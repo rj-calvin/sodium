@@ -36,7 +36,7 @@ def testBasicSecretStream : IO Unit := do
 
     -- Test message encryption/decryption
     let message := "Hello, LibSodium SecretStream!".toUTF8
-    let ciphertext ← push pushState message none tagMessage
+    let ciphertext ← push pushState message none SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE
     IO.println s!"✓ Test 3c: Message encrypted, ciphertext size: {ciphertext.size}"
 
     -- Decrypt the message
@@ -65,9 +65,9 @@ def testMultipleMessages : IO Unit := do
 
     -- Send multiple messages with different tags
     let messages := [
-      ("First message", tagMessage),
-      ("Second message", tagPush),
-      ("Final message", tagFinal)
+      ("First message", SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE),
+      ("Second message", SECRETSTREAM_XCHACHA20POLY1305_TAG_PUSH),
+      ("Final message", SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL)
     ]
 
     for (msg, tag) in messages do
@@ -99,7 +99,7 @@ def testWithAdditionalData : IO Unit := do
     let additionalData := "public metadata".toUTF8
 
     -- Encrypt with additional data
-    let ciphertext ← push pushState message (some additionalData) tagMessage
+    let ciphertext ← push pushState message (some additionalData) SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE
     IO.println s!"✓ Test 5a: Message encrypted with additional data, size: {ciphertext.size}"
 
     -- Decrypt with same additional data
@@ -108,7 +108,7 @@ def testWithAdditionalData : IO Unit := do
     IO.println s!"✓ Test 5b: Message decrypted with additional data: '{decryptedString}'"
 
     -- Verify the message
-    if decryptedString == "Secret message" && tag == tagMessage then
+    if decryptedString == "Secret message" && tag == SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE then
       IO.println "✓ Test 5c: Additional data authentication successful"
     else
       IO.println "✗ Test 5c: Additional data authentication failed"
@@ -127,7 +127,7 @@ def testRekey : IO Unit := do
 
     -- Send a message, rekey, then send another
     let message1 := "Before rekey".toUTF8
-    let _ ← push pushState message1 none tagMessage
+    let _ ← push pushState message1 none SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE
     IO.println "✓ Test 6a: Message sent before rekey"
 
     -- Perform rekey
@@ -136,7 +136,7 @@ def testRekey : IO Unit := do
 
     -- Send another message after rekey
     let message2 := "After rekey".toUTF8
-    let _ ← push pushState message2 none tagMessage
+    let _ ← push pushState message2 none SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE
     IO.println "✓ Test 6c: Message sent after rekey"
 
   catch e =>

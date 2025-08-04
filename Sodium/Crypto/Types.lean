@@ -24,6 +24,8 @@ universe u
 
 namespace Sodium.Crypto
 
+private instance : Ord Name := ⟨Name.quickCmp⟩
+
 /-- Algorithm specifications with size constants for all LibSodium cryptographic primitives.
 
 This structure provides compile-time size information for all fields used across
@@ -32,74 +34,59 @@ structure AlgorithmSpec where
   /-- Algorithm name for identification -/
   name : Name
   /-- Secret key size in bytes -/
-  secretKeyBytes : Nat
+  secretKeyBytes : Nat := 0
   /-- Public key size in bytes -/
-  publicKeyBytes : Nat
+  publicKeyBytes : Nat := 0
   /-- Nonce size in bytes -/
-  nonceBytes : Nat
+  nonceBytes : Nat := 0
   /-- MAC size in bytes -/
-  macBytes : Nat
+  macBytes : Nat := 0
   /-- Seed size in bytes for deterministic key generation -/
-  seedBytes : Nat
+  seedBytes : Nat := 0
   /-- Precomputed shared secret size for Box operations -/
-  beforeNmBytes : Nat
+  beforeNmBytes : Nat := 0
   /-- Sealed box overhead size in bytes -/
-  sealBytes : Nat
+  sealBytes : Nat := 0
   /-- Hash output size in bytes for generic hashing -/
-  hashBytes : Nat
+  hashBytes : Nat := 0
   /-- Authentication tag size in bytes for AEAD operations -/
-  tagBytes : Nat
+  tagBytes : Nat := 0
   /-- Context size in bytes for key derivation -/
-  contextBytes : Nat
+  contextBytes : Nat := 0
   /-- Session key size in bytes for key exchange protocols -/
-  sessionKeyBytes : Nat
+  sessionKeyBytes : Nat := 0
   /-- Salt size in bytes for password hashing -/
-  saltBytes : Nat
+  saltBytes : Nat := 0
   /-- Header size in bytes for secret stream operations -/
-  headerBytes : Nat
+  headerBytes : Nat := 0
+  /-- Maximum message size in bytes for streaming operations -/
+  messageMaxBytes : Nat := 0
   /-- State size in bytes for streaming operations (currently not in use) -/
-  stateBytes : Nat
-  deriving BEq, Hashable, Inhabited, ToJson, FromJson
+  stateBytes : Nat := 0
+  deriving BEq, Ord, TypeName, Hashable, Inhabited, ToJson, FromJson
 
 instance : Coe AlgorithmSpec Name := ⟨AlgorithmSpec.name⟩
 
-def NameGeneratorSpec : AlgorithmSpec := {
+def NameGeneratorSpec : AlgorithmSpec where
   name := .mkSimple "nonce"
-  nonceBytes := 24
-  publicKeyBytes := 0
-  secretKeyBytes := 0
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
-  tagBytes := 0
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
+  /-
+    Generic nonces should support `ByteArray.toUInt64LE!` and `ByteArray.toUInt64BE!`, though
+    `ByteArray.compact!` should also suffice (despite producing a different result).
 
-def SecretBoxSpec : AlgorithmSpec := {
+    This choice also has the added benefit of preventing mixups between nonces used generically
+    and those used by more secure algorithms.
+  -/
+  nonceBytes := 8
+
+def SecretBoxSpec : AlgorithmSpec where
   name := .mkSimple "XSalsa20Poly1305"
   secretKeyBytes := FFI.SECRETBOX_KEYBYTES.toNat
-  publicKeyBytes := 0  -- N/A for symmetric crypto
   nonceBytes := FFI.SECRETBOX_NONCEBYTES.toNat
   macBytes := FFI.SECRETBOX_MACBYTES.toNat
   seedBytes := FFI.SECRETBOX_KEYBYTES.toNat
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.SECRETBOX_MACBYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def BoxSpec : AlgorithmSpec := {
+def BoxSpec : AlgorithmSpec where
   name := .mkSimple "Curve25519XSalsa20Poly1305"
   secretKeyBytes := FFI.BOX_SECRETKEYBYTES.toNat
   publicKeyBytes := FFI.BOX_PUBLICKEYBYTES.toNat
@@ -108,374 +95,136 @@ def BoxSpec : AlgorithmSpec := {
   seedBytes := FFI.BOX_SEEDBYTES.toNat
   beforeNmBytes := FFI.BOX_BEFORENMBYTES.toNat
   sealBytes := FFI.BOX_SEALBYTES.toNat
-  hashBytes := 0
   tagBytes := FFI.BOX_MACBYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def SignSpec : AlgorithmSpec := {
+def SignSpec : AlgorithmSpec where
   name := .mkSimple "Ed25519"
   secretKeyBytes := FFI.SIGN_SECRETKEYBYTES.toNat
   publicKeyBytes := FFI.SIGN_PUBLICKEYBYTES.toNat
-  nonceBytes := 0     -- N/A for signatures
-  macBytes := FFI.SIGN_BYTES.toNat      -- Signature size
+  macBytes := FFI.SIGN_BYTES.toNat
   seedBytes := FFI.SIGN_SEEDBYTES.toNat
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.SIGN_BYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
 /- Authentication Algorithm Specs -/
 
-def AuthSpec : AlgorithmSpec := {
+def AuthSpec : AlgorithmSpec where
   name := .mkSimple "HMACSHA512256"
   secretKeyBytes := FFI.AUTH_KEYBYTES.toNat
-  publicKeyBytes := 0
-  nonceBytes := 0
   macBytes := FFI.AUTH_BYTES.toNat
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.AUTH_BYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def HmacSha256Spec : AlgorithmSpec := {
+def HmacSha256Spec : AlgorithmSpec where
   name := .mkSimple "HMACSHA256"
   secretKeyBytes := FFI.HMAC_SHA256_KEYBYTES.toNat
-  publicKeyBytes := 0
-  nonceBytes := 0
   macBytes := FFI.HMAC_SHA256_BYTES.toNat
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.HMAC_SHA256_BYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def HmacSha512Spec : AlgorithmSpec := {
+def HmacSha512Spec : AlgorithmSpec where
   name := .mkSimple "HMACSHA512"
   secretKeyBytes := FFI.HMAC_SHA512_KEYBYTES.toNat
-  publicKeyBytes := 0
-  nonceBytes := 0
   macBytes := FFI.HMAC_SHA512_BYTES.toNat
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.HMAC_SHA512_BYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
 /- Key Exchange Algorithm Spec -/
 
-def KeyExchangeSpec : AlgorithmSpec := {
+def KeyExchangeSpec : AlgorithmSpec where
   name := .mkSimple "X25519"
   secretKeyBytes := FFI.KX_SECRETKEYBYTES.toNat
   publicKeyBytes := FFI.KX_PUBLICKEYBYTES.toNat
-  nonceBytes := 0
-  macBytes := 0
   seedBytes := FFI.KX_SEEDBYTES.toNat
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
-  tagBytes := 0
-  contextBytes := 0
   sessionKeyBytes := FFI.KX_SESSIONKEYBYTES.toNat
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
 /- Key Derivation Algorithm Spec -/
 
-def KeyDerivationSpec : AlgorithmSpec := {
+def KeyDerivationSpec : AlgorithmSpec where
   name := .mkSimple "BLAKE2bKDF"
   secretKeyBytes := FFI.KDF_KEYBYTES.toNat
-  publicKeyBytes := 0
-  nonceBytes := 0
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
-  tagBytes := 0
   contextBytes := FFI.KDF_CONTEXTBYTES.toNat
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
 /- Short Hash Algorithm Spec -/
 
-def ShortHashSpec : AlgorithmSpec := {
+def ShortHashSpec : AlgorithmSpec where
   name := .mkSimple "SipHash24"
   secretKeyBytes := FFI.SHORTHASH_KEYBYTES.toNat
-  publicKeyBytes := 0
-  nonceBytes := 0
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
   hashBytes := FFI.SHORTHASH_BYTES.toNat
-  tagBytes := 0
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
 /- Generic Hash Algorithm Spec -/
 
-def GenericHashSpec : AlgorithmSpec := {
+def GenericHashSpec : AlgorithmSpec where
   name := .mkSimple "BLAKE2b"
   secretKeyBytes := FFI.GENERICHASH_KEYBYTES.toNat
-  publicKeyBytes := 0
-  nonceBytes := 0
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
   hashBytes := FFI.GENERICHASH_BYTES.toNat
-  tagBytes := 0
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
 /- AEAD Algorithm Specs -/
 
-def ChaCha20Poly1305IetfSpec : AlgorithmSpec := {
+def ChaCha20Poly1305IetfSpec : AlgorithmSpec where
   name := .mkSimple "ChaCha20Poly1305IETF"
   secretKeyBytes := FFI.CHACHA20POLY1305_IETF_KEYBYTES.toNat
-  publicKeyBytes := 0
   nonceBytes := FFI.CHACHA20POLY1305_IETF_NONCEBYTES.toNat
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.CHACHA20POLY1305_IETF_TAGBYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def ChaCha20Poly1305Spec : AlgorithmSpec := {
+def ChaCha20Poly1305Spec : AlgorithmSpec where
   name := .mkSimple "ChaCha20Poly1305"
   secretKeyBytes := FFI.CHACHA20POLY1305_KEYBYTES.toNat
-  publicKeyBytes := 0
   nonceBytes := FFI.CHACHA20POLY1305_NONCEBYTES.toNat
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.CHACHA20POLY1305_TAGBYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def XChaCha20Poly1305IetfSpec : AlgorithmSpec := {
+def XChaCha20Poly1305IetfSpec : AlgorithmSpec where
   name := .mkSimple "XChaCha20Poly1305IETF"
   secretKeyBytes := FFI.XCHACHA20POLY1305_IETF_KEYBYTES.toNat
-  publicKeyBytes := 0
   nonceBytes := FFI.XCHACHA20POLY1305_IETF_NONCEBYTES.toNat
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.XCHACHA20POLY1305_IETF_TAGBYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def Aes256GcmSpec : AlgorithmSpec := {
+def Aes256GcmSpec : AlgorithmSpec where
   name := .mkSimple "AES256GCM"
   secretKeyBytes := FFI.AES256GCM_KEYBYTES.toNat
-  publicKeyBytes := 0
   nonceBytes := FFI.AES256GCM_NONCEBYTES.toNat
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.AES256GCM_TAGBYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def Aegis128LSpec : AlgorithmSpec := {
+def Aegis128LSpec : AlgorithmSpec where
   name := .mkSimple "AEGIS128L"
   secretKeyBytes := FFI.AEGIS128L_KEYBYTES.toNat
-  publicKeyBytes := 0
   nonceBytes := FFI.AEGIS128L_NONCEBYTES.toNat
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.AEGIS128L_TAGBYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def Aegis256Spec : AlgorithmSpec := {
+def Aegis256Spec : AlgorithmSpec where
   name := .mkSimple "AEGIS256"
   secretKeyBytes := FFI.AEGIS256_KEYBYTES.toNat
-  publicKeyBytes := 0
   nonceBytes := FFI.AEGIS256_NONCEBYTES.toNat
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.AEGIS256_TAGBYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
 /- Stream Cipher Algorithm Specs -/
 
-def StreamSpec : AlgorithmSpec := {
+def StreamSpec : AlgorithmSpec where
   name := .mkSimple "XSalsa20"
   secretKeyBytes := FFI.STREAM_KEYBYTES.toNat
-  publicKeyBytes := 0
   nonceBytes := FFI.STREAM_NONCEBYTES.toNat
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
-  tagBytes := 0
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def ChaCha20StreamSpec : AlgorithmSpec := {
+def ChaCha20StreamSpec : AlgorithmSpec where
   name := .mkSimple "ChaCha20"
   secretKeyBytes := FFI.CHACHA20_KEYBYTES.toNat
-  publicKeyBytes := 0
   nonceBytes := FFI.CHACHA20_NONCEBYTES.toNat
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
-  tagBytes := 0
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
-def ChaCha20IetfStreamSpec : AlgorithmSpec := {
+def ChaCha20IetfStreamSpec : AlgorithmSpec where
   name := .mkSimple "ChaCha20IETF"
   secretKeyBytes := FFI.CHACHA20_IETF_KEYBYTES.toNat
-  publicKeyBytes := 0
   nonceBytes := FFI.CHACHA20_IETF_NONCEBYTES.toNat
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
-  tagBytes := 0
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
-  headerBytes := 0
-  stateBytes := 0
-}
 
 /- Password Hashing Algorithm Spec -/
 
-def PwHashSpec : AlgorithmSpec := {
+def PwHashSpec : AlgorithmSpec where
   name := .mkSimple "Argon2id"
-  secretKeyBytes := 0  -- Variable length output
-  publicKeyBytes := 0
-  nonceBytes := 0
-  macBytes := 0
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0  -- Variable length output
-  tagBytes := 0
-  contextBytes := 0
-  sessionKeyBytes := 0
   saltBytes := FFI.PWHASH_SALTBYTES.toNat
-  headerBytes := 0
-  stateBytes := 0  -- No streaming state for pwhash
-}
 
 /- Secret Stream Algorithm Spec -/
 
-def SecretStreamSpec : AlgorithmSpec := {
+def SecretStreamSpec : AlgorithmSpec where
   name := .mkSimple "XChaCha20Poly1305SecretStream"
   secretKeyBytes := FFI.SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES.toNat
-  publicKeyBytes := 0
-  nonceBytes := 0
   macBytes := FFI.SECRETSTREAM_XCHACHA20POLY1305_ABYTES.toNat
-  seedBytes := 0
-  beforeNmBytes := 0
-  sealBytes := 0
-  hashBytes := 0
   tagBytes := FFI.SECRETSTREAM_XCHACHA20POLY1305_ABYTES.toNat
-  contextBytes := 0
-  sessionKeyBytes := 0
-  saltBytes := 0
   headerBytes := FFI.SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES.toNat
-  stateBytes := 0  -- TODO: Add STATEBYTES constant when needed
-}
+  messageMaxBytes := FFI.SECRETSTREAM_XCHACHA20POLY1305_MESSAGEBYTES_MAX.toNat
 
 /-- Refined secret key type with size validation -/
 structure SecretKey (spec : AlgorithmSpec) where
@@ -521,6 +270,11 @@ structure Mac (spec : AlgorithmSpec) where
 structure DetachedCipherText (spec : AlgorithmSpec) where
   bytes : ByteArray
 
+/-- AEAD ciphertext containing embedded authentication tag -/
+structure TaggedCipherText (spec : AlgorithmSpec) where
+  bytes : ByteArray
+  has_tag : bytes.size >= spec.tagBytes := by omega
+
 /-- Sealed box ciphertext (includes ephemeral public key + MAC) -/
 structure SealedCipherText (spec : AlgorithmSpec) where
   bytes : ByteArray
@@ -556,6 +310,11 @@ structure StreamHeader (spec : AlgorithmSpec) where
   bytes : ByteArray
   size_valid : bytes.size = spec.headerBytes := by omega
 
+/-- Message for secret stream operations -/
+structure StreamMessage (spec : AlgorithmSpec) where
+  bytes : ByteArray
+  size_valid : bytes.size ≤ spec.messageMaxBytes
+
 /-- Opaque state for streaming operations (variable size, so no size constraint) -/
 structure StreamState (spec : AlgorithmSpec) where
   bytes : ByteArray
@@ -576,6 +335,7 @@ instance : CoeOut (Seed spec) ByteArray := ⟨Seed.bytes⟩
 instance : CoeOut (CipherText spec) ByteArray := ⟨CipherText.bytes⟩
 instance : CoeOut (Mac spec) ByteArray := ⟨Mac.bytes⟩
 instance : CoeOut (DetachedCipherText spec) ByteArray := ⟨DetachedCipherText.bytes⟩
+instance : CoeOut (TaggedCipherText spec) ByteArray := ⟨TaggedCipherText.bytes⟩
 instance : CoeOut (SealedCipherText spec) ByteArray := ⟨SealedCipherText.bytes⟩
 instance : CoeOut (HashOutput spec) ByteArray := ⟨HashOutput.bytes⟩
 instance : CoeOut (AuthTag spec) ByteArray := ⟨AuthTag.bytes⟩
@@ -583,25 +343,10 @@ instance : CoeOut (Context spec) ByteArray := ⟨Context.bytes⟩
 instance : CoeOut (SessionKey spec) ByteArray := ⟨SessionKey.bytes⟩
 instance : CoeOut (Salt spec) ByteArray := ⟨Salt.bytes⟩
 instance : CoeOut (StreamHeader spec) ByteArray := ⟨StreamHeader.bytes⟩
+instance : CoeOut (StreamMessage spec) ByteArray := ⟨StreamMessage.bytes⟩
 instance : CoeOut (StreamState spec) ByteArray := ⟨StreamState.bytes⟩
 
 abbrev NonceNameGenerator := NonceId NameGeneratorSpec
-
-abbrev SecretBoxKey := SecretKey SecretBoxSpec
-abbrev SecretBoxNonce := NonceId SecretBoxSpec
-abbrev SecretBoxCipherText := CipherText SecretBoxSpec
-abbrev SecretBoxMac := Mac SecretBoxSpec
-abbrev SecretBoxDetachedCipherText := DetachedCipherText SecretBoxSpec
-
-abbrev BoxPublicKey := PublicKey BoxSpec
-abbrev BoxSecretKey := SecretKey BoxSpec
-abbrev BoxNonce := NonceId BoxSpec
-abbrev BoxKeyPair := KeyPair BoxSpec
-abbrev BoxCipherText := CipherText BoxSpec
-abbrev BoxMac := Mac BoxSpec
-abbrev BoxDetachedCipherText := DetachedCipherText BoxSpec
-
-abbrev BoxSealedCipherText := SealedCipherText BoxSpec
 
 abbrev SignPublicKey := PublicKey SignSpec
 abbrev SignSecretKey := SecretKey SignSpec
@@ -675,11 +420,5 @@ abbrev ChaCha20IetfStreamNonce := NonceId ChaCha20IetfStreamSpec
 /- Type aliases for Password Hashing -/
 -- Note: PwHash uses variable-length outputs, so no fixed-size key types
 abbrev PwHashSalt := Salt PwHashSpec
-
-/- Type aliases for Secret Stream -/
-abbrev SecretStreamSecretKey := SecretKey SecretStreamSpec
-abbrev SecretStreamMac := Mac SecretStreamSpec
-abbrev SecretStreamAuthTag := AuthTag SecretStreamSpec
-abbrev SecretStreamHeader := StreamHeader SecretStreamSpec
 
 end Sodium.Crypto

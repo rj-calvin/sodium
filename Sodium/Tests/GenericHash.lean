@@ -1,8 +1,9 @@
 import Sodium.FFI.GenericHash
+import Sodium.FFI.Basic
 
-open Sodium FFI
+open Sodium.FFI
 
-namespace Tests
+namespace Sodium.Tests.GenericHash
 
 -- Import needed for sodium_init
 
@@ -16,7 +17,7 @@ def testInit : IO Unit := do
 
 -- Test 2: Simple constants access
 def testConstants : IO Unit := do
-  IO.println s!"✓ Test 2: Constants - BYTES: {BYTES}, BYTES_MIN: {BYTES_MIN}, BYTES_MAX: {BYTES_MAX}"
+  IO.println s!"✓ Test 2: Constants - GENERICHASH_BYTES: {GENERICHASH_BYTES}, GENERICHASH_BYTES_MIN: {GENERICHASH_BYTES_MIN}, GENERICHASH_BYTES_MAX: {GENERICHASH_BYTES_MAX}"
 
 -- Test 3: Create ByteArray for testing
 def testByteArrayCreation : IO Unit := do
@@ -28,7 +29,7 @@ def testBasicHash : IO Unit := do
   let _ ← sodiumInit
   let message := "test".toUTF8
   try
-    let hash ← genericHash BYTES message none
+    let hash ← genericHash GENERICHASH_BYTES message none
     IO.println s!"✓ Test 4: Basic hash successful, size: {hash.size}"
   catch e =>
     IO.println s!"✗ Test 4: Basic hash failed: {e}"
@@ -39,7 +40,7 @@ def testHashWithKey : IO Unit := do
   let message := "test".toUTF8
   let key := "my-32-byte-key-exactly-this-len!".toUTF8
   try
-    let hash ← genericHash BYTES message (some key)
+    let hash ← genericHash GENERICHASH_BYTES message (some key)
     IO.println s!"✓ Test 5: Keyed hash successful, size: {hash.size}"
   catch e =>
     IO.println s!"✗ Test 5: Keyed hash failed: {e}"
@@ -48,7 +49,7 @@ def testHashWithKey : IO Unit := do
 def testStreamInit : IO Unit := do
   let _ ← sodiumInit
   try
-    let _state ← init 0 BYTES none
+    let _state ← init 0 GENERICHASH_BYTES none
     IO.println "✓ Test 6: Stream init successful"
   catch e =>
     IO.println s!"✗ Test 6: Stream init failed: {e}"
@@ -57,10 +58,10 @@ def testStreamInit : IO Unit := do
 def testFullStream : IO Unit := do
   let _ ← sodiumInit
   try
-    let state ← init 0 BYTES none
+    let state ← init 0 GENERICHASH_BYTES none
     let message := "test".toUTF8
     let _ ← update state message
-    let hash ← final state BYTES
+    let hash ← final state GENERICHASH_BYTES
     IO.println s!"✓ Test 7: Full streaming successful, size: {hash.size}"
   catch e =>
     IO.println s!"✗ Test 7: Full streaming failed: {e}"
@@ -87,4 +88,4 @@ def runProgressiveTests : IO Unit := do
 -- #eval testFullStream
 #eval runProgressiveTests
 
-end Tests
+end Sodium.Tests.GenericHash

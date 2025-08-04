@@ -14,6 +14,15 @@ namespace Sodium.Crypto.Box
 
 open Utils
 
+abbrev BoxPublicKey := PublicKey BoxSpec
+abbrev BoxSecretKey := SecretKey BoxSpec
+abbrev BoxNonce := NonceId BoxSpec
+abbrev BoxKeyPair := KeyPair BoxSpec
+abbrev BoxCipherText := CipherText BoxSpec
+abbrev BoxMac := Mac BoxSpec
+abbrev BoxDetachedCipherText := DetachedCipherText BoxSpec
+abbrev BoxSealedCipherText := SealedCipherText BoxSpec
+
 /-- Precomputed shared secret for performance optimization -/
 structure SharedSecret where
   bytes : ByteArray
@@ -32,9 +41,9 @@ def genKeyPair : CryptoM BoxKeyPair := do
       let secretKey := ⟨secretBytes, h2⟩
       return ⟨publicKey, secretKey⟩
     else
-      throwInvariantFailure m!"{decl_name%} - invalid secret key size"
+      throwMessage m!"invariant failed in {decl_name%} - invalid secret key size"
   else
-    throwInvariantFailure m!"{decl_name%} - invalid public key size"
+    throwMessage m!"invariant failed in {decl_name%} - invalid public key size"
 
 /--
 Generate a Box key pair from a seed for deterministic key generation.
@@ -49,9 +58,9 @@ def genKeyPairFromSeed (seed : Seed BoxSpec) : CryptoM BoxKeyPair := do
       let secretKey := ⟨secretBytes, h2⟩
       return ⟨publicKey, secretKey⟩
     else
-      throwInvariantFailure m!"{decl_name%} - invalid secret key size"
+      throwMessage m!"invariant failed in {decl_name%} - invalid secret key size"
   else
-    throwInvariantFailure m!"{decl_name%} - invalid public key size"
+    throwMessage m!"invariant failed in {decl_name%} - invalid public key size"
 
 variable {α : Type}
 
@@ -70,7 +79,7 @@ def encrypt [ToJson α] (keyPair : BoxKeyPair) (msg : α) : CryptoM (BoxNonce ×
     return (nonce, ciphertext)
   else
     -- This should never happen if FFI is implemented correctly
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Encrypt a message using Box with an explicitly provided nonce.
@@ -85,16 +94,18 @@ def encryptWith [ToJson α] (nonce : BoxNonce) (keyPair : BoxKeyPair) (msg : α)
     return ⟨bytes, h⟩
   else
     -- This should never happen if FFI is implemented correctly
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Decrypt a Box ciphertext using the provided nonce and key pair.
 Returns the original message if authentication succeeds.
 Returns an error if authentication fails or decryption is not possible.
 -/
-def decrypt [FromJson α] (keyPair : BoxKeyPair) (nonce : BoxNonce) (ct : BoxCipherText) : CryptoM (Except String α) := do
-  let json := (← FFI.boxOpenEasy ct nonce keyPair.public keyPair.secret) |> String.fromUTF8! |> Json.parse
-  return json >>= fromJson?
+def decrypt [FromJson α] (nonce : BoxNonce) (keyPair : BoxKeyPair) (ct : BoxCipherText) : CryptoM (Except ByteArray α) := do
+  let bytes ← FFI.boxOpenEasy ct nonce keyPair.public keyPair.secret
+  return match String.fromUTF8? bytes with
+  | none => .error bytes
+  | some utf8 => Json.parse utf8 >>= fromJson? |>.mapError (·.toUTF8)
 
 /-- Result type for detached mode encryption -/
 structure DetachedResult where
@@ -111,7 +122,7 @@ def encryptDetached [ToJson α] (keyPair : BoxKeyPair) (msg : α) : CryptoM (Box
   let payload := toJson msg |>.compress.toUTF8
 
   if !(← validateMessageSize payload.size) then
-    throwInvariantFailure m!"Message too large for Box encryption"
+    throwMessage m!"invariant failed in {decl_name%} - message too large for Box encryption"
 
   let (cipherBytes, macBytes) ← FFI.boxDetached payload nonce keyPair.public keyPair.secret
 
@@ -121,7 +132,7 @@ def encryptDetached [ToJson α] (keyPair : BoxKeyPair) (msg : α) : CryptoM (Box
     let ciphertext := ⟨cipherBytes⟩
     return (nonce, ⟨ciphertext, mac⟩)
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Encrypt a message using Box detached mode with an explicitly provided nonce.
@@ -131,7 +142,7 @@ def encryptDetachedWith [ToJson α] (nonce : BoxNonce) (keyPair : BoxKeyPair) (m
   let payload := toJson msg |>.compress.toUTF8
 
   if !(← validateMessageSize payload.size) then
-    throwInvariantFailure m!"Message too large for Box encryption"
+    throwMessage m!"invariant failed in {decl_name%} - message too large for Box encryption"
 
   let (cipherBytes, macBytes) ← FFI.boxDetached payload nonce keyPair.public keyPair.secret
 
@@ -141,17 +152,19 @@ def encryptDetachedWith [ToJson α] (nonce : BoxNonce) (keyPair : BoxKeyPair) (m
     let ciphertext := ⟨cipherBytes⟩
     return ⟨ciphertext, mac⟩
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Decrypt a Box detached mode ciphertext using the provided nonce, key pair, and MAC.
 Returns the original message if authentication succeeds.
 Uses constant-time MAC verification for security.
 -/
-def decryptDetached [FromJson α] (keyPair : BoxKeyPair) (nonce : BoxNonce)
-                   (ciphertext : BoxDetachedCipherText) (mac : BoxMac) : CryptoM (Except String α) := do
-  let json := (← FFI.boxOpenDetached ciphertext mac nonce keyPair.public keyPair.secret) |> String.fromUTF8! |> Json.parse
-  return json >>= fromJson?
+def decryptDetached [FromJson α] (nonce : BoxNonce) (keyPair : BoxKeyPair)
+    (mac : BoxMac) (ciphertext : BoxDetachedCipherText) : CryptoM (Except ByteArray α) := do
+  let bytes ← FFI.boxOpenDetached ciphertext mac nonce keyPair.public keyPair.secret
+  return match String.fromUTF8? bytes with
+  | none => .error bytes
+  | some utf8 => Json.parse utf8 >>= fromJson? |>.mapError (·.toUTF8)
 
 /--
 Precompute the shared secret between a public key and secret key for performance.
@@ -162,7 +175,7 @@ def precompute (publicKey : BoxPublicKey) (secretKey : BoxSecretKey) : CryptoM S
   if h : sharedBytes.size = BoxSpec.beforeNmBytes then
     return ⟨sharedBytes, h⟩
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Encrypt a message using a precomputed shared secret with automatically generated nonce.
@@ -177,7 +190,7 @@ def postEncrypt [ToJson α] (sharedSecret : SharedSecret) (msg : α) : CryptoM (
     let ciphertext := ⟨bytes, h⟩
     return (nonce, ciphertext)
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Encrypt a message using a precomputed shared secret with an explicitly provided nonce.
@@ -189,15 +202,17 @@ def postEncryptWith [ToJson α] (nonce : BoxNonce) (sharedSecret : SharedSecret)
   if h : bytes.size ≥ BoxSpec.macBytes then
     return ⟨bytes, h⟩
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Decrypt a Box ciphertext using a precomputed shared secret.
 Returns the original message if authentication succeeds.
 -/
-def postDecrypt [FromJson α] (sharedSecret : SharedSecret) (nonce : BoxNonce) (ct : BoxCipherText) : CryptoM (Except String α) := do
-  let json := (← FFI.boxOpenEasyAfternm ct nonce sharedSecret.bytes) |> String.fromUTF8! |> Json.parse
-  return json >>= fromJson?
+def postDecrypt [FromJson α] (nonce : BoxNonce) (sharedSecret : SharedSecret) (ct : BoxCipherText) : CryptoM (Except ByteArray α) := do
+  let bytes ← FFI.boxOpenEasyAfternm ct nonce sharedSecret.bytes
+  return match String.fromUTF8? bytes with
+  | none => .error bytes
+  | some utf8 => Json.parse utf8 >>= fromJson? |>.mapError (·.toUTF8)
 
 /--
 Encrypt a message using detached mode with a precomputed shared secret and automatically generated nonce.
@@ -208,7 +223,7 @@ def postEncryptDetached [ToJson α] (sharedSecret : SharedSecret) (msg : α) : C
   let payload := toJson msg |>.compress.toUTF8
 
   if !(← validateMessageSize payload.size) then
-    throwInvariantFailure m!"Message too large for Box encryption"
+    throwMessage m!"invariant failed in {decl_name%} - message too large for Box encryption"
 
   let (cipherBytes, macBytes) ← FFI.boxDetachedAfternm payload nonce sharedSecret.bytes
 
@@ -217,7 +232,7 @@ def postEncryptDetached [ToJson α] (sharedSecret : SharedSecret) (msg : α) : C
     let ciphertext := ⟨cipherBytes⟩
     return (nonce, ⟨ciphertext, mac⟩)
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Encrypt a message using detached mode with a precomputed shared secret and explicitly provided nonce.
@@ -227,7 +242,7 @@ def postEncryptDetachedWith [ToJson α] (nonce : BoxNonce) (sharedSecret : Share
   let payload := toJson msg |>.compress.toUTF8
 
   if !(← validateMessageSize payload.size) then
-    throwInvariantFailure m!"Message too large for Box encryption"
+    throwMessage m!"invariant failed in {decl_name%} - message too large for Box encryption"
 
   let (cipherBytes, macBytes) ← FFI.boxDetachedAfternm payload nonce sharedSecret.bytes
 
@@ -236,16 +251,18 @@ def postEncryptDetachedWith [ToJson α] (nonce : BoxNonce) (sharedSecret : Share
     let ciphertext := ⟨cipherBytes⟩
     return ⟨ciphertext, mac⟩
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Decrypt a Box detached mode ciphertext using a precomputed shared secret.
 Returns the original message if authentication succeeds.
 -/
-def postDecryptDetached [FromJson α] (sharedSecret : SharedSecret) (nonce : BoxNonce)
-                          (ciphertext : BoxDetachedCipherText) (mac : BoxMac) : CryptoM (Except String α) := do
-  let json := (← FFI.boxOpenDetachedAfternm ciphertext mac nonce sharedSecret.bytes) |> String.fromUTF8! |> Json.parse
-  return json >>= fromJson?
+def postDecryptDetached [FromJson α] (nonce : BoxNonce) (sharedSecret : SharedSecret)
+    (mac : BoxMac) (ciphertext : BoxDetachedCipherText) : CryptoM (Except ByteArray α) := do
+  let bytes ← FFI.boxOpenDetachedAfternm ciphertext mac nonce sharedSecret.bytes
+  return match String.fromUTF8? bytes with
+  | none => .error bytes
+  | some utf8 => Json.parse utf8 >>= fromJson? |>.mapError (·.toUTF8)
 
 /--
 Anonymously encrypt a message using sealed box (ephemeral key pair).
@@ -258,14 +275,16 @@ def enclose [ToJson α] (publicKey : BoxPublicKey) (msg : α) : CryptoM BoxSeale
   if h : bytes.size ≥ BoxSpec.sealBytes then
     return ⟨bytes, h⟩
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Decrypt a sealed box ciphertext using the recipient's key pair.
 Returns the original message if authentication succeeds.
 -/
-def declose [FromJson α] (keyPair : BoxKeyPair) (ct : BoxSealedCipherText) : CryptoM (Except String α) := do
-  let json := (← FFI.boxSealOpen ct keyPair.public keyPair.secret) |> String.fromUTF8! |> Json.parse
-  return json >>= fromJson?
+def declose [FromJson α] (keyPair : BoxKeyPair) (ct : BoxSealedCipherText) : CryptoM (Except ByteArray α) := do
+  let bytes ← FFI.boxSealOpen ct keyPair.public keyPair.secret
+  return match String.fromUTF8? bytes with
+  | none => .error bytes
+  | some utf8 => Json.parse utf8 >>= fromJson? |>.mapError (·.toUTF8)
 
 end Sodium.Crypto.Box

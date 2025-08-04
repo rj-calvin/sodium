@@ -10,7 +10,7 @@ namespace Sodium.FFI
 def SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES : USize := 32
 def SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES : USize := 24
 def SECRETSTREAM_XCHACHA20POLY1305_ABYTES : USize := 17
-def SECRETSTREAM_XCHACHA20POLY1305_MESSAGEBYTES_MAX : USize := 0x3fffffffffffffbf
+def SECRETSTREAM_XCHACHA20POLY1305_MESSAGEBYTES_MAX : USize := 0x3fffffec00
 
 -- Tag constants for message types
 def SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE : UInt8 := 0
@@ -39,9 +39,8 @@ def initPush (key : ByteArray) : IO (PushState × ByteArray) :=
   size_t key_size = lean_sarray_size(key)
   size_t expected_size = crypto_secretstream_xchacha20poly1305_KEYBYTES
   if (key_size != expected_size) {
-    // Create IO.Error.userError
     lean_object* error_msg = lean_mk_string("Invalid key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)  // userError constructor
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
     lean_ctor_set(io_error, 0, error_msg)
     return lean_io_result_mk_error(io_error)
   }
@@ -63,9 +62,8 @@ def initPush (key : ByteArray) : IO (PushState × ByteArray) :=
   if (result != 0) {
     free(state)
     lean_dec(header)
-    // Create IO.Error.userError
     lean_object* error_msg = lean_mk_string("init_push failed")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)  // userError constructor
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
     lean_ctor_set(io_error, 0, error_msg)
     return lean_io_result_mk_error(io_error)
   }
@@ -120,6 +118,14 @@ def push (state : @& PushState) (message : ByteArray) (additionalData : Option B
   crypto_secretstream_xchacha20poly1305_state* st = of_lean<PushState>(state)
 
   size_t message_len = lean_sarray_size(message)
+
+  if (message_len > crypto_secretstream_xchacha20poly1305_MESSAGEBYTES_MAX) {
+    lean_object* error_msg = lean_mk_string("Message too large for secret stream")
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
+    lean_ctor_set(io_error, 0, error_msg)
+    return lean_io_result_mk_error(io_error)
+  }
+
   size_t ciphertext_len = message_len + crypto_secretstream_xchacha20poly1305_ABYTES
 
   lean_object* ciphertext = lean_alloc_sarray(sizeof(unsigned char), ciphertext_len, ciphertext_len)
@@ -128,8 +134,7 @@ def push (state : @& PushState) (message : ByteArray) (additionalData : Option B
   const unsigned char* ad_ptr = NULL;
   size_t ad_len = 0;
 
-  // Check if additionalData is some (not none) - Lean Option is tagged union
-  if (lean_obj_tag(additionalData) == 1) {  // 1 = some, 0 = none
+  if (lean_obj_tag(additionalData) == 1) {
     lean_object* ad_val = lean_ctor_get(additionalData, 0)
     ad_ptr = lean_sarray_cptr(ad_val)
     ad_len = lean_sarray_size(ad_val)
@@ -174,7 +179,7 @@ def pull (state : @& PullState) (ciphertext : ByteArray) (additionalData : Optio
   const unsigned char* ad_ptr = NULL;
   size_t ad_len = 0;
 
-  if (lean_obj_tag(additionalData) == 1) {  // 1 = some, 0 = none
+  if (lean_obj_tag(additionalData) == 1) {
     lean_object* ad_val = lean_ctor_get(additionalData, 0)
     ad_ptr = lean_sarray_cptr(ad_val)
     ad_len = lean_sarray_size(ad_val)

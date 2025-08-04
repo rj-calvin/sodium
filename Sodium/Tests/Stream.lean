@@ -1,11 +1,13 @@
 import «Sodium».FFI.Stream
 import «Sodium».FFI.Basic
 
+open Sodium.FFI
+
 namespace Sodium.Tests.Stream
 
 def testStreamKeygen : IO Unit := do
   try
-    let key ← Sodium.FFI.Stream.streamKeygen
+    let key ← streamKeygen
     if key.size == 32 then
       IO.println "✓ Stream keygen generated 32-byte key"
     else
@@ -15,15 +17,15 @@ def testStreamKeygen : IO Unit := do
 
 def testStreamCiphers : IO Unit := do
   try
-    let key ← Sodium.FFI.Stream.streamKeygen
+    let key ← streamKeygen
     let nonceBytes := #[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
                        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
     let nonce := ByteArray.mk nonceBytes
     let message := "Hello, Stream Ciphers!".toUTF8
     
-    let ciphertext ← Sodium.FFI.Stream.streamXor message nonce key
-    let decrypted ← Sodium.FFI.Stream.streamXor ciphertext nonce key
+    let ciphertext ← streamXor message nonce key
+    let decrypted ← streamXor ciphertext nonce key
     
     if decrypted.toList == message.toList then
       IO.println "✓ Default stream cipher encryption/decryption working"
@@ -34,13 +36,13 @@ def testStreamCiphers : IO Unit := do
 
 def testChaCha20 : IO Unit := do
   try
-    let key ← Sodium.FFI.Stream.chacha20Keygen
+    let key ← chacha20Keygen
     let nonceBytes := #[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
     let nonce := ByteArray.mk nonceBytes
     let message := "ChaCha20 test message".toUTF8
     
-    let ciphertext ← Sodium.FFI.Stream.chacha20Xor message nonce key
-    let decrypted ← Sodium.FFI.Stream.chacha20Xor ciphertext nonce key
+    let ciphertext ← chacha20Xor message nonce key
+    let decrypted ← chacha20Xor ciphertext nonce key
     
     if decrypted.toList == message.toList then
       IO.println "✓ ChaCha20 encryption/decryption working"
@@ -51,14 +53,14 @@ def testChaCha20 : IO Unit := do
 
 def testChaCha20Ietf : IO Unit := do
   try
-    let key ← Sodium.FFI.Stream.chacha20IetfKeygen
+    let key ← chacha20IetfKeygen
     let nonceBytes := #[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                        0x08, 0x09, 0x0a, 0x0b]
     let nonce := ByteArray.mk nonceBytes
     let message := "ChaCha20-IETF test message".toUTF8
     
-    let ciphertext ← Sodium.FFI.Stream.chacha20IetfXor message nonce key
-    let decrypted ← Sodium.FFI.Stream.chacha20IetfXor ciphertext nonce key
+    let ciphertext ← chacha20IetfXor message nonce key
+    let decrypted ← chacha20IetfXor ciphertext nonce key
     
     if decrypted.toList == message.toList then
       IO.println "✓ ChaCha20-IETF encryption/decryption working"
@@ -69,13 +71,13 @@ def testChaCha20Ietf : IO Unit := do
 
 def testSalsa20 : IO Unit := do
   try
-    let key ← Sodium.FFI.Stream.salsa20Keygen
+    let key ← salsa20Keygen
     let nonceBytes := #[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
     let nonce := ByteArray.mk nonceBytes
     let message := "Salsa20 test message".toUTF8
     
-    let ciphertext ← Sodium.FFI.Stream.salsa20Xor message nonce key
-    let decrypted ← Sodium.FFI.Stream.salsa20Xor ciphertext nonce key
+    let ciphertext ← salsa20Xor message nonce key
+    let decrypted ← salsa20Xor ciphertext nonce key
     
     if decrypted.toList == message.toList then
       IO.println "✓ Salsa20 encryption/decryption working"
@@ -86,15 +88,15 @@ def testSalsa20 : IO Unit := do
 
 def testXChaCha20 : IO Unit := do
   try
-    let key ← Sodium.FFI.Stream.xchacha20Keygen
+    let key ← xchacha20Keygen
     let nonceBytes := #[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
                        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
     let nonce := ByteArray.mk nonceBytes
     let message := "XChaCha20 test message".toUTF8
     
-    let ciphertext ← Sodium.FFI.Stream.xchacha20Xor message nonce key
-    let decrypted ← Sodium.FFI.Stream.xchacha20Xor ciphertext nonce key
+    let ciphertext ← xchacha20Xor message nonce key
+    let decrypted ← xchacha20Xor ciphertext nonce key
     
     if decrypted.toList == message.toList then
       IO.println "✓ XChaCha20 encryption/decryption working"
@@ -105,15 +107,15 @@ def testXChaCha20 : IO Unit := do
 
 def testXSalsa20 : IO Unit := do
   try
-    let key ← Sodium.FFI.Stream.xsalsa20Keygen
+    let key ← xsalsa20Keygen
     let nonceBytes := #[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
                        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
     let nonce := ByteArray.mk nonceBytes
     let message := "XSalsa20 test message".toUTF8
     
-    let ciphertext ← Sodium.FFI.Stream.xsalsa20Xor message nonce key
-    let decrypted ← Sodium.FFI.Stream.xsalsa20Xor ciphertext nonce key
+    let ciphertext ← xsalsa20Xor message nonce key
+    let decrypted ← xsalsa20Xor ciphertext nonce key
     
     if decrypted.toList == message.toList then
       IO.println "✓ XSalsa20 encryption/decryption working"
@@ -124,14 +126,14 @@ def testXSalsa20 : IO Unit := do
 
 def testStreamGeneration : IO Unit := do
   try
-    let key ← Sodium.FFI.Stream.streamKeygen
+    let key ← streamKeygen
     let nonceBytes := #[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
                        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
     let nonce := ByteArray.mk nonceBytes
     
-    let stream1 ← Sodium.FFI.Stream.stream 64 nonce key
-    let stream2 ← Sodium.FFI.Stream.stream 64 nonce key
+    let stream1 ← stream 64 nonce key
+    let stream2 ← stream 64 nonce key
     
     if stream1.size == 64 && stream2.size == 64 then
       if stream1.toList == stream2.toList then
@@ -145,13 +147,13 @@ def testStreamGeneration : IO Unit := do
 
 def testCounterFunctions : IO Unit := do
   try
-    let key ← Sodium.FFI.Stream.chacha20Keygen
+    let key ← chacha20Keygen
     let nonceBytes := #[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
     let nonce := ByteArray.mk nonceBytes
     let message := "Counter test message".toUTF8
     
-    let ciphertext1 ← Sodium.FFI.Stream.chacha20XorIc message nonce 0 key
-    let ciphertext2 ← Sodium.FFI.Stream.chacha20XorIc message nonce 1 key
+    let ciphertext1 ← chacha20XorIc message nonce 0 key
+    let ciphertext2 ← chacha20XorIc message nonce 1 key
     
     if ciphertext1.toList != ciphertext2.toList then
       IO.println "✓ Counter functions produce different outputs"
@@ -166,14 +168,14 @@ def testInvalidInputs : IO Unit := do
   let validMessage := "test message".toUTF8
   
   try
-    let _ ← Sodium.FFI.Stream.streamXor validMessage shortNonce shortKey
+    let _ ← streamXor validMessage shortNonce shortKey
     IO.println "✗ Should have failed with invalid key/nonce size"
   catch _ =>
     IO.println "✓ Correctly rejected invalid key/nonce size"
   
   try
-    let validKey ← Sodium.FFI.Stream.streamKeygen
-    let _ ← Sodium.FFI.Stream.streamXor validMessage shortNonce validKey
+    let validKey ← streamKeygen
+    let _ ← streamXor validMessage shortNonce validKey
     IO.println "✗ Should have failed with invalid nonce size"
   catch _ =>
     IO.println "✓ Correctly rejected invalid nonce size"

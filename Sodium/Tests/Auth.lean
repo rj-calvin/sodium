@@ -1,11 +1,13 @@
 import «Sodium».FFI.Auth
 import «Sodium».FFI.Basic
 
+open Sodium.FFI
+
 namespace Sodium.Tests.Auth
 
 def testAuthKeygen : IO Unit := do
   try
-    let key ← Sodium.FFI.Auth.authKeygen
+    let key ← authKeygen
     if key.size == 32 then
       IO.println "✓ Auth keygen generated 32-byte key"
     else
@@ -15,9 +17,9 @@ def testAuthKeygen : IO Unit := do
 
 def testAuth : IO Unit := do
   try
-    let key ← Sodium.FFI.Auth.authKeygen
+    let key ← authKeygen
     let message := "Hello, HMAC-SHA512-256!".toUTF8
-    let mac ← Sodium.FFI.Auth.auth message key
+    let mac ← auth message key
     
     if mac.size == 32 then
       IO.println "✓ Auth generated 32-byte MAC"
@@ -28,12 +30,12 @@ def testAuth : IO Unit := do
 
 def testAuthVerify : IO Unit := do
   try
-    let key ← Sodium.FFI.Auth.authKeygen
+    let key ← authKeygen
     let message := "Test message for verification".toUTF8
-    let mac ← Sodium.FFI.Auth.auth message key
+    let mac ← auth message key
     
     -- Test valid MAC verification
-    let validResult ← Sodium.FFI.Auth.authVerify mac message key
+    let validResult ← authVerify mac message key
     if validResult then
       IO.println "✓ Auth verification succeeded for valid MAC"
     else
@@ -44,7 +46,7 @@ def testAuthVerify : IO Unit := do
                                     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
                                     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
                                     0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f]
-    let invalidResult ← Sodium.FFI.Auth.authVerify invalidMac message key
+    let invalidResult ← authVerify invalidMac message key
     if not invalidResult then
       IO.println "✓ Auth verification correctly rejected invalid MAC"
     else
@@ -54,13 +56,13 @@ def testAuthVerify : IO Unit := do
 
 def testHmacSha256 : IO Unit := do
   try
-    let key ← Sodium.FFI.Auth.hmacSha256Keygen
+    let key ← hmacSha256Keygen
     let message := "Hello, HMAC-SHA256!".toUTF8
-    let mac ← Sodium.FFI.Auth.hmacSha256 message key
+    let mac ← hmacSha256 message key
     
     if mac.size == 32 then
       -- Test verification
-      let verified ← Sodium.FFI.Auth.hmacSha256Verify mac message key
+      let verified ← hmacSha256Verify mac message key
       if verified then
         IO.println "✓ HMAC-SHA256 computation and verification working"
       else
@@ -72,13 +74,13 @@ def testHmacSha256 : IO Unit := do
 
 def testHmacSha512 : IO Unit := do
   try
-    let key ← Sodium.FFI.Auth.hmacSha512Keygen
+    let key ← hmacSha512Keygen
     let message := "Hello, HMAC-SHA512!".toUTF8
-    let mac ← Sodium.FFI.Auth.hmacSha512 message key
+    let mac ← hmacSha512 message key
     
     if mac.size == 64 then
       -- Test verification
-      let verified ← Sodium.FFI.Auth.hmacSha512Verify mac message key
+      let verified ← hmacSha512Verify mac message key
       if verified then
         IO.println "✓ HMAC-SHA512 computation and verification working"
       else
@@ -97,8 +99,8 @@ def testAuthDeterministic : IO Unit := do
     let key := ByteArray.mk keyBytes
     let message := "deterministic test message".toUTF8
     
-    let mac1 ← Sodium.FFI.Auth.auth message key
-    let mac2 ← Sodium.FFI.Auth.auth message key
+    let mac1 ← auth message key
+    let mac2 ← auth message key
     
     let consistent := mac1.toList == mac2.toList
     if consistent then
@@ -110,12 +112,12 @@ def testAuthDeterministic : IO Unit := do
 
 def testAuthDifferentKeys : IO Unit := do
   try
-    let key1 ← Sodium.FFI.Auth.authKeygen
-    let key2 ← Sodium.FFI.Auth.authKeygen
+    let key1 ← authKeygen
+    let key2 ← authKeygen
     let message := "test message for different keys".toUTF8
     
-    let mac1 ← Sodium.FFI.Auth.auth message key1
-    let mac2 ← Sodium.FFI.Auth.auth message key2
+    let mac1 ← auth message key1
+    let mac2 ← auth message key2
     
     let different := mac1.toList != mac2.toList
     if different then
@@ -131,33 +133,33 @@ def testInvalidInputs : IO Unit := do
   
   -- Test auth with invalid key
   try
-    let _ ← Sodium.FFI.Auth.auth validMessage invalidKey
+    let _ ← auth validMessage invalidKey
     IO.println "✗ Should have failed with invalid key size"
   catch _ =>
     IO.println "✓ Correctly rejected invalid key size for auth"
   
   -- Test HMAC-SHA256 with invalid key
   try
-    let _ ← Sodium.FFI.Auth.hmacSha256 validMessage invalidKey
+    let _ ← hmacSha256 validMessage invalidKey
     IO.println "✗ Should have failed with invalid key size"
   catch _ =>
     IO.println "✓ Correctly rejected invalid key size for HMAC-SHA256"
   
   -- Test HMAC-SHA512 with invalid key
   try
-    let _ ← Sodium.FFI.Auth.hmacSha512 validMessage invalidKey
+    let _ ← hmacSha512 validMessage invalidKey
     IO.println "✗ Should have failed with invalid key size"
   catch _ =>
     IO.println "✓ Correctly rejected invalid key size for HMAC-SHA512"
 
 def testEmptyMessage : IO Unit := do
   try
-    let key ← Sodium.FFI.Auth.authKeygen
+    let key ← authKeygen
     let emptyMessage := ByteArray.empty
-    let mac ← Sodium.FFI.Auth.auth emptyMessage key
+    let mac ← auth emptyMessage key
     
     if mac.size == 32 then
-      let verified ← Sodium.FFI.Auth.authVerify mac emptyMessage key
+      let verified ← authVerify mac emptyMessage key
       if verified then
         IO.println "✓ Auth handles empty message correctly"
       else

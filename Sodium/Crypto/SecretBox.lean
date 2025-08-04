@@ -12,6 +12,14 @@ open Lean
 
 namespace Sodium.Crypto.SecretBox
 
+open Utils
+
+abbrev SecretBoxKey := SecretKey SecretBoxSpec
+abbrev SecretBoxNonce := NonceId SecretBoxSpec
+abbrev SecretBoxCipherText := CipherText SecretBoxSpec
+abbrev SecretBoxMac := Mac SecretBoxSpec
+abbrev SecretBoxDetachedCipherText := DetachedCipherText SecretBoxSpec
+
 /--
 Generate a new SecretBox key using LibSodium's secure random number generator.
 This operation does not consume fuel as it uses LibSodium's internal entropy.
@@ -23,7 +31,7 @@ def genKey : CryptoM SecretBoxKey := do
     return ⟨keyBytes, h⟩
   else
     -- This should never happen if FFI is implemented correctly
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 variable {α : Type}
 
@@ -42,7 +50,7 @@ def encrypt [ToJson α] (key : SecretBoxKey) (msg : α) : CryptoM (SecretBoxNonc
     return (nonce, ciphertext)
   else
     -- This should never happen if FFI is implemented correctly
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Encrypt a message using SecretBox with an explicitly provided nonce.
@@ -57,16 +65,18 @@ def encryptWith [ToJson α] (nonce : SecretBoxNonce) (key : SecretBoxKey) (msg :
     return ⟨cipherBytes, h⟩
   else
     -- This should never happen if FFI is implemented correctly
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Decrypt a SecretBox ciphertext using the provided nonce and key.
 Returns the original message if authentication succeeds.
 Returns an error if authentication fails or decryption is not possible.
 -/
-def decrypt [FromJson α] (key : SecretBoxKey) (nonce : SecretBoxNonce) (ct : SecretBoxCipherText) : CryptoM (Except String α) := do
-  let json := (← FFI.secretBoxOpenEasy ct nonce key) |> String.fromUTF8! |> Json.parse
-  return json >>= fromJson?
+def decrypt [FromJson α] (nonce : SecretBoxNonce) (key : SecretBoxKey) (ct : SecretBoxCipherText) : CryptoM (Except ByteArray α) := do
+  let bytes ← FFI.secretBoxOpenEasy ct nonce key
+  return match String.fromUTF8? bytes with
+  | none => .error bytes
+  | some utf8 => Json.parse utf8 >>= fromJson? |>.mapError (·.toUTF8)
 
 /-- Result type for detached mode encryption -/
 structure DetachedResult where
@@ -83,9 +93,8 @@ def encryptDetached [ToJson α] (key : SecretBoxKey) (msg : α) : CryptoM (Secre
   let payload := toJson msg |>.compress.toUTF8
 
   -- Validate message size
-  let isValid ← Utils.validateMessageSize payload.size
-  if !isValid then
-    throwInvariantFailure m!"Message too large for SecretBox encryption"
+  if !(← validateMessageSize payload.size) then
+    throwMessage m!"invariant failed in {decl_name%} - message too large for SecretBox encryption"
 
   let (cipherBytes, macBytes) ← FFI.secretBoxDetached payload nonce key
 
@@ -95,7 +104,7 @@ def encryptDetached [ToJson α] (key : SecretBoxKey) (msg : α) : CryptoM (Secre
     let ciphertext := ⟨cipherBytes⟩
     return (nonce, ⟨ciphertext, mac⟩)
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Encrypt a message using SecretBox detached mode with an explicitly provided nonce.
@@ -104,10 +113,8 @@ This operation does not consume fuel as no nonce generation is required.
 def encryptDetachedWith [ToJson α] (nonce : SecretBoxNonce) (key : SecretBoxKey) (msg : α) : CryptoM DetachedResult := do
   let payload := toJson msg |>.compress.toUTF8
 
-  -- Validate message size
-  let isValid ← Utils.validateMessageSize payload.size
-  if !isValid then
-    throwInvariantFailure m!"Message too large for SecretBox encryption"
+  if !(← validateMessageSize payload.size) then
+    throwMessage m!"invariant failed in {decl_name%} - message too large for SecretBox encryption"
 
   let (cipherBytes, macBytes) ← FFI.secretBoxDetached payload nonce key
 
@@ -117,16 +124,18 @@ def encryptDetachedWith [ToJson α] (nonce : SecretBoxNonce) (key : SecretBoxKey
     let ciphertext := ⟨cipherBytes⟩
     return ⟨ciphertext, mac⟩
   else
-    throwInvariantFailure m!"{decl_name%}"
+    throwMessage m!"invariant failed in {decl_name%}"
 
 /--
 Decrypt a SecretBox detached mode ciphertext using the provided nonce, key, and MAC.
 Returns the original message if authentication succeeds.
 Uses constant-time MAC verification for security.
 -/
-def decryptDetached [FromJson α] (key : SecretBoxKey) (nonce : SecretBoxNonce)
-                   (ciphertext : SecretBoxDetachedCipherText) (mac : SecretBoxMac) : CryptoM (Except String α) := do
-  let json := (← FFI.secretBoxOpenDetached ciphertext mac nonce key) |> String.fromUTF8! |> Json.parse
-  return json >>= fromJson?
+def decryptDetached [FromJson α] (nonce : SecretBoxNonce) (key : SecretBoxKey)
+    (mac : SecretBoxMac) (ciphertext : SecretBoxDetachedCipherText) : CryptoM (Except ByteArray α) := do
+  let bytes ← FFI.secretBoxOpenDetached ciphertext mac nonce key
+  return match String.fromUTF8? bytes with
+  | none => .error bytes
+  | some utf8 => Json.parse utf8 >>= fromJson? |>.mapError (·.toUTF8)
 
 end Sodium.Crypto.SecretBox

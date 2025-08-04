@@ -51,30 +51,38 @@ structure CryptoState where
 structure CryptoContext where
   startingFuel : USize
 
-inductive CryptoError
+inductive CryptoMessage
   | outOfFuel
-  | invariantFailure (e : MessageData)
   | ioError (e : IO.Error)
+  | ofData (e : MessageData)
+  | ofLazy (f : Option PPContext → BaseIO Dynamic) (hasSyntheticSorry : MetavarContext → Bool)
   deriving Inhabited
 
-def CryptoError.toMessageData : CryptoError → MessageData
+@[coe] def CryptoMessage.toMessageData : CryptoMessage → MessageData
   | .outOfFuel => m!"ran out of fuel"
-  | .invariantFailure e => e
+  | .ofData e => e
   | .ioError e => instToMessageDataOfToFormat.toMessageData e
+  | .ofLazy f s => .ofLazy f s
 
-instance : ToMessageData CryptoError := ⟨CryptoError.toMessageData⟩
+instance : ToMessageData CryptoMessage := ⟨CryptoMessage.toMessageData⟩
 
-def CryptoError.toException (e : CryptoError) : Exception := .error .missing (e.toMessageData)
+@[coe] def CryptoMessage.toException (e : CryptoMessage) : Exception :=
+  .error .missing (e.toMessageData)
 
-instance : Coe CryptoError Exception := ⟨CryptoError.toException⟩
+instance : Coe CryptoMessage Exception := ⟨CryptoMessage.toException⟩
 
 abbrev CryptoM := ReaderT CryptoContext <| StateRefT (Mutex CryptoState) CoreM
 
-def throwOutOfFuel {α : Type} : CryptoM α :=
-  throw CryptoError.outOfFuel.toException
+variable {α : Type}
 
-def throwInvariantFailure {α : Type} (msg : MessageData) : CryptoM α :=
-  throw (CryptoError.invariantFailure msg).toException
+def throwOutOfFuel : CryptoM α :=
+  throw CryptoMessage.outOfFuel.toException
+
+def throwMessage {ε : Type} [ToMessageData ε] (msg : ε) : CryptoM α :=
+  throw (CryptoMessage.ofData <| toMessageData msg).toException
+
+def throwLazy (f : Option PPContext → BaseIO Dynamic) (hasSyntheticSorry : MetavarContext → Bool) : CryptoM α :=
+  throw (CryptoMessage.ofLazy f hasSyntheticSorry).toException
 
 private instance : MonadStateOf CryptoState CryptoM where
   get := do (← get).atomically get
@@ -135,7 +143,7 @@ def reset : CryptoM Unit :=
 def mkFreshNonceId (spec : AlgorithmSpec := NameGeneratorSpec) : CryptoM (NonceId spec) := do
   if h : spec.nonceBytes = 0 then
     return ⟨.empty, by simp [ByteArray.empty, ByteArray.size, ByteArray.emptyWithCapacity, h]⟩
-  let nonce? : Option (NonceId spec) ← modifyGet fun st@{entropy, nonces, ..} =>
+  let nonce? ← modifyGet fun st@{nonces, ..} =>
     match nonces.find? spec.name with
     | some n =>
       match n.succ? with
@@ -162,7 +170,7 @@ where
       (exact := true)
 
     if h : front.size = spec.nonceBytes then
-      let nonce : NonceId spec := ⟨front, h⟩
+      let nonce := ⟨front, h⟩
       let nonces := nonces.insert spec.name nonce.bytes
       (some nonce, {st with entropyOff := entropyOff + spec.nonceBytes, nonces})
     else

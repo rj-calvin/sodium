@@ -226,12 +226,13 @@ The project includes comprehensive test modules in `Sodium/Tests/` for each FFI 
 
 **Development Status**: 🎉 **FFI LAYER COMPLETE!** **100% LibSodium API coverage achieved** - a remarkable milestone! All 14 major cryptographic categories are now fully implemented with comprehensive FFI bindings, type safety, memory management, and test coverage.
 
-**Next Phase - High-Level Abstractions**: While the low-level FFI bindings are complete, the project now focuses on **API ergonomics** and providing high-level abstractions that make cryptographic operations more intuitive and safe for end users. This includes:
+**Next Phase - Completeness and Security**: While the FFI layer provides comprehensive API coverage, the project now focuses on **iterating on completeness** and addressing security gaps identified through auditing. This includes:
 
-- **Type-Safe Wrappers**: Building on `Sodium/Crypto/Types.lean` for compile-time size guarantees
-- **Monadic Interfaces**: Expanding `Sodium/Crypto/Monad.lean` for stateful crypto operations  
-- **Ergonomic APIs**: Creating user-friendly interfaces that abstract away low-level details
-- **Safe Defaults**: Providing secure-by-default configurations and best practices
-- **Documentation**: Comprehensive usage examples and security guidelines
+- **Security Hardening**: Adding missing input validation to FFI modules (GenericHash, Box operations)
+- **Validation Completeness**: Ensuring all FFI functions match LibSodium's internal validation patterns
+- **Error Handling Consistency**: Standardizing error messages and cleanup patterns across all modules
+- **Type Safety Improvements**: Expanding compile-time guarantees and preventing misuse
+- **Test Coverage Enhancement**: Adding security-focused tests for edge cases and malicious inputs
+- **Documentation**: Comprehensive security guidelines and best practices
 
-The objective has shifted from **coverage** to **usability** - making LibSodium's power accessible through elegant, type-safe Lean4 abstractions.
+The objective has shifted from **coverage** to **completeness and security** - ensuring every FFI binding is as secure and robust as the exemplary SecretStream implementation.

@@ -16,12 +16,12 @@ def sodiumMemcmp (b1 : ByteArray) (b2 : ByteArray) : IO Int32 :=
     lean_ctor_set(io_error, 0, error_msg)
     return lean_io_result_mk_error(io_error)
   }
-  
+
   int result = sodium_memcmp(lean_sarray_cptr(b1), lean_sarray_cptr(b2), len1)
   return lean_io_result_mk_ok(lean_box(result))
 
 alloy c extern "lean_sodium_memzero"
-def sodiumMemzero (buffer : ByteArray) : IO Unit :=
+def sodiumMemzero (buffer : ByteArray) : BaseIO Unit :=
   size_t len = lean_sarray_size(buffer)
   sodium_memzero(lean_sarray_cptr(buffer), len)
   return lean_io_result_mk_ok(lean_box(0))
@@ -36,12 +36,12 @@ def sodiumCompare (b1 : ByteArray) (b2 : ByteArray) : IO Int32 :=
     lean_ctor_set(io_error, 0, error_msg)
     return lean_io_result_mk_error(io_error)
   }
-  
+
   int result = sodium_compare(lean_sarray_cptr(b1), lean_sarray_cptr(b2), len1)
   return lean_io_result_mk_ok(lean_box(result))
 
 alloy c extern "lean_sodium_is_zero"
-def sodiumIsZero (buffer : ByteArray) : IO Bool :=
+def sodiumIsZero (buffer : ByteArray) : BaseIO Bool :=
   size_t len = lean_sarray_size(buffer)
   int result = sodium_is_zero(lean_sarray_cptr(buffer), len)
   uint8_t is_zero = (result == 1)
@@ -57,7 +57,7 @@ def cryptoVerify16 (x : ByteArray) (y : ByteArray) : IO Bool :=
     lean_ctor_set(io_error, 0, error_msg)
     return lean_io_result_mk_error(io_error)
   }
-  
+
   int result = crypto_verify_16(lean_sarray_cptr(x), lean_sarray_cptr(y))
   uint8_t is_equal = (result == 0)
   return lean_io_result_mk_ok(lean_box(is_equal))
@@ -72,7 +72,7 @@ def cryptoVerify32 (x : ByteArray) (y : ByteArray) : IO Bool :=
     lean_ctor_set(io_error, 0, error_msg)
     return lean_io_result_mk_error(io_error)
   }
-  
+
   int result = crypto_verify_32(lean_sarray_cptr(x), lean_sarray_cptr(y))
   uint8_t is_equal = (result == 0)
   return lean_io_result_mk_ok(lean_box(is_equal))
@@ -87,7 +87,7 @@ def cryptoVerify64 (x : ByteArray) (y : ByteArray) : IO Bool :=
     lean_ctor_set(io_error, 0, error_msg)
     return lean_io_result_mk_error(io_error)
   }
-  
+
   int result = crypto_verify_64(lean_sarray_cptr(x), lean_sarray_cptr(y))
   uint8_t is_equal = (result == 0)
   return lean_io_result_mk_ok(lean_box(is_equal))

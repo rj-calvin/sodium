@@ -1,11 +1,13 @@
 import «Sodium».FFI.KeyExch
 import «Sodium».FFI.Basic
 
+open Sodium.FFI
+
 namespace Sodium.Tests.KeyExch
 
 def testKxKeypair : IO Unit := do
   try
-    let (publicKey, secretKey) ← Sodium.FFI.KeyExch.kxKeypair
+    let (publicKey, secretKey) ← kxKeypair
     if publicKey.size == 32 && secretKey.size == 32 then
       IO.println "✓ Key exchange keypair generated successfully (32 bytes each)"
     else
@@ -16,8 +18,8 @@ def testKxKeypair : IO Unit := do
 def testKxSeedKeypair : IO Unit := do
   try
     let seed := "this_is_exactly_32_bytes_long!!!".toUTF8
-    let (publicKey1, secretKey1) ← Sodium.FFI.KeyExch.kxSeedKeypair seed
-    let (publicKey2, secretKey2) ← Sodium.FFI.KeyExch.kxSeedKeypair seed
+    let (publicKey1, secretKey1) ← kxSeedKeypair seed
+    let (publicKey2, secretKey2) ← kxSeedKeypair seed
     
     if publicKey1.size == 32 && secretKey1.size == 32 then
       -- Check deterministic generation
@@ -35,12 +37,12 @@ def testKxSeedKeypair : IO Unit := do
 def testKxSessionKeys : IO Unit := do
   try
     -- Generate client and server keypairs
-    let (clientPk, clientSk) ← Sodium.FFI.KeyExch.kxKeypair
-    let (serverPk, serverSk) ← Sodium.FFI.KeyExch.kxKeypair
+    let (clientPk, clientSk) ← kxKeypair
+    let (serverPk, serverSk) ← kxKeypair
     
     -- Derive session keys from both perspectives
-    let (clientRx, clientTx) ← Sodium.FFI.KeyExch.kxClientSessionKeys clientPk clientSk serverPk
-    let (serverRx, serverTx) ← Sodium.FFI.KeyExch.kxServerSessionKeys serverPk serverSk clientPk
+    let (clientRx, clientTx) ← kxClientSessionKeys clientPk clientSk serverPk
+    let (serverRx, serverTx) ← kxServerSessionKeys serverPk serverSk clientPk
     
     if clientRx.size == 32 && clientTx.size == 32 && serverRx.size == 32 && serverTx.size == 32 then
       -- Check key symmetry: client TX should equal server RX, and vice versa
@@ -57,34 +59,34 @@ def testKxSessionKeys : IO Unit := do
     IO.println ("✗ Session key derivation failed: " ++ toString e)
 
 def testKxInvalidInputs : IO Unit := do
-  let (validPk, validSk) ← Sodium.FFI.KeyExch.kxKeypair
+  let (validPk, validSk) ← kxKeypair
   let invalidKey := "short".toUTF8
   let invalidSeed := "too_short".toUTF8
   
   -- Test invalid seed size
   try
-    let _ ← Sodium.FFI.KeyExch.kxSeedKeypair invalidSeed
+    let _ ← kxSeedKeypair invalidSeed
     IO.println "✗ Should have failed with invalid seed size"
   catch _ =>
     IO.println "✓ Correctly rejected invalid seed size"
   
   -- Test invalid client public key
   try
-    let _ ← Sodium.FFI.KeyExch.kxClientSessionKeys invalidKey validSk validPk
+    let _ ← kxClientSessionKeys invalidKey validSk validPk
     IO.println "✗ Should have failed with invalid client public key"
   catch _ =>
     IO.println "✓ Correctly rejected invalid client public key"
   
   -- Test invalid client secret key
   try
-    let _ ← Sodium.FFI.KeyExch.kxClientSessionKeys validPk invalidKey validPk
+    let _ ← kxClientSessionKeys validPk invalidKey validPk
     IO.println "✗ Should have failed with invalid client secret key"
   catch _ =>
     IO.println "✓ Correctly rejected invalid client secret key"
   
   -- Test invalid server public key
   try
-    let _ ← Sodium.FFI.KeyExch.kxClientSessionKeys validPk validSk invalidKey
+    let _ ← kxClientSessionKeys validPk validSk invalidKey
     IO.println "✗ Should have failed with invalid server public key"
   catch _ =>
     IO.println "✓ Correctly rejected invalid server public key"
@@ -95,12 +97,12 @@ def testKxKeyReuse : IO Unit := do
     let seed1 := "32_byte_deterministic_seed_test1".toUTF8
     let seed2 := "32_byte_deterministic_seed_test2".toUTF8
     
-    let (clientPk, clientSk) ← Sodium.FFI.KeyExch.kxSeedKeypair seed1
-    let (serverPk, serverSk) ← Sodium.FFI.KeyExch.kxSeedKeypair seed2
+    let (clientPk, clientSk) ← kxSeedKeypair seed1
+    let (serverPk, serverSk) ← kxSeedKeypair seed2
     
     -- Derive session keys twice
-    let (rx1, tx1) ← Sodium.FFI.KeyExch.kxClientSessionKeys clientPk clientSk serverPk
-    let (rx2, tx2) ← Sodium.FFI.KeyExch.kxClientSessionKeys clientPk clientSk serverPk
+    let (rx1, tx1) ← kxClientSessionKeys clientPk clientSk serverPk
+    let (rx2, tx2) ← kxClientSessionKeys clientPk clientSk serverPk
     
     let consistent := (rx1.toList == rx2.toList) && (tx1.toList == tx2.toList)
     if consistent then

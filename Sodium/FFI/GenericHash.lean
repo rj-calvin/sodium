@@ -25,13 +25,12 @@ def genericHash (outlen : USize) (input : ByteArray) (key : Option ByteArray) : 
   const unsigned char* key_ptr = NULL
   size_t key_len = 0
 
-  if (lean_obj_tag(key) == 1) {  // 1 = some, 0 = none
+  if (lean_obj_tag(key) == 1) {
     lean_object* key_val = lean_ctor_get(key, 0)
     key_ptr = lean_sarray_cptr(key_val)
     key_len = lean_sarray_size(key_val)
   }
 
-  // Call LibSodium function
   int result = crypto_generichash(out_ptr, outlen, in_ptr, in_len, key_ptr, key_len)
 
   if (result != 0) {
@@ -54,7 +53,7 @@ def init (keylen : USize) (outlen : USize) (key : Option ByteArray) : IO State :
   const unsigned char* key_ptr = NULL
   size_t key_len = 0
 
-  if (lean_obj_tag(key) == 1) {  // 1 = some, 0 = none
+  if (lean_obj_tag(key) == 1) {
     lean_object* key_val = lean_ctor_get(key, 0)
     key_ptr = lean_sarray_cptr(key_val)
     key_len = lean_sarray_size(key_val)

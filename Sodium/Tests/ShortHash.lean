@@ -1,11 +1,13 @@
 import «Sodium».FFI.ShortHash
 import «Sodium».FFI.Basic
 
+open Sodium.FFI
+
 namespace Sodium.Tests.ShortHash
 
 def testShortHashKeygen : IO Unit := do
   try
-    let key ← Sodium.FFI.ShortHash.shortHashKeygen
+    let key ← shortHashKeygen
     if key.size == 16 then
       IO.println "✓ Short hash keygen generated 16-byte key"
     else
@@ -15,9 +17,9 @@ def testShortHashKeygen : IO Unit := do
 
 def testShortHash : IO Unit := do
   try
-    let key ← Sodium.FFI.ShortHash.shortHashKeygen
+    let key ← shortHashKeygen
     let message := "Hello, SipHash-2-4!".toUTF8
-    let hash ← Sodium.FFI.ShortHash.shortHash message key
+    let hash ← shortHash message key
     
     if hash.size == 8 then
       IO.println "✓ Short hash generated 8-byte hash"
@@ -33,8 +35,8 @@ def testShortHashConsistency : IO Unit := do
     let key := ByteArray.mk keyBytes
     let message := "consistent test message".toUTF8
     
-    let hash1 ← Sodium.FFI.ShortHash.shortHash message key
-    let hash2 ← Sodium.FFI.ShortHash.shortHash message key
+    let hash1 ← shortHash message key
+    let hash2 ← shortHash message key
     
     let consistent := hash1.toList == hash2.toList
     if consistent then
@@ -46,12 +48,12 @@ def testShortHashConsistency : IO Unit := do
 
 def testShortHashDifferentKeys : IO Unit := do
   try
-    let key1 ← Sodium.FFI.ShortHash.shortHashKeygen
-    let key2 ← Sodium.FFI.ShortHash.shortHashKeygen
+    let key1 ← shortHashKeygen
+    let key2 ← shortHashKeygen
     let message := "test message for different keys".toUTF8
     
-    let hash1 ← Sodium.FFI.ShortHash.shortHash message key1
-    let hash2 ← Sodium.FFI.ShortHash.shortHash message key2
+    let hash1 ← shortHash message key1
+    let hash2 ← shortHash message key2
     
     let different := hash1.toList != hash2.toList
     if different then
@@ -63,9 +65,9 @@ def testShortHashDifferentKeys : IO Unit := do
 
 def testShortHashx24 : IO Unit := do
   try
-    let key ← Sodium.FFI.ShortHash.shortHashKeygen
+    let key ← shortHashKeygen
     let message := "Hello, SipHashx-2-4!".toUTF8
-    let hash ← Sodium.FFI.ShortHash.shortHashx24 message key
+    let hash ← shortHashx24 message key
     
     if hash.size == 16 then
       IO.println "✓ SipHashx-2-4 generated 16-byte hash"
@@ -80,23 +82,23 @@ def testShortHashInvalidKey : IO Unit := do
   
   -- Test short hash with invalid key
   try
-    let _ ← Sodium.FFI.ShortHash.shortHash message invalidKey
+    let _ ← shortHash message invalidKey
     IO.println "✗ Should have failed with invalid key size"
   catch _ =>
     IO.println "✓ Correctly rejected invalid key size for short hash"
   
   -- Test SipHashx-2-4 with invalid key
   try
-    let _ ← Sodium.FFI.ShortHash.shortHashx24 message invalidKey
+    let _ ← shortHashx24 message invalidKey
     IO.println "✗ Should have failed with invalid key size"
   catch _ =>
     IO.println "✓ Correctly rejected invalid key size for SipHashx-2-4"
 
 def testEmptyMessage : IO Unit := do
   try
-    let key ← Sodium.FFI.ShortHash.shortHashKeygen
+    let key ← shortHashKeygen
     let emptyMessage := ByteArray.empty
-    let hash ← Sodium.FFI.ShortHash.shortHash emptyMessage key
+    let hash ← shortHash emptyMessage key
     
     if hash.size == 8 then
       IO.println "✓ Short hash handles empty message correctly"
