@@ -28,10 +28,10 @@ def keygen : IO ByteArray :=
   return lean_io_result_mk_ok(key)
 
 alloy c opaque_extern_type PushState => crypto_secretstream_xchacha20poly1305_state where
-  finalize(s) := free(s)
+  finalize(s) := lean_free_object((lean_object*)s)
 
 alloy c opaque_extern_type PullState => crypto_secretstream_xchacha20poly1305_state where
-  finalize(s) := free(s)
+  finalize(s) := lean_free_object((lean_object*)s)
 
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_init_push"
 -- Internal C FFI function
@@ -45,8 +45,9 @@ def initPush (key : ByteArray) : IO (PushState × ByteArray) :=
     return lean_io_result_mk_error(io_error)
   }
 
+  lean_object* state_object = lean_alloc_object(sizeof(crypto_secretstream_xchacha20poly1305_state))
   crypto_secretstream_xchacha20poly1305_state* state =
-    (crypto_secretstream_xchacha20poly1305_state*)malloc(sizeof(crypto_secretstream_xchacha20poly1305_state))
+    (crypto_secretstream_xchacha20poly1305_state*)state_object
 
   lean_object* header = lean_alloc_sarray(
     sizeof(unsigned char),
@@ -60,7 +61,7 @@ def initPush (key : ByteArray) : IO (PushState × ByteArray) :=
   )
 
   if (result != 0) {
-    free(state)
+    lean_free_object(state_object)
     lean_dec(header)
     lean_object* error_msg = lean_mk_string("init_push failed")
     lean_object* io_error = lean_alloc_ctor(7, 1, 0)
@@ -94,8 +95,9 @@ def initPull (key : ByteArray) (header : ByteArray) : IO PullState :=
     return lean_io_result_mk_error(io_error)
   }
 
+  lean_object* state_object = lean_alloc_object(sizeof(crypto_secretstream_xchacha20poly1305_state))
   crypto_secretstream_xchacha20poly1305_state* state =
-    (crypto_secretstream_xchacha20poly1305_state*)malloc(sizeof(crypto_secretstream_xchacha20poly1305_state))
+    (crypto_secretstream_xchacha20poly1305_state*)state_object
 
   int result = crypto_secretstream_xchacha20poly1305_init_pull(
     state,
@@ -104,7 +106,7 @@ def initPull (key : ByteArray) (header : ByteArray) : IO PullState :=
   )
 
   if (result != 0) {
-    free(state)
+    lean_free_object(state_object)
     lean_object* error_msg = lean_mk_string("init_pull failed")
     lean_object* io_error = lean_alloc_ctor(7, 1, 0)
     lean_ctor_set(io_error, 0, error_msg)

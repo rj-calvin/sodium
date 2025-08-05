@@ -44,11 +44,12 @@ def genericHash (outlen : USize) (input : ByteArray) (key : Option ByteArray) : 
   return lean_io_result_mk_ok(out)
 
 alloy c opaque_extern_type State => crypto_generichash_state where
-  finalize(s) := free(s)
+  finalize(s) := lean_free_object((lean_object*)s)
 
 alloy c extern "lean_crypto_generichash_init"
 def init (keylen : USize) (outlen : USize) (key : Option ByteArray) : IO State :=
-  crypto_generichash_state* state = (crypto_generichash_state*)malloc(sizeof(crypto_generichash_state))
+  lean_object* state_object = lean_alloc_object(sizeof(crypto_generichash_state))
+  crypto_generichash_state* state = (crypto_generichash_state*)state_object
 
   const unsigned char* key_ptr = NULL
   size_t key_len = 0
@@ -62,7 +63,7 @@ def init (keylen : USize) (outlen : USize) (key : Option ByteArray) : IO State :
   int result = crypto_generichash_init(state, key_ptr, key_len, outlen)
 
   if (result != 0) {
-    free(state)
+    lean_free_object(state_object)
     lean_object* error_msg = lean_mk_string("crypto_generichash_init failed")
     lean_object* io_error = lean_alloc_ctor(7, 1, 0)
     lean_ctor_set(io_error, 0, error_msg)

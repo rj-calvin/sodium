@@ -59,13 +59,8 @@ def pwhashStr (passwd : String) (opslimit : USize) (memlimit : USize) : IO Strin
   const char* passwd_cstr = lean_string_cstr(passwd)
   size_t passwd_len = lean_string_len(passwd)
 
-  char* out = (char*)malloc(crypto_pwhash_STRBYTES)
-  if (out == NULL) {
-    lean_object* error_msg = lean_mk_string("Failed to allocate memory for password hash")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  lean_object* out_object = lean_alloc_object(crypto_pwhash_STRBYTES)
+  char* out = (char*)out_object
 
   int result = crypto_pwhash_str(
     out,
@@ -74,7 +69,7 @@ def pwhashStr (passwd : String) (opslimit : USize) (memlimit : USize) : IO Strin
   )
 
   if (result != 0) {
-    free(out)
+    lean_free_object(out_object)
     lean_object* error_msg = lean_mk_string("crypto_pwhash_str failed (possibly out of memory)")
     lean_object* io_error = lean_alloc_ctor(7, 1, 0)
     lean_ctor_set(io_error, 0, error_msg)
@@ -82,7 +77,7 @@ def pwhashStr (passwd : String) (opslimit : USize) (memlimit : USize) : IO Strin
   }
 
   lean_object* hash_string = lean_mk_string(out)
-  free(out)
+  lean_free_object(out_object)
   return lean_io_result_mk_ok(hash_string)
 
 alloy c extern "lean_crypto_pwhash_str_verify"

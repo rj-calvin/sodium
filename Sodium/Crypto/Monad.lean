@@ -22,8 +22,8 @@ variable {spec : AlgorithmSpec}
 
 namespace NonceId
 
-/-- Alias of `ByteArray.compact!`. -/
-abbrev compact! (nonce : NonceId spec) := ByteArray.compact! nonce
+def hash : NonceId spec → UInt64 := ByteArray.hash ∘ NonceId.bytes
+instance : Hashable (NonceId spec) := ⟨hash⟩
 
 /--
   Create a "unique" MVarId.
@@ -31,7 +31,7 @@ abbrev compact! (nonce : NonceId spec) := ByteArray.compact! nonce
   Uniqueness is obviously not guaranteed in a purist sense, but can still be useful for
   creating synthetic goals.
 -/
-def toMVarId! (nonce : NonceId spec) := MVarId.mk (.num spec.name nonce.compact!.toNat)
+def toMVarId! (nonce : NonceId spec) := MVarId.mk (.num spec.name nonce.hash.toNat)
 
 /--
   Create a "unique" FVarId.
@@ -39,7 +39,7 @@ def toMVarId! (nonce : NonceId spec) := MVarId.mk (.num spec.name nonce.compact!
   Uniqueness is obviously not guaranteed in a purist sense, but can still be useful for
   creating synthetic free variables.
 -/
-def toFVarId! (nonce : NonceId spec) := FVarId.mk (.num spec.name nonce.compact!.toNat)
+def toFVarId! (nonce : NonceId spec) := FVarId.mk (.num spec.name nonce.hash.toNat)
 
 end NonceId
 
@@ -146,14 +146,12 @@ def mkFreshNonceId (spec : AlgorithmSpec := NameGeneratorSpec) : CryptoM (NonceI
   let nonce? ← modifyGet fun st@{nonces, ..} =>
     match nonces.find? spec.name with
     | some n =>
-      match n.succ? with
-      | some n' =>
-        if h : n'.size = spec.nonceBytes then -- TODO: eliminate this check
-          let nonces := nonces.insert spec.name n'
-          (some ⟨n', h⟩, {st with nonces})
-        else
-          nextNonce st
-      | none => nextNonce st
+      let n := n.succ!
+      if h : n.size = spec.nonceBytes then
+        let nonces := nonces.insert spec.name n
+        (some ⟨n, h⟩, {st with nonces})
+      else
+        nextNonce st
     | none => nextNonce st
   match nonce? with
   | some n => return n
@@ -193,7 +191,7 @@ def drainEntropy (size : Nat) : CryptoM ByteArray := do
 instance : MonadNameGenerator CryptoM where
   getNGen := do
     let nonce ← mkFreshNonceId
-    return {namePrefix := NameGeneratorSpec.name, idx := nonce.compact!.toNat}
+    return {namePrefix := NameGeneratorSpec.name, idx := nonce.hash.toNat}
   setNGen _ :=
     return () -- not allowed, so we ignore.
 

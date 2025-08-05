@@ -7,21 +7,12 @@ ensuring proper security practices for memory management and secret comparisons.
 import Sodium.FFI.Utils
 import Sodium.FFI.SecretBox
 import Sodium.Crypto.Types
-import Sodium.Crypto.Monad
 
 open Lean
 
 namespace Sodium.Crypto.Utils
 
 variable {spec : AlgorithmSpec}
-
-/--
-Securely zero out a key's memory to prevent data leakage.
-This uses LibSodium's `sodium_memzero` which prevents compiler optimizations
-from removing the memory clearing operation.
--/
-def zeroKey (key : SecretKey spec) : IO Unit :=
-  FFI.sodiumMemzero key.bytes
 
 /--
 Securely zero out any buffer's memory.
@@ -36,15 +27,6 @@ Uses LibSodium's constant-time implementation to avoid timing attacks.
 -/
 def isBufferZero (buffer : ByteArray) : IO Bool :=
   FFI.sodiumIsZero buffer
-
-/--
-Compare two keys for equality in constant time.
-This prevents timing-based side-channel attacks when comparing secret keys.
-Returns true if keys are identical, false otherwise.
--/
-def keyEqual (key1 key2 : SecretKey spec) : IO Bool := do
-  let result ← FFI.sodiumMemcmp key1.bytes key2.bytes
-  return result == 0
 
 /--
 Compare two nonces lexicographically in constant time.
