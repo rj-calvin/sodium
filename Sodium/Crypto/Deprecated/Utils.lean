@@ -4,8 +4,8 @@ Cryptographic utility functions for secure memory management and constant-time o
 This module provides high-level wrappers around LibSodium's utility functions,
 ensuring proper security practices for memory management and secret comparisons.
 -/
-import Sodium.FFI.Utils
-import Sodium.FFI.SecretBox
+import Sodium.FFI.Deprecated.Utils
+import Sodium.FFI.Deprecated.SecretBox
 import Sodium.Crypto.Types
 
 open Lean

@@ -1,4 +1,4 @@
-import «Sodium».FFI.Stream
+import «Sodium».FFI.Deprecated.Stream
 import «Sodium».FFI.Basic
 
 open Sodium.FFI

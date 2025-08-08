@@ -4,7 +4,7 @@ Type-safe Box (public-key authenticated encryption) operations using the CryptoM
 This module provides high-level, fuel-managed wrappers around the LibSodium box
 operations, ensuring proper nonce management and type safety for public-key cryptography.
 -/
-import Sodium.FFI.Box
+import Sodium.FFI.Deprecated.Box
 import Sodium.Crypto.Monad
 import Sodium.Crypto.Utils
 

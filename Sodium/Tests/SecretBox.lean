@@ -1,5 +1,5 @@
 import «Sodium».FFI.Basic
-import «Sodium».FFI.SecretBox
+import «Sodium».FFI.Deprecated.SecretBox
 
 namespace Sodium.Tests
 

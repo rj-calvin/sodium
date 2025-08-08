@@ -4,629 +4,608 @@ open scoped Alloy.C
 
 alloy c include <sodium.h> <lean/lean.h>
 
-namespace Sodium.FFI
+namespace Sodium.FFI.Box
+
+variable {σ : Type}
+
+alloy c section
+extern lean_obj_res lean_sodium_malloc(b_lean_obj_arg, size_t, lean_obj_arg);
+extern lean_obj_res sodium_secure_to_lean(void*);
+extern void* sodium_secure_of_lean(b_lean_obj_arg);
+end
 
 -- Constants for crypto_box
-def BOX_PUBLICKEYBYTES : USize := 32
-def BOX_SECRETKEYBYTES : USize := 32
-def BOX_NONCEBYTES : USize := 24
-def BOX_MACBYTES : USize := 16
-def BOX_SEEDBYTES : USize := 32
-def BOX_BEFORENMBYTES : USize := 32
-def BOX_SEALBYTES : USize := 48  -- PUBLICKEYBYTES + MACBYTES
+def PUBLICKEYBYTES : USize := 32
+def SECRETKEYBYTES : USize := 32
+def NONCEBYTES : USize := 24
+def MACBYTES : USize := 16
+def SEEDBYTES : USize := 32
+def BEFORENMBYTES : USize := 32
+def SEALBYTES : USize := 48  -- PUBLICKEYBYTES + MACBYTES
 
 alloy c extern "lean_crypto_box_keypair"
-def boxKeypair : IO (ByteArray × ByteArray) :=
+def keypair (tau : @& Sodium σ) : IO (ByteArray × SecureArray tau) :=
   lean_object* public_key = lean_alloc_sarray(
-    sizeof(unsigned char),
+    sizeof(uint8_t),
     crypto_box_PUBLICKEYBYTES,
     crypto_box_PUBLICKEYBYTES)
-  lean_object* secret_key = lean_alloc_sarray(
-    sizeof(unsigned char),
-    crypto_box_SECRETKEYBYTES,
-    crypto_box_SECRETKEYBYTES)
 
-  int result = crypto_box_keypair(
-    lean_sarray_cptr(public_key),
-    lean_sarray_cptr(secret_key)
-  )
+  lean_object* secret_key_io = lean_sodium_malloc(tau, crypto_box_SECRETKEYBYTES, _1);
 
-  if (result != 0) {
-    lean_dec(public_key)
-    lean_dec(secret_key)
-    lean_object* error_msg = lean_mk_string("crypto_box_keypair failed")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  if (lean_io_result_is_error(secret_key_io)) {
+    return secret_key_io;
   }
 
-  lean_object* pair = lean_alloc_ctor(0, 2, 0)
-  lean_ctor_set(pair, 0, public_key)
-  lean_ctor_set(pair, 1, secret_key)
+  lean_object* secret_key_ref = lean_io_result_take_value(secret_key_io);
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secret_key_ref, 0));
+  sodium_mprotect_readwrite(secret_key);
 
-  return lean_io_result_mk_ok(pair)
+  int err = crypto_box_keypair(lean_sarray_cptr(public_key), (uint8_t*) secret_key);
+
+  if (err != 0) {
+    sodium_munlock(secret_key, crypto_box_SECRETKEYBYTES);
+    lean_dec(public_key);
+    lean_dec(secret_key_ref);
+    lean_object* error_msg = lean_mk_string("crypto_box_keypair failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  sodium_mprotect_noaccess(secret_key);
+
+  lean_object* ret = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(ret, 0, public_key);
+  lean_ctor_set(ret, 1, secret_key_ref);
+  return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_box_seed_keypair"
-def boxSeedKeypair (seed : ByteArray) : IO (ByteArray × ByteArray) :=
-  size_t seed_size = lean_sarray_size(seed)
-  size_t expected_seed_size = crypto_box_SEEDBYTES
-  if (seed_size != expected_seed_size) {
-    lean_object* error_msg = lean_mk_string("Invalid seed size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray × SecureArray tau) :=
+  size_t seed_len = lean_ctor_get_usize(seed, 1);
+  if (seed_len != crypto_box_SEEDBYTES) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_seed_keypair");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
   lean_object* public_key = lean_alloc_sarray(
-    sizeof(unsigned char),
+    sizeof(uint8_t),
     crypto_box_PUBLICKEYBYTES,
-    crypto_box_PUBLICKEYBYTES)
-  lean_object* secret_key = lean_alloc_sarray(
-    sizeof(unsigned char),
-    crypto_box_SECRETKEYBYTES,
-    crypto_box_SECRETKEYBYTES)
+    crypto_box_PUBLICKEYBYTES);
 
-  int result = crypto_box_seed_keypair(
-    lean_sarray_cptr(public_key),
-    lean_sarray_cptr(secret_key),
-    lean_sarray_cptr(seed)
-  )
+  lean_object* secret_key_io = lean_sodium_malloc(tau, crypto_box_SECRETKEYBYTES, _2);
 
-  if (result != 0) {
-    lean_dec(public_key)
-    lean_dec(secret_key)
-    lean_object* error_msg = lean_mk_string("crypto_box_seed_keypair failed")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  if (lean_io_result_is_error(secret_key_io)) {
+    lean_dec(public_key);
+    return secret_key_io;
   }
 
-  lean_object* pair = lean_alloc_ctor(0, 2, 0)
-  lean_ctor_set(pair, 0, public_key)
-  lean_ctor_set(pair, 1, secret_key)
+  lean_object* secret_key_ref = lean_io_result_take_value(secret_key_io);
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secret_key_ref, 0));
+  void* seed_ptr = sodium_secure_of_lean(lean_ctor_get(seed, 0));
 
-  return lean_io_result_mk_ok(pair)
+  sodium_mprotect_readwrite(secret_key);
+  sodium_mprotect_readonly(seed_ptr);
+
+  int err = crypto_box_seed_keypair(
+    lean_sarray_cptr(public_key),
+    (uint8_t*) secret_key,
+    (uint8_t*) seed_ptr);
+
+  sodium_mprotect_noaccess(secret_key);
+  sodium_mprotect_noaccess(seed_ptr);
+
+  if (err != 0) {
+    sodium_munlock(secret_key, crypto_box_SECRETKEYBYTES);
+    lean_dec(public_key);
+    lean_dec(secret_key_ref);
+    lean_object* error_msg = lean_mk_string("crypto_box_seed_keypair failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  lean_object* ret = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(ret, 0, public_key);
+  lean_ctor_set(ret, 1, secret_key_ref);
+  return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_box_easy"
-def boxEasy (message : ByteArray) (nonce : ByteArray) (publicKey : ByteArray) (secretKey : ByteArray) : IO ByteArray :=
-  size_t nonce_size = lean_sarray_size(nonce)
-  size_t expected_nonce_size = crypto_box_NONCEBYTES
-  if (nonce_size != expected_nonce_size) {
-    lean_object* error_msg = lean_mk_string("Invalid nonce size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO ByteArray :=
+  size_t message_len = lean_sarray_size(message);
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_box_NONCEBYTES ||
+    lean_sarray_size(publicKey) != crypto_box_PUBLICKEYBYTES ||
+    sk_len != crypto_box_SECRETKEYBYTES ||
+    message_len > crypto_box_MESSAGEBYTES_MAX - crypto_box_MACBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_easy");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  size_t public_key_size = lean_sarray_size(publicKey)
-  size_t expected_public_key_size = crypto_box_PUBLICKEYBYTES
-  if (public_key_size != expected_public_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid public key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  lean_object* ciphertext = lean_alloc_sarray(
+    sizeof(uint8_t),
+    message_len + crypto_box_MACBYTES,
+    message_len + crypto_box_MACBYTES);
 
-  size_t secret_key_size = lean_sarray_size(secretKey)
-  size_t expected_secret_key_size = crypto_box_SECRETKEYBYTES
-  if (secret_key_size != expected_secret_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid secret key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  sodium_mprotect_readonly(secret_key);
 
-  size_t message_len = lean_sarray_size(message)
-  size_t ciphertext_len = message_len + crypto_box_MACBYTES
-
-  lean_object* ciphertext = lean_alloc_sarray(sizeof(unsigned char), ciphertext_len, ciphertext_len)
-
-  int result = crypto_box_easy(
+  int err = crypto_box_easy(
     lean_sarray_cptr(ciphertext),
     lean_sarray_cptr(message), message_len,
     lean_sarray_cptr(nonce),
     lean_sarray_cptr(publicKey),
-    lean_sarray_cptr(secretKey)
-  )
+    (uint8_t*) secret_key);
 
-  if (result != 0) {
-    lean_dec(ciphertext)
-    lean_object* error_msg = lean_mk_string("crypto_box_easy failed")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    lean_dec(ciphertext);
+    lean_object* error_msg = lean_mk_string("crypto_box_easy failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  return lean_io_result_mk_ok(ciphertext)
+  return lean_io_result_mk_ok(ciphertext);
 
 alloy c extern "lean_crypto_box_open_easy"
-def boxOpenEasy (ciphertext : ByteArray) (nonce : ByteArray) (publicKey : ByteArray) (secretKey : ByteArray) : IO ByteArray :=
-  size_t nonce_size = lean_sarray_size(nonce)
-  size_t expected_nonce_size = crypto_box_NONCEBYTES
-  if (nonce_size != expected_nonce_size) {
-    lean_object* error_msg = lean_mk_string("Invalid nonce size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteArray)
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO ByteArray :=
+  size_t ciphertext_len = lean_sarray_size(ciphertext);
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_box_NONCEBYTES ||
+    lean_sarray_size(publicKey) != crypto_box_PUBLICKEYBYTES ||
+    sk_len != crypto_box_SECRETKEYBYTES ||
+    ciphertext_len < crypto_box_MACBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_open_easy");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  size_t public_key_size = lean_sarray_size(publicKey)
-  size_t expected_public_key_size = crypto_box_PUBLICKEYBYTES
-  if (public_key_size != expected_public_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid public key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  lean_object* message = lean_alloc_sarray(
+    sizeof(uint8_t),
+    ciphertext_len - crypto_box_MACBYTES,
+    ciphertext_len - crypto_box_MACBYTES);
 
-  size_t secret_key_size = lean_sarray_size(secretKey)
-  size_t expected_secret_key_size = crypto_box_SECRETKEYBYTES
-  if (secret_key_size != expected_secret_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid secret key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  sodium_mprotect_readonly(secret_key);
 
-  size_t ciphertext_len = lean_sarray_size(ciphertext)
-  if (ciphertext_len < crypto_box_MACBYTES) {
-    lean_object* error_msg = lean_mk_string("Ciphertext too short")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  size_t message_len = ciphertext_len - crypto_box_MACBYTES
-  lean_object* message = lean_alloc_sarray(sizeof(unsigned char), message_len, message_len)
-
-  int result = crypto_box_open_easy(
+  int err = crypto_box_open_easy(
     lean_sarray_cptr(message),
     lean_sarray_cptr(ciphertext), ciphertext_len,
     lean_sarray_cptr(nonce),
     lean_sarray_cptr(publicKey),
-    lean_sarray_cptr(secretKey)
-  )
+    (uint8_t*) secret_key);
 
-  if (result != 0) {
-    lean_dec(message)
-    lean_object* error_msg = lean_mk_string("crypto_box_open_easy failed (authentication failed)")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    lean_dec(message);
+    lean_object* error_msg = lean_mk_string("crypto_box_open_easy failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  return lean_io_result_mk_ok(message)
-
-alloy c extern "lean_crypto_box_detached"
-def boxDetached (message : ByteArray) (nonce : ByteArray) (publicKey : ByteArray) (secretKey : ByteArray) : IO (ByteArray × ByteArray) :=
-  size_t nonce_size = lean_sarray_size(nonce)
-  size_t expected_nonce_size = crypto_box_NONCEBYTES
-  if (nonce_size != expected_nonce_size) {
-    lean_object* error_msg = lean_mk_string("Invalid nonce size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  size_t public_key_size = lean_sarray_size(publicKey)
-  size_t expected_public_key_size = crypto_box_PUBLICKEYBYTES
-  if (public_key_size != expected_public_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid public key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  size_t secret_key_size = lean_sarray_size(secretKey)
-  size_t expected_secret_key_size = crypto_box_SECRETKEYBYTES
-  if (secret_key_size != expected_secret_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid secret key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  size_t message_len = lean_sarray_size(message)
-  lean_object* ciphertext = lean_alloc_sarray(sizeof(unsigned char), message_len, message_len)
-  lean_object* mac = lean_alloc_sarray(sizeof(unsigned char), crypto_box_MACBYTES, crypto_box_MACBYTES)
-
-  int result = crypto_box_detached(
-    lean_sarray_cptr(ciphertext),
-    lean_sarray_cptr(mac),
-    lean_sarray_cptr(message), message_len,
-    lean_sarray_cptr(nonce),
-    lean_sarray_cptr(publicKey),
-    lean_sarray_cptr(secretKey)
-  )
-
-  if (result != 0) {
-    lean_dec(ciphertext)
-    lean_dec(mac)
-    lean_object* error_msg = lean_mk_string("crypto_box_detached failed")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  lean_object* pair = lean_alloc_ctor(0, 2, 0)
-  lean_ctor_set(pair, 0, ciphertext)
-  lean_ctor_set(pair, 1, mac)
-
-  return lean_io_result_mk_ok(pair)
-
-alloy c extern "lean_crypto_box_open_detached" 
-def boxOpenDetached (ciphertext : ByteArray) (mac : ByteArray) (nonce : ByteArray) (publicKey : ByteArray) (secretKey : ByteArray) : IO ByteArray :=
-  size_t nonce_size = lean_sarray_size(nonce)
-  size_t expected_nonce_size = crypto_box_NONCEBYTES
-  if (nonce_size != expected_nonce_size) {
-    lean_object* error_msg = lean_mk_string("Invalid nonce size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  size_t public_key_size = lean_sarray_size(publicKey)
-  size_t expected_public_key_size = crypto_box_PUBLICKEYBYTES
-  if (public_key_size != expected_public_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid public key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  size_t secret_key_size = lean_sarray_size(secretKey)
-  size_t expected_secret_key_size = crypto_box_SECRETKEYBYTES
-  if (secret_key_size != expected_secret_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid secret key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  size_t mac_size = lean_sarray_size(mac)
-  size_t expected_mac_size = crypto_box_MACBYTES
-  if (mac_size != expected_mac_size) {
-    lean_object* error_msg = lean_mk_string("Invalid MAC size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  size_t ciphertext_len = lean_sarray_size(ciphertext)
-  lean_object* message = lean_alloc_sarray(sizeof(unsigned char), ciphertext_len, ciphertext_len)
-
-  int result = crypto_box_open_detached(
-    lean_sarray_cptr(message),
-    lean_sarray_cptr(ciphertext),
-    lean_sarray_cptr(mac),
-    ciphertext_len,
-    lean_sarray_cptr(nonce),
-    lean_sarray_cptr(publicKey),
-    lean_sarray_cptr(secretKey)
-  )
-
-  if (result != 0) {
-    lean_dec(message)
-    lean_object* error_msg = lean_mk_string("crypto_box_open_detached failed (authentication failed)")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
-
-  return lean_io_result_mk_ok(message)
+  return lean_io_result_mk_ok(message);
 
 alloy c extern "lean_crypto_box_beforenm"
-def boxBeforenm (publicKey : ByteArray) (secretKey : ByteArray) : IO ByteArray :=
-  size_t public_key_size = lean_sarray_size(publicKey)
-  size_t expected_public_key_size = crypto_box_PUBLICKEYBYTES
-  if (public_key_size != expected_public_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid public key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def beforenm (tau : @& Sodium σ) (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (SecureArray tau) :=
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(publicKey) != crypto_box_PUBLICKEYBYTES ||
+    sk_len != crypto_box_SECRETKEYBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_beforenm");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  size_t secret_key_size = lean_sarray_size(secretKey)
-  size_t expected_secret_key_size = crypto_box_SECRETKEYBYTES
-  if (secret_key_size != expected_secret_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid secret key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  lean_object* shared_secret_io = lean_sodium_malloc(tau, crypto_box_BEFORENMBYTES, _3);
+
+  if (lean_io_result_is_error(shared_secret_io)) {
+    return shared_secret_io;
   }
 
-  lean_object* shared_secret = lean_alloc_sarray(
-    sizeof(unsigned char),
-    crypto_box_BEFORENMBYTES,
-    crypto_box_BEFORENMBYTES)
+  lean_object* shared_secret_ref = lean_io_result_take_value(shared_secret_io);
+  void* shared_secret = sodium_secure_of_lean(lean_ctor_get(shared_secret_ref, 0));
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
 
-  int result = crypto_box_beforenm(
-    lean_sarray_cptr(shared_secret),
+  sodium_mprotect_readwrite(shared_secret);
+  sodium_mprotect_readonly(secret_key);
+
+  int err = crypto_box_beforenm(
+    (uint8_t*) shared_secret,
     lean_sarray_cptr(publicKey),
-    lean_sarray_cptr(secretKey)
-  )
+    (uint8_t*) secret_key);
 
-  if (result != 0) {
-    lean_dec(shared_secret)
-    lean_object* error_msg = lean_mk_string("crypto_box_beforenm failed")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  sodium_mprotect_noaccess(shared_secret);
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    sodium_munlock(shared_secret, crypto_box_BEFORENMBYTES);
+    lean_dec(shared_secret_ref);
+    lean_object* error_msg = lean_mk_string("crypto_box_beforenm failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  return lean_io_result_mk_ok(shared_secret)
+  return lean_io_result_mk_ok(shared_secret_ref);
 
 alloy c extern "lean_crypto_box_easy_afternm"
-def boxEasyAfternm (message : ByteArray) (nonce : ByteArray) (sharedSecret : ByteArray) : IO ByteArray :=
-  size_t nonce_size = lean_sarray_size(nonce)
-  size_t expected_nonce_size = crypto_box_NONCEBYTES
-  if (nonce_size != expected_nonce_size) {
-    lean_object* error_msg = lean_mk_string("Invalid nonce size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def easyAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
+    (sharedSecret : @& SecureArray tau) : IO ByteArray :=
+  size_t message_len = lean_sarray_size(message);
+  size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_box_NONCEBYTES ||
+    shared_len != crypto_box_BEFORENMBYTES ||
+    message_len > crypto_box_MESSAGEBYTES_MAX - crypto_box_MACBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_easy_afternm");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  size_t shared_secret_size = lean_sarray_size(sharedSecret)
-  size_t expected_shared_secret_size = crypto_box_BEFORENMBYTES
-  if (shared_secret_size != expected_shared_secret_size) {
-    lean_object* error_msg = lean_mk_string("Invalid shared secret size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  lean_object* ciphertext = lean_alloc_sarray(
+    sizeof(uint8_t),
+    message_len + crypto_box_MACBYTES,
+    message_len + crypto_box_MACBYTES);
 
-  size_t message_len = lean_sarray_size(message)
-  size_t ciphertext_len = message_len + crypto_box_MACBYTES
+  void* shared_secret = sodium_secure_of_lean(lean_ctor_get(sharedSecret, 0));
+  sodium_mprotect_readonly(shared_secret);
 
-  lean_object* ciphertext = lean_alloc_sarray(sizeof(unsigned char), ciphertext_len, ciphertext_len)
-
-  int result = crypto_box_easy_afternm(
+  int err = crypto_box_easy_afternm(
     lean_sarray_cptr(ciphertext),
     lean_sarray_cptr(message), message_len,
     lean_sarray_cptr(nonce),
-    lean_sarray_cptr(sharedSecret)
-  )
+    (uint8_t*) shared_secret);
 
-  if (result != 0) {
-    lean_dec(ciphertext)
-    lean_object* error_msg = lean_mk_string("crypto_box_easy_afternm failed")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  sodium_mprotect_noaccess(shared_secret);
+
+  if (err != 0) {
+    lean_dec(ciphertext);
+    lean_object* error_msg = lean_mk_string("crypto_box_easy_afternm failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  return lean_io_result_mk_ok(ciphertext)
+  return lean_io_result_mk_ok(ciphertext);
 
 alloy c extern "lean_crypto_box_open_easy_afternm"
-def boxOpenEasyAfternm (ciphertext : ByteArray) (nonce : ByteArray) (sharedSecret : ByteArray) : IO ByteArray :=
-  size_t nonce_size = lean_sarray_size(nonce)
-  size_t expected_nonce_size = crypto_box_NONCEBYTES
-  if (nonce_size != expected_nonce_size) {
-    lean_object* error_msg = lean_mk_string("Invalid nonce size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def openEasyAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteArray)
+    (sharedSecret : @& SecureArray tau) : IO ByteArray :=
+  size_t ciphertext_len = lean_sarray_size(ciphertext);
+  size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_box_NONCEBYTES ||
+    shared_len != crypto_box_BEFORENMBYTES ||
+    ciphertext_len < crypto_box_MACBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_open_easy_afternm");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  size_t shared_secret_size = lean_sarray_size(sharedSecret)
-  size_t expected_shared_secret_size = crypto_box_BEFORENMBYTES
-  if (shared_secret_size != expected_shared_secret_size) {
-    lean_object* error_msg = lean_mk_string("Invalid shared secret size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  lean_object* message = lean_alloc_sarray(
+    sizeof(uint8_t),
+    ciphertext_len - crypto_box_MACBYTES,
+    ciphertext_len - crypto_box_MACBYTES);
 
-  size_t ciphertext_len = lean_sarray_size(ciphertext)
-  if (ciphertext_len < crypto_box_MACBYTES) {
-    lean_object* error_msg = lean_mk_string("Ciphertext too short")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  void* shared_secret = sodium_secure_of_lean(lean_ctor_get(sharedSecret, 0));
+  sodium_mprotect_readonly(shared_secret);
 
-  size_t message_len = ciphertext_len - crypto_box_MACBYTES
-  lean_object* message = lean_alloc_sarray(sizeof(unsigned char), message_len, message_len)
-
-  int result = crypto_box_open_easy_afternm(
+  int err = crypto_box_open_easy_afternm(
     lean_sarray_cptr(message),
     lean_sarray_cptr(ciphertext), ciphertext_len,
     lean_sarray_cptr(nonce),
-    lean_sarray_cptr(sharedSecret)
-  )
+    (uint8_t*) shared_secret);
 
-  if (result != 0) {
-    lean_dec(message)
-    lean_object* error_msg = lean_mk_string("crypto_box_open_easy_afternm failed (authentication failed)")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  sodium_mprotect_noaccess(shared_secret);
+
+  if (err != 0) {
+    lean_dec(message);
+    lean_object* error_msg = lean_mk_string("crypto_box_open_easy_afternm failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  return lean_io_result_mk_ok(message)
+  return lean_io_result_mk_ok(message);
 
 alloy c extern "lean_crypto_box_detached_afternm"
-def boxDetachedAfternm (message : ByteArray) (nonce : ByteArray) (sharedSecret : ByteArray) : IO (ByteArray × ByteArray) :=
-  size_t nonce_size = lean_sarray_size(nonce)
-  size_t expected_nonce_size = crypto_box_NONCEBYTES
-  if (nonce_size != expected_nonce_size) {
-    lean_object* error_msg = lean_mk_string("Invalid nonce size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def detachedAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
+    (sharedSecret : @& SecureArray tau) : IO (ByteArray × ByteArray) :=
+  size_t message_len = lean_sarray_size(message);
+  size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_box_NONCEBYTES ||
+    shared_len != crypto_box_BEFORENMBYTES ||
+    message_len > crypto_box_MESSAGEBYTES_MAX
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_detached_afternm");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  size_t shared_secret_size = lean_sarray_size(sharedSecret)
-  size_t expected_shared_secret_size = crypto_box_BEFORENMBYTES
-  if (shared_secret_size != expected_shared_secret_size) {
-    lean_object* error_msg = lean_mk_string("Invalid shared secret size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  lean_object* ciphertext = lean_alloc_sarray(
+    sizeof(uint8_t),
+    message_len,
+    message_len);
+  lean_object* mac = lean_alloc_sarray(
+    sizeof(uint8_t),
+    crypto_box_MACBYTES,
+    crypto_box_MACBYTES);
 
-  size_t message_len = lean_sarray_size(message)
-  lean_object* ciphertext = lean_alloc_sarray(sizeof(unsigned char), message_len, message_len)
-  lean_object* mac = lean_alloc_sarray(sizeof(unsigned char), crypto_box_MACBYTES, crypto_box_MACBYTES)
+  void* shared_secret = sodium_secure_of_lean(lean_ctor_get(sharedSecret, 0));
+  sodium_mprotect_readonly(shared_secret);
 
-  int result = crypto_box_detached_afternm(
+  int err = crypto_box_detached_afternm(
     lean_sarray_cptr(ciphertext),
     lean_sarray_cptr(mac),
     lean_sarray_cptr(message), message_len,
     lean_sarray_cptr(nonce),
-    lean_sarray_cptr(sharedSecret)
-  )
+    (uint8_t*) shared_secret);
 
-  if (result != 0) {
-    lean_dec(ciphertext)
-    lean_dec(mac)
-    lean_object* error_msg = lean_mk_string("crypto_box_detached_afternm failed")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  sodium_mprotect_noaccess(shared_secret);
+
+  if (err != 0) {
+    lean_dec(ciphertext);
+    lean_dec(mac);
+    lean_object* error_msg = lean_mk_string("crypto_box_detached_afternm failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  lean_object* pair = lean_alloc_ctor(0, 2, 0)
-  lean_ctor_set(pair, 0, ciphertext)
-  lean_ctor_set(pair, 1, mac)
-
-  return lean_io_result_mk_ok(pair)
+  lean_object* ret = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(ret, 0, ciphertext);
+  lean_ctor_set(ret, 1, mac);
+  return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_box_open_detached_afternm"
-def boxOpenDetachedAfternm (ciphertext : ByteArray) (mac : ByteArray) (nonce : ByteArray) (sharedSecret : ByteArray) : IO ByteArray :=
-  size_t nonce_size = lean_sarray_size(nonce)
-  size_t expected_nonce_size = crypto_box_NONCEBYTES
-  if (nonce_size != expected_nonce_size) {
-    lean_object* error_msg = lean_mk_string("Invalid nonce size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def openDetachedAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& ByteArray) (nonce : @& ByteArray)
+    (sharedSecret : @& SecureArray tau) : IO ByteArray :=
+  size_t ciphertext_len = lean_sarray_size(ciphertext);
+  size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_box_NONCEBYTES ||
+    lean_sarray_size(mac) != crypto_box_MACBYTES ||
+    shared_len != crypto_box_BEFORENMBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_open_detached_afternm");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  size_t shared_secret_size = lean_sarray_size(sharedSecret)
-  size_t expected_shared_secret_size = crypto_box_BEFORENMBYTES
-  if (shared_secret_size != expected_shared_secret_size) {
-    lean_object* error_msg = lean_mk_string("Invalid shared secret size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  lean_object* message = lean_alloc_sarray(
+    sizeof(uint8_t),
+    ciphertext_len,
+    ciphertext_len);
 
-  size_t mac_size = lean_sarray_size(mac)
-  size_t expected_mac_size = crypto_box_MACBYTES
-  if (mac_size != expected_mac_size) {
-    lean_object* error_msg = lean_mk_string("Invalid MAC size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  void* shared_secret = sodium_secure_of_lean(lean_ctor_get(sharedSecret, 0));
+  sodium_mprotect_readonly(shared_secret);
 
-  size_t ciphertext_len = lean_sarray_size(ciphertext)
-  lean_object* message = lean_alloc_sarray(sizeof(unsigned char), ciphertext_len, ciphertext_len)
-
-  int result = crypto_box_open_detached_afternm(
+  int err = crypto_box_open_detached_afternm(
     lean_sarray_cptr(message),
     lean_sarray_cptr(ciphertext),
     lean_sarray_cptr(mac),
     ciphertext_len,
     lean_sarray_cptr(nonce),
-    lean_sarray_cptr(sharedSecret)
-  )
+    (uint8_t*) shared_secret);
 
-  if (result != 0) {
-    lean_dec(message)
-    lean_object* error_msg = lean_mk_string("crypto_box_open_detached_afternm failed (authentication failed)")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  sodium_mprotect_noaccess(shared_secret);
+
+  if (err != 0) {
+    lean_dec(message);
+    lean_object* error_msg = lean_mk_string("crypto_box_open_detached_afternm failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  return lean_io_result_mk_ok(message)
+  return lean_io_result_mk_ok(message);
+
+alloy c extern "lean_crypto_box_detached"
+def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (ByteArray × ByteArray) :=
+  size_t message_len = lean_sarray_size(message);
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_box_NONCEBYTES ||
+    lean_sarray_size(publicKey) != crypto_box_PUBLICKEYBYTES ||
+    sk_len != crypto_box_SECRETKEYBYTES ||
+    message_len > crypto_box_MESSAGEBYTES_MAX
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_detached");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  lean_object* ciphertext = lean_alloc_sarray(
+    sizeof(uint8_t),
+    message_len,
+    message_len);
+  lean_object* mac = lean_alloc_sarray(
+    sizeof(uint8_t),
+    crypto_box_MACBYTES,
+    crypto_box_MACBYTES);
+
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  sodium_mprotect_readonly(secret_key);
+
+  int err = crypto_box_detached(
+    lean_sarray_cptr(ciphertext),
+    lean_sarray_cptr(mac),
+    lean_sarray_cptr(message), message_len,
+    lean_sarray_cptr(nonce),
+    lean_sarray_cptr(publicKey),
+    (uint8_t*) secret_key);
+
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    lean_dec(ciphertext);
+    lean_dec(mac);
+    lean_object* error_msg = lean_mk_string("crypto_box_detached failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  lean_object* ret = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(ret, 0, ciphertext);
+  lean_ctor_set(ret, 1, mac);
+  return lean_io_result_mk_ok(ret);
+
+alloy c extern "lean_crypto_box_open_detached"
+def openDetached (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& ByteArray) (nonce : @& ByteArray)
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO ByteArray :=
+  size_t ciphertext_len = lean_sarray_size(ciphertext);
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_box_NONCEBYTES ||
+    lean_sarray_size(publicKey) != crypto_box_PUBLICKEYBYTES ||
+    lean_sarray_size(mac) != crypto_box_MACBYTES ||
+    sk_len != crypto_box_SECRETKEYBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_open_detached");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  lean_object* message = lean_alloc_sarray(
+    sizeof(uint8_t),
+    ciphertext_len,
+    ciphertext_len);
+
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  sodium_mprotect_readonly(secret_key);
+
+  int err = crypto_box_open_detached(
+    lean_sarray_cptr(message),
+    lean_sarray_cptr(ciphertext),
+    lean_sarray_cptr(mac),
+    ciphertext_len,
+    lean_sarray_cptr(nonce),
+    lean_sarray_cptr(publicKey),
+    (uint8_t*) secret_key);
+
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    lean_dec(message);
+    lean_object* error_msg = lean_mk_string("crypto_box_open_detached failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  return lean_io_result_mk_ok(message);
 
 alloy c extern "lean_crypto_box_seal"
-def boxSeal (message : ByteArray) (publicKey : ByteArray) : IO ByteArray :=
-  size_t public_key_size = lean_sarray_size(publicKey)
-  size_t expected_public_key_size = crypto_box_PUBLICKEYBYTES
-  if (public_key_size != expected_public_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid public key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def «seal» (tau : @& Sodium σ) (message : @& ByteArray) (publicKey : @& ByteArray) : IO ByteArray :=
+  size_t message_len = lean_sarray_size(message);
+
+  if (
+    lean_sarray_size(publicKey) != crypto_box_PUBLICKEYBYTES ||
+    message_len > crypto_box_MESSAGEBYTES_MAX - crypto_box_SEALBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_seal");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  size_t message_len = lean_sarray_size(message)
-  size_t sealed_len = message_len + crypto_box_SEALBYTES
+  lean_object* sealed = lean_alloc_sarray(
+    sizeof(uint8_t),
+    message_len + crypto_box_SEALBYTES,
+    message_len + crypto_box_SEALBYTES);
 
-  lean_object* sealed = lean_alloc_sarray(sizeof(unsigned char), sealed_len, sealed_len)
-
-  int result = crypto_box_seal(
+  int err = crypto_box_seal(
     lean_sarray_cptr(sealed),
     lean_sarray_cptr(message), message_len,
-    lean_sarray_cptr(publicKey)
-  )
+    lean_sarray_cptr(publicKey));
 
-  if (result != 0) {
-    lean_dec(sealed)
-    lean_object* error_msg = lean_mk_string("crypto_box_seal failed")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  if (err != 0) {
+    lean_dec(sealed);
+    lean_object* error_msg = lean_mk_string("crypto_box_seal failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  return lean_io_result_mk_ok(sealed)
+  return lean_io_result_mk_ok(sealed);
 
 alloy c extern "lean_crypto_box_seal_open"
-def boxSealOpen (sealed : ByteArray) (publicKey : ByteArray) (secretKey : ByteArray) : IO ByteArray :=
-  size_t public_key_size = lean_sarray_size(publicKey)
-  size_t expected_public_key_size = crypto_box_PUBLICKEYBYTES
-  if (public_key_size != expected_public_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid public key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+def sealOpen (tau : @& Sodium σ) (sealed : @& ByteArray)
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO ByteArray :=
+  size_t sealed_len = lean_sarray_size(sealed);
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(publicKey) != crypto_box_PUBLICKEYBYTES ||
+    sk_len != crypto_box_SECRETKEYBYTES ||
+    sealed_len < crypto_box_SEALBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_seal_open");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  size_t secret_key_size = lean_sarray_size(secretKey)
-  size_t expected_secret_key_size = crypto_box_SECRETKEYBYTES
-  if (secret_key_size != expected_secret_key_size) {
-    lean_object* error_msg = lean_mk_string("Invalid secret key size")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  lean_object* message = lean_alloc_sarray(
+    sizeof(uint8_t),
+    sealed_len - crypto_box_SEALBYTES,
+    sealed_len - crypto_box_SEALBYTES);
 
-  size_t sealed_len = lean_sarray_size(sealed)
-  if (sealed_len < crypto_box_SEALBYTES) {
-    lean_object* error_msg = lean_mk_string("Sealed message too short")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
-  }
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  sodium_mprotect_readonly(secret_key);
 
-  size_t message_len = sealed_len - crypto_box_SEALBYTES
-  lean_object* message = lean_alloc_sarray(sizeof(unsigned char), message_len, message_len)
-
-  int result = crypto_box_seal_open(
+  int err = crypto_box_seal_open(
     lean_sarray_cptr(message),
     lean_sarray_cptr(sealed), sealed_len,
     lean_sarray_cptr(publicKey),
-    lean_sarray_cptr(secretKey)
-  )
+    (uint8_t*) secret_key);
 
-  if (result != 0) {
-    lean_dec(message)
-    lean_object* error_msg = lean_mk_string("crypto_box_seal_open failed (authentication failed)")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    lean_dec(message);
+    lean_object* error_msg = lean_mk_string("crypto_box_seal_open failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
-  return lean_io_result_mk_ok(message)
+  return lean_io_result_mk_ok(message);
 
-alloy c extern "lean_crypto_box_messagebytes_max"
-def boxMessageBytesMax : BaseIO USize :=
-  size_t max_bytes = crypto_box_messagebytes_max()
-  return lean_io_result_mk_ok(lean_box_usize(max_bytes))
-
-end Sodium.FFI
+end Sodium.FFI.Box

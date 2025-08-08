@@ -74,7 +74,7 @@ encryption systems with Lean 4's excellent async and large file capabilities.
 -/
 import Batteries.Data.ByteArray
 import Init.Data.Stream
-import Sodium.FFI.SecretStream
+import Sodium.FFI.Deprecated.SecretStream
 import Sodium.Crypto.Monad
 import Sodium.Crypto.Types
 import Sodium.Crypto.Utils

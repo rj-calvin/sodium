@@ -1,5 +1,5 @@
 import «Sodium».FFI.Basic
-import «Sodium».FFI.Sign
+import «Sodium».FFI.Deprecated.Sign
 
 namespace Sodium.Tests
 

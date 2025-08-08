@@ -1,4 +1,4 @@
-import «Sodium».FFI.KeyExch
+import «Sodium».FFI.Deprecated.KeyExch
 import «Sodium».FFI.Basic
 
 open Sodium.FFI

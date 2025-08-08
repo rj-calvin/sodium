@@ -4,7 +4,7 @@ Type-safe SecretBox cryptography operations using the CryptoM monad.
 This module provides high-level, fuel-managed wrappers around the LibSodium secretbox
 operations, ensuring proper nonce management and type safety.
 -/
-import Sodium.FFI.SecretBox
+import Sodium.FFI.Deprecated.SecretBox
 import Sodium.Crypto.Monad
 import Sodium.Crypto.Utils
 

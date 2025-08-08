@@ -1,5 +1,5 @@
 import «Sodium».FFI.Basic
-import «Sodium».FFI.PwHash
+import «Sodium».FFI.Deprecated.PwHash
 
 namespace Sodium.Tests
 

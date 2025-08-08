@@ -1,5 +1,5 @@
 import Sodium.FFI.Basic
-import Sodium.FFI.SecretStream
+import Sodium.FFI.Deprecated.SecretStream
 
 namespace Tests.SecretStream
 

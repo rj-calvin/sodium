@@ -5,7 +5,7 @@ This module provides high-level, fuel-managed wrappers around LibSodium AEAD ope
 ensuring proper nonce management and type safety for authenticated encryption with associated data.
 Supports ChaCha20-Poly1305 (IETF and Original), XChaCha20-Poly1305 IETF variants.
 -/
-import Sodium.FFI.Aead
+import Sodium.FFI.Deprecated.Aead
 import Sodium.Crypto.Monad
 import Sodium.Crypto.Utils
 

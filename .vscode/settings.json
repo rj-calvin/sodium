@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "core.h": "c",
+        "common.h": "c",
+        "utils.h": "c",
+        "export.h": "c"
+    }
+}

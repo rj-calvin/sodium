@@ -1,20 +1,18 @@
-import «Sodium».Tests.Auth
-import «Sodium».Tests.Basic
-import «Sodium».Tests.Box
-import «Sodium».Tests.GenericHash
-import «Sodium».Tests.KeyDeriv
-import «Sodium».Tests.KeyExch
-import «Sodium».Tests.PwHash
-import «Sodium».Tests.SecretBox
-import «Sodium».Tests.SecretStream
-import «Sodium».Tests.ShortHash
-import «Sodium».Tests.Sign
-import «Sodium».Tests.Stream
+import «Sodium».FFI.Basic
+import «Sodium».FFI.Box
+import «Sodium».Crypto.Monad
 
-def main : IO UInt32 := do
-  Sodium.Tests.KeyDeriv.runAllTests
-  Sodium.Tests.KeyExch.runAllTests
-  Sodium.Tests.ShortHash.runAllTests
-  Sodium.Tests.Auth.runAllTests
-  Sodium.Tests.Stream.runAllTests
-  pure 0
+open Lean Sodium Crypto
+
+def main : IO Unit := do
+  let core := show CoreM Unit from do
+    let (nonce1, nonce2) ← CryptoM.toCoreM fun _ => do
+      println! ← getFuel
+      let n1 ← mkFreshNonceId
+      println! ← getFuel
+      let n2 ← mkFreshNonceId
+      println! ← getFuel
+      return (n1, n2)
+    println! nonce1.bytes
+    println! nonce2.bytes
+  discard <| core.toIO {fileName := default, fileMap := default} {env := ← mkEmptyEnvironment}

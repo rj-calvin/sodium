@@ -1,4 +1,4 @@
-import «Sodium».FFI.ShortHash
+import «Sodium».FFI.Deprecated.ShortHash
 import «Sodium».FFI.Basic
 
 open Sodium.FFI

@@ -55,7 +55,7 @@ extern_lib libsodium pkg := do
         "--disable-dependency-tracking", -- Faster build
         "--disable-ssp",                -- Compatibility
         s!"--prefix={installDir}",      -- Install location
-        "CFLAGS=-fPIC -O2",             -- Position independent code
+        "CFLAGS=-fPIC -O2 -g",          -- Position independent code + debug symbols
         "CPPFLAGS=-fPIC"                -- PIC for preprocessor
       ]
       cwd := srcDir
@@ -100,3 +100,4 @@ lean_lib «Sodium» where
 
 lean_exe Tests where
   supportInterpreter := true
+  moreLeancArgs := #["-g", "-O0"]  -- Debug symbols, no optimization

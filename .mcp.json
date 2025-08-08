@@ -9,6 +9,14 @@
         "lean-lsp-mcp"
       ],
       "env": {}
+    },
+    "gdb": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "../../git/signal-slot/mcp-gdb/build/index.js"
+      ],
+      "env": {}
     }
   }
 }

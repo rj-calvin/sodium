@@ -1,4 +1,4 @@
-import «Sodium».FFI.Auth
+import «Sodium».FFI.Deprecated.Auth
 import «Sodium».FFI.Basic
 
 open Sodium.FFI

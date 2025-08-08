@@ -1,26 +1,20 @@
-/-
-The CryptoM monad using StateRefT for safe cryptographic operations.
-
-This module provides a stateful monad that:
-- Ensures sodium initialization before any crypto operations
-- Tracks nonce generation to prevent reuse
-- Manages cryptographic resource lifecycle
-- Provides compile-time and runtime safety guarantees
--/
-import Init.Meta
 import Init.Control.StateRef
-import Std.Data.HashMap
 import Sodium.Data.ByteArray
 import Sodium.FFI.Basic
-import Sodium.Crypto.Types
+import Sodium.Crypto.Spec
 
 open Lean Std Sodium
 
 namespace Sodium.Crypto
 
-variable {spec : AlgorithmSpec}
+/-- Nonce (number used only once) type for uniqueness tracking -/
+structure NonceId (spec : Spec) where
+  bytes : ByteArray
+  size_eq_nonce_bytes : bytes.size = spec.nonceBytes
 
 namespace NonceId
+
+variable {spec : Spec}
 
 def hash : NonceId spec → UInt64 := ByteArray.hash ∘ NonceId.bytes
 instance : Hashable (NonceId spec) := ⟨hash⟩
@@ -43,26 +37,18 @@ def toFVarId! (nonce : NonceId spec) := FVarId.mk (.num spec.name nonce.hash.toN
 
 end NonceId
 
-structure CryptoState where
-  private entropyOff : Nat := 0
-  private entropy : ByteArray
-  private nonces : NameMap ByteArray := ∅
+variable {σ : Type}
 
-structure CryptoContext where
-  startingFuel : USize
+structure CryptoState (τ : Sodium σ) where
+  private entropy : EntropyArray τ
+  private nonces : NameMap ByteArray := ∅
 
 inductive CryptoMessage
   | outOfFuel
-  | ioError (e : IO.Error)
-  | ofData (e : MessageData)
-  | ofLazy (f : Option PPContext → BaseIO Dynamic) (hasSyntheticSorry : MetavarContext → Bool)
-  deriving Inhabited
+  deriving BEq, Hashable, Inhabited
 
 @[coe] def CryptoMessage.toMessageData : CryptoMessage → MessageData
   | .outOfFuel => m!"ran out of fuel"
-  | .ofData e => e
-  | .ioError e => instToMessageDataOfToFormat.toMessageData e
-  | .ofLazy f s => .ofLazy f s
 
 instance : ToMessageData CryptoMessage := ⟨CryptoMessage.toMessageData⟩
 
@@ -71,20 +57,12 @@ instance : ToMessageData CryptoMessage := ⟨CryptoMessage.toMessageData⟩
 
 instance : Coe CryptoMessage Exception := ⟨CryptoMessage.toException⟩
 
-abbrev CryptoM := ReaderT CryptoContext <| StateRefT (Mutex CryptoState) CoreM
+abbrev CryptoM (τ : Sodium σ) := StateRefT (Mutex (CryptoState τ)) CoreM
 
-variable {α : Type}
-
-def throwOutOfFuel : CryptoM α :=
+def throwOutOfFuel {α : Type} {τ : Sodium σ}: CryptoM τ α :=
   throw CryptoMessage.outOfFuel.toException
 
-def throwMessage {ε : Type} [ToMessageData ε] (msg : ε) : CryptoM α :=
-  throw (CryptoMessage.ofData <| toMessageData msg).toException
-
-def throwLazy (f : Option PPContext → BaseIO Dynamic) (hasSyntheticSorry : MetavarContext → Bool) : CryptoM α :=
-  throw (CryptoMessage.ofLazy f hasSyntheticSorry).toException
-
-private instance : MonadStateOf CryptoState CryptoM where
+private instance {τ : Sodium σ} : MonadStateOf (CryptoState τ) (CryptoM τ) where
   get := do (← get).atomically get
   set st := do (← get).atomically (set st)
   modifyGet f := do (← get).atomically (modifyGet f)
@@ -96,99 +74,84 @@ register_option crypto.defaultFuelSize : Nat := {
   descr := "The number of random bytes to allocate for entropy."
 }
 
-/--
-  Initialize the crypto monad, ensuring sodium is initialized before computation begins.
-  Uses `crypto.defaultFuelSize if fuel is not provided.
--/
-def run {α : Type} (action : CryptoM α) (fuel? : Option USize := none) : CoreM α := do
-  let fuel := fuel?.getD <| crypto.defaultFuelSize.get (← getOptions) |> Nat.toUSize
-  discard FFI.sodiumInit
-  let entropy ← FFI.randomBytes fuel
-  StateRefT'.run' (action {startingFuel := fuel}) (← Mutex.new {entropy})
+def toCoreM {α : Type} (x : {σ : Type} → (τ : Sodium σ) → CryptoM τ α) (fuel? : Option Nat := none) : CoreM α := do
+  let fuel := fuel?.getD <| crypto.defaultFuelSize.get (← getOptions)
+  let τ ← init Unit
+  let entropy ← EntropyArray.new τ fuel
+  StateRefT'.run' (x τ) (← Mutex.new {entropy})
 
-/--
-  Get the remaining fuel of the environment - i.e. the remaining bytes of entropy that can be
-  used to securely generate nonces.
--/
-def getFuel : CryptoM Nat := do
+def toIO {α : Type} (ctx : Elab.ContextInfo)
+    (x : {σ : Type} → (τ : Sodium σ) → CryptoM τ α) (fuel? : Option Nat := none) : IO α := do
+  ctx.runCoreM <| toCoreM x fuel?
+
+variable {τ : Sodium σ}
+
+def getStatus : CryptoM τ (Nat × Nat) := do
   let st ← get
-  return st.entropy.size - st.entropyOff
+  return (st.entropy.off.toNat, st.entropy.size - st.entropy.off |>.toNat)
 
-/--
-  Get the number of bytes used and the number of bytes remaining.
--/
-def getEntropyStatus : CryptoM (Nat × Nat) := do
-  let st ← get
-  return (st.entropyOff, st.entropy.size - st.entropyOff)
+def getFuel : CryptoM τ Nat :=
+  getStatus >>= pure ∘ Prod.snd
 
-/--
-  Reinitialize the entropy of the current cryptographic environment. Uses the starting fuel if not provided.
-
-  Note: refueling will not reset active nonces. Use `reset` for this purpose.
--/
-def refuel (fuel? : Option USize := none) : CryptoM Unit := do
-  let fuel := fuel?.getD (← read).startingFuel
-  let entropy ← FFI.randomBytes fuel
-  modify ({· with entropyOff := 0, entropy})
-
-/--
-  Reset the nonces of the current cryptographic environment.
-
-  Note: resetting does not allocate new entropy. Use `refuel` for this purpose.
--/
-def reset : CryptoM Unit :=
+def reset : CryptoM τ Unit :=
   modify ({· with nonces := ∅})
 
-/-- Get or initialize nonce counter for an algorithm. -/
-def mkFreshNonceId (spec : AlgorithmSpec := NameGeneratorSpec) : CryptoM (NonceId spec) := do
+def refuel : CryptoM τ Unit := do
+  let mtx ← getThe (Mutex (CryptoState τ))
+  mtx.atomically fun ref => do
+    let st ← ref.get
+    let entropy ← st.entropy.refresh
+    ref.set {st with entropy}
+
+def realloc (fuel : USize) : CryptoM τ Unit := do
+  let mtx ← getThe (Mutex (CryptoState τ))
+  mtx.atomically fun ref => do
+    let entropy ← EntropyArray.new τ fuel
+    ref.set {entropy}
+
+def mkFreshNonceId (spec : Spec := NameGeneratorSpec) : CryptoM τ (NonceId spec) := do
   if h : spec.nonceBytes = 0 then
     return ⟨.empty, by simp [ByteArray.empty, ByteArray.size, ByteArray.emptyWithCapacity, h]⟩
-  let nonce? ← modifyGet fun st@{nonces, ..} =>
-    match nonces.find? spec.name with
-    | some n =>
-      let n := n.succ!
-      if h : n.size = spec.nonceBytes then
-        let nonces := nonces.insert spec.name n
-        (some ⟨n, h⟩, {st with nonces})
+  let mtx ← getThe (Mutex (CryptoState τ))
+  let nonce? ← mtx.atomically fun ref => do
+    let st ← ref.get
+    match st.nonces.find? spec.name with
+    | some stale =>
+      let nonce := stale.succ
+      if h : !nonce.isZero ∧ nonce.size = spec.nonceBytes then
+        let nonces := st.nonces.insert spec.name nonce
+        ref.set {st with nonces}
+        return some ⟨nonce, h.2⟩
       else
-        nextNonce st
-    | none => nextNonce st
+        let (nonce?, st) ← next st
+        ref.set st
+        return nonce?
+    | _ =>
+      let (nonce?, st) ← next st
+      ref.set st
+      return nonce?
   match nonce? with
-  | some n => return n
+  | some nonce => return nonce
   | _ => throwOutOfFuel
 where
-  nextNonce (st : CryptoState) : Option (NonceId spec) × CryptoState :=
-    let {nonces, entropy, entropyOff} := st
-
-    let front := entropy.copySlice
-      (srcOff := entropyOff)
-      (dest := ⟨.emptyWithCapacity spec.nonceBytes⟩)
-      (destOff := 0)
-      (len := spec.nonceBytes)
-      (exact := true)
-
-    if h : front.size = spec.nonceBytes then
-      let nonce := ⟨front, h⟩
-      let nonces := nonces.insert spec.name nonce.bytes
-      (some nonce, {st with entropyOff := entropyOff + spec.nonceBytes, nonces})
+  next (st : CryptoState τ) : BaseIO (Option (NonceId spec) × CryptoState τ) := do
+    let {nonces, entropy} := st
+    let (buf, entropy) ← entropy.extract τ spec.nonceBytes
+    if h : buf.size = spec.nonceBytes then
+      let nonces := nonces.insert spec.name buf
+      return (some ⟨buf, h⟩, {st with nonces, entropy})
     else
-      (none, st)
+      return (none, st)
 
-/--
-  Extract entropy of at most `size` number of bytes, draining fuel in the process.
--/
-def drainEntropy (size : Nat) : CryptoM ByteArray := do
-  if size == 0 then return .empty else
-  modifyGet fun st@{entropyOff, entropy, ..} =>
-    let data := entropy.copySlice
-      (srcOff := entropyOff)
-      (dest := ⟨.emptyWithCapacity size⟩)
-      (destOff := 0)
-      (len := size)
-      (exact := true)
-    (data, {st with entropyOff := entropyOff + size})
+def extractEntropy (size : USize) : CryptoM τ ByteArray := do
+  let mtx ← getThe (Mutex (CryptoState τ))
+  mtx.atomically fun ref => do
+    let st ← ref.get
+    let (buf, entropy) ← st.entropy.extract τ size
+    ref.set {st with entropy}
+    return buf
 
-instance : MonadNameGenerator CryptoM where
+instance {τ : Sodium σ} : MonadNameGenerator (CryptoM τ) where
   getNGen := do
     let nonce ← mkFreshNonceId
     return {namePrefix := NameGeneratorSpec.name, idx := nonce.hash.toNat}
@@ -197,9 +160,6 @@ instance : MonadNameGenerator CryptoM where
 
 end CryptoM
 
-export CryptoM (mkFreshNonceId getFuel refuel reset drainEntropy)
-
-instance : MonadLift CryptoM CoreM where
-  monadLift := CryptoM.run
+export CryptoM (mkFreshNonceId getFuel refuel reset realloc extractEntropy)
 
 end Sodium.Crypto

@@ -1,4 +1,4 @@
-import Sodium.FFI.GenericHash
+import Sodium.FFI.Deprecated.GenericHash
 import Sodium.FFI.Basic
 
 open Sodium.FFI

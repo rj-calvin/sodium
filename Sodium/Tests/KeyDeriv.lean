@@ -1,4 +1,4 @@
-import «Sodium».FFI.KeyDeriv
+import «Sodium».FFI.Deprecated.KeyDeriv
 import «Sodium».FFI.Basic
 
 open Sodium.FFI

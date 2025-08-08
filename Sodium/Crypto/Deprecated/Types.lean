@@ -5,18 +5,18 @@ This module provides type-safe wrappers around raw cryptographic data structures
 using dependent types to enforce size constraints and prevent misuse at compile time.
 -/
 import Lean.Server.Rpc.Basic
-import «Sodium».FFI.SecretBox
-import «Sodium».FFI.Box
-import «Sodium».FFI.Sign
-import «Sodium».FFI.Auth
-import «Sodium».FFI.Stream
-import «Sodium».FFI.Aead
-import «Sodium».FFI.KeyDeriv
-import «Sodium».FFI.KeyExch
-import «Sodium».FFI.ShortHash
-import «Sodium».FFI.GenericHash
-import «Sodium».FFI.PwHash
-import «Sodium».FFI.SecretStream
+import «Sodium».FFI.Deprecated.SecretBox
+import «Sodium».FFI.Deprecated.Box
+import «Sodium».FFI.Deprecated.Sign
+import «Sodium».FFI.Deprecated.Auth
+import «Sodium».FFI.Deprecated.Stream
+import «Sodium».FFI.Deprecated.Aead
+import «Sodium».FFI.Deprecated.KeyDeriv
+import «Sodium».FFI.Deprecated.KeyExch
+import «Sodium».FFI.Deprecated.ShortHash
+import «Sodium».FFI.Deprecated.GenericHash
+import «Sodium».FFI.Deprecated.PwHash
+import «Sodium».FFI.Deprecated.SecretStream
 
 open Lean
 
