@@ -7,11 +7,6 @@ open Lean Std Sodium
 
 namespace Sodium.Crypto
 
-/-- Nonce (number used only once) type for uniqueness tracking -/
-structure NonceId (spec : Spec) where
-  bytes : ByteArray
-  size_eq_nonce_bytes : bytes.size = spec.nonceBytes
-
 namespace NonceId
 
 variable {spec : Spec}
@@ -25,7 +20,8 @@ instance : Hashable (NonceId spec) := ⟨hash⟩
   Uniqueness is obviously not guaranteed in a purist sense, but can still be useful for
   creating synthetic goals.
 -/
-def toMVarId! (nonce : NonceId spec) := MVarId.mk (.num spec.name nonce.hash.toNat)
+def toMVarId! (nonce : NonceId spec) :=
+  MVarId.mk (.num spec.name nonce.hash.toNat)
 
 /--
   Create a "unique" FVarId.
@@ -33,7 +29,8 @@ def toMVarId! (nonce : NonceId spec) := MVarId.mk (.num spec.name nonce.hash.toN
   Uniqueness is obviously not guaranteed in a purist sense, but can still be useful for
   creating synthetic free variables.
 -/
-def toFVarId! (nonce : NonceId spec) := FVarId.mk (.num spec.name nonce.hash.toNat)
+def toFVarId! (nonce : NonceId spec) :=
+  FVarId.mk (.num spec.name nonce.hash.toNat)
 
 end NonceId
 
@@ -45,10 +42,12 @@ structure CryptoState (τ : Sodium σ) where
 
 inductive CryptoMessage
   | outOfFuel
+  | invariantFailure (decl : Name)
   deriving BEq, Hashable, Inhabited
 
 @[coe] def CryptoMessage.toMessageData : CryptoMessage → MessageData
   | .outOfFuel => m!"ran out of fuel"
+  | .invariantFailure decl => m!"invariant failed for {decl}"
 
 instance : ToMessageData CryptoMessage := ⟨CryptoMessage.toMessageData⟩
 
@@ -59,13 +58,11 @@ instance : Coe CryptoMessage Exception := ⟨CryptoMessage.toException⟩
 
 abbrev CryptoM (τ : Sodium σ) := StateRefT (Mutex (CryptoState τ)) CoreM
 
-def throwOutOfFuel {α : Type} {τ : Sodium σ}: CryptoM τ α :=
+def throwOutOfFuel {α : Type} {τ : Sodium σ} : CryptoM τ α :=
   throw CryptoMessage.outOfFuel.toException
 
-private instance {τ : Sodium σ} : MonadStateOf (CryptoState τ) (CryptoM τ) where
-  get := do (← get).atomically get
-  set st := do (← get).atomically (set st)
-  modifyGet f := do (← get).atomically (modifyGet f)
+def throwInvariantFailure {α : Type} {τ : Sodium σ} (decl : Name := by exact decl_name%) : CryptoM τ α :=
+  throw (CryptoMessage.invariantFailure decl).toException
 
 namespace CryptoM
 
@@ -87,24 +84,28 @@ def toIO {α : Type} (ctx : Elab.ContextInfo)
 variable {τ : Sodium σ}
 
 def getStatus : CryptoM τ (Nat × Nat) := do
-  let st ← get
-  return (st.entropy.off.toNat, st.entropy.size - st.entropy.off |>.toNat)
+  let mtx ← get
+  mtx.atomically fun ref => do
+    let st ← ref.get
+    return (st.entropy.off.toNat, st.entropy.size - st.entropy.off |>.toNat)
 
 def getFuel : CryptoM τ Nat :=
   getStatus >>= pure ∘ Prod.snd
 
-def reset : CryptoM τ Unit :=
-  modify ({· with nonces := ∅})
+def reset : CryptoM τ Unit := do
+  let mtx ← get
+  mtx.atomically fun ref =>
+    ref.modify ({· with nonces := ∅})
 
 def refuel : CryptoM τ Unit := do
-  let mtx ← getThe (Mutex (CryptoState τ))
+  let mtx ← get
   mtx.atomically fun ref => do
     let st ← ref.get
-    let entropy ← st.entropy.refresh
+    let entropy ← st.entropy.refresh τ
     ref.set {st with entropy}
 
 def realloc (fuel : USize) : CryptoM τ Unit := do
-  let mtx ← getThe (Mutex (CryptoState τ))
+  let mtx ← get
   mtx.atomically fun ref => do
     let entropy ← EntropyArray.new τ fuel
     ref.set {entropy}
@@ -112,7 +113,7 @@ def realloc (fuel : USize) : CryptoM τ Unit := do
 def mkFreshNonceId (spec : Spec := NameGeneratorSpec) : CryptoM τ (NonceId spec) := do
   if h : spec.nonceBytes = 0 then
     return ⟨.empty, by simp [ByteArray.empty, ByteArray.size, ByteArray.emptyWithCapacity, h]⟩
-  let mtx ← getThe (Mutex (CryptoState τ))
+  let mtx ← get
   let nonce? ← mtx.atomically fun ref => do
     let st ← ref.get
     match st.nonces.find? spec.name with
@@ -143,8 +144,15 @@ where
     else
       return (none, st)
 
+def mkFreshSeed (spec : Spec := NameGeneratorSpec) : CryptoM τ (Seed τ spec) := do
+  let seed ← SecureArray.new τ spec.seedBytes
+  if h : seed.size = spec.seedBytes then
+    return ⟨seed, h⟩
+  else
+    throwError m!"unreachable code has been reached in {decl_name%}"
+
 def extractEntropy (size : USize) : CryptoM τ ByteArray := do
-  let mtx ← getThe (Mutex (CryptoState τ))
+  let mtx ← get
   mtx.atomically fun ref => do
     let st ← ref.get
     let (buf, entropy) ← st.entropy.extract τ size
@@ -160,6 +168,6 @@ instance {τ : Sodium σ} : MonadNameGenerator (CryptoM τ) where
 
 end CryptoM
 
-export CryptoM (mkFreshNonceId getFuel refuel reset realloc extractEntropy)
+export CryptoM (mkFreshNonceId mkFreshSeed getFuel refuel reset realloc extractEntropy)
 
 end Sodium.Crypto

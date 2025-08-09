@@ -1,5 +1,7 @@
 import Alloy.C
 
+open Lean
+
 open scoped Alloy.C
 
 alloy c include <sodium.h> <lean/lean.h> <string.h>
@@ -33,6 +35,9 @@ def compare (b1 : @& ByteArray) (b2 : @& ByteArray) : Ordering :=
 
   int result = sodium_compare(lean_sarray_cptr(b1), lean_sarray_cptr(b2), len1);
   return result + 1;
+
+instance : BEq ByteArray where
+  beq x y := compare x y == .eq
 
 instance : Ord ByteArray := ⟨compare⟩
 
@@ -69,5 +74,8 @@ def ofBase64 (str : @& String) : ByteArray :=
 
   lean_sarray_set_size(bin, bin_len);
   return bin;
+
+instance : ToJson ByteArray := ⟨Json.str ∘ toBase64⟩
+instance : FromJson ByteArray := ⟨(Json.getStr? · >>= pure ∘ ofBase64)⟩
 
 end ByteArray

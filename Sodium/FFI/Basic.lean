@@ -55,8 +55,8 @@ def new (ctx : @& Sodium σ) (size : USize) : IO (SecureArray ctx) :=
     return lean_io_result_mk_error(io_error);
   }
 
-  sodium_memzero(ptr, size);
   sodium_mlock(ptr, size);
+  randombytes_buf(ptr, size);
   sodium_mprotect_noaccess(ptr);
 
   lean_object* secure_pointed = to_lean<SecurePointed>(ptr);
@@ -70,13 +70,15 @@ alloy c extern "lean_sodium_is_zero"
 def isZero {ctx : @& Sodium σ} (buf : @& SecureArray ctx) : Bool :=
   size_t len = lean_ctor_get_usize(buf, 1);
   void* ptr = of_lean<SecurePointed>(lean_ctor_get(buf, 0));
+  sodium_mprotect_readonly(ptr);
   int result = sodium_is_zero(ptr, len);
+  sodium_mprotect_noaccess(ptr);
   return result == 1;
 
 alloy c extern "lean_sodium_memcmp"
 def compare {ctx : @& Sodium σ} (b1 : @& SecureArray ctx) (b2 : @& SecureArray ctx) : Ordering :=
   size_t len1 = lean_ctor_get_usize(b1, 1);
-  size_t len2 = lean_ctor_get_usize(b2, 2);
+  size_t len2 = lean_ctor_get_usize(b2, 1);
 
   if (len1 != len2) {
     return len1 < len2 ? 0 : 2;
@@ -84,7 +86,11 @@ def compare {ctx : @& Sodium σ} (b1 : @& SecureArray ctx) (b2 : @& SecureArray 
 
   void* ptr1 = of_lean<SecurePointed>(lean_ctor_get(b1, 0));
   void* ptr2 = of_lean<SecurePointed>(lean_ctor_get(b2, 0));
+  sodium_mprotect_readonly(ptr1);
+  sodium_mprotect_readonly(ptr2);
   int result = sodium_compare(ptr1, ptr2, len1);
+  sodium_mprotect_noaccess(ptr2);
+  sodium_mprotect_noaccess(ptr1);
   return result + 1;
 
 instance {τ : Sodium σ} : Ord (SecureArray τ) := ⟨compare⟩
@@ -104,13 +110,6 @@ namespace EntropyArray
 
 alloy c extern "lean_sodium_randombytes_buf"
 def new (τ : @& Sodium σ) (size : USize) : IO (EntropyArray τ) :=
-  if (size == 0) {
-    lean_object* error_msg = lean_mk_string("Cannot allocate zero-sized secure memory");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
-  }
-
   void* ptr = sodium_malloc(size);
 
   if (ptr == NULL) {
@@ -133,7 +132,7 @@ def new (τ : @& Sodium σ) (size : USize) : IO (EntropyArray τ) :=
   return lean_io_result_mk_ok(secure_ref);
 
 alloy c extern "lean_sodium_randombytes_buf_refresh"
-def refresh {τ : @& Sodium σ} (arr : EntropyArray τ) : BaseIO (EntropyArray τ) :=
+def refresh (τ : @& Sodium σ) (arr : EntropyArray τ) : BaseIO (EntropyArray τ) :=
   void* ptr = of_lean<SecurePointed>(lean_ctor_get(arr, 0));
   size_t size = lean_ctor_get_usize(arr, 2);
 
@@ -142,7 +141,7 @@ def refresh {τ : @& Sodium σ} (arr : EntropyArray τ) : BaseIO (EntropyArray �
   sodium_mprotect_readonly(ptr);
 
   lean_ctor_set_usize(arr, 1, 0);
-  return arr;
+  return lean_io_result_mk_ok(arr);
 
 /--
 Copy a slice from an EntropyArray to a ByteArray for safe data extraction.

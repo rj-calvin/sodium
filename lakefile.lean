@@ -98,6 +98,12 @@ lean_lib «Sodium» where
     else
       #[Module.oNoExportFacet, `module.alloy.c.o.noexport]
 
-lean_exe Tests where
-  supportInterpreter := true
+lean_lib Tests where
+  roots := #[`Tests, `Sodium]
+  precompileModules := true
+  nativeFacets := fun shouldExport =>
+    if shouldExport then
+      #[Module.oExportFacet, `module.alloy.c.o.export]
+    else
+      #[Module.oNoExportFacet, `module.alloy.c.o.noexport]
   moreLeancArgs := #["-g", "-O0"]  -- Debug symbols, no optimization

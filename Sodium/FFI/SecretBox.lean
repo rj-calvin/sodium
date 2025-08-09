@@ -1,0 +1,222 @@
+import Sodium.FFI.Basic
+
+open scoped Alloy.C
+
+alloy c include <sodium.h> <lean/lean.h>
+
+namespace Sodium.FFI.SecretBox
+
+variable {σ : Type}
+
+alloy c section
+extern lean_obj_res lean_sodium_malloc(b_lean_obj_arg, size_t, lean_obj_arg);
+extern lean_obj_res sodium_secure_to_lean(void*);
+extern void* sodium_secure_of_lean(b_lean_obj_arg);
+end
+
+-- Constants for crypto_secretbox
+def KEYBYTES : USize := 32
+def NONCEBYTES : USize := 24
+def MACBYTES : USize := 16
+
+alloy c extern "lean_crypto_secretbox_keygen"
+def keygen (tau : @& Sodium σ) : IO (SecureArray tau) :=
+  lean_object* secret_key_io = lean_sodium_malloc(tau, crypto_secretbox_KEYBYTES, _1);
+
+  if (lean_io_result_is_error(secret_key_io)) {
+    return secret_key_io;
+  }
+
+  lean_object* secret_key_ref = lean_io_result_take_value(secret_key_io);
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secret_key_ref, 0));
+
+  sodium_mprotect_readwrite(secret_key);
+  crypto_secretbox_keygen((uint8_t*) secret_key);
+  sodium_mprotect_noaccess(secret_key);
+
+  return lean_io_result_mk_ok(secret_key_ref);
+
+alloy c extern "lean_crypto_secretbox_easy"
+def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
+    (secretKey : @& SecureArray tau) : IO ByteArray :=
+  size_t message_len = lean_sarray_size(message);
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_secretbox_NONCEBYTES ||
+    sk_len != crypto_secretbox_KEYBYTES ||
+    message_len > crypto_secretbox_MESSAGEBYTES_MAX - crypto_secretbox_MACBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_secretbox_easy");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  lean_object* ciphertext = lean_alloc_sarray(
+    sizeof(uint8_t),
+    message_len + crypto_secretbox_MACBYTES,
+    message_len + crypto_secretbox_MACBYTES);
+
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  sodium_mprotect_readonly(secret_key);
+
+  int err = crypto_secretbox_easy(
+    lean_sarray_cptr(ciphertext),
+    lean_sarray_cptr(message), message_len,
+    lean_sarray_cptr(nonce),
+    (uint8_t*) secret_key);
+
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    lean_dec(ciphertext);
+    lean_object* error_msg = lean_mk_string("crypto_secretbox_easy failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  return lean_io_result_mk_ok(ciphertext);
+
+alloy c extern "lean_crypto_secretbox_open_easy"
+def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteArray)
+    (secretKey : @& SecureArray tau) : IO ByteArray :=
+  size_t ciphertext_len = lean_sarray_size(ciphertext);
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_secretbox_NONCEBYTES ||
+    sk_len != crypto_secretbox_KEYBYTES ||
+    ciphertext_len < crypto_secretbox_MACBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_secretbox_open_easy");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  lean_object* message = lean_alloc_sarray(
+    sizeof(uint8_t),
+    ciphertext_len - crypto_secretbox_MACBYTES,
+    ciphertext_len - crypto_secretbox_MACBYTES);
+
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  sodium_mprotect_readonly(secret_key);
+
+  int err = crypto_secretbox_open_easy(
+    lean_sarray_cptr(message),
+    lean_sarray_cptr(ciphertext), ciphertext_len,
+    lean_sarray_cptr(nonce),
+    (uint8_t*) secret_key);
+
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    lean_dec(message);
+    lean_object* error_msg = lean_mk_string("crypto_secretbox_open_easy failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  return lean_io_result_mk_ok(message);
+
+alloy c extern "lean_crypto_secretbox_detached"
+def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
+    (secretKey : @& SecureArray tau) : IO (ByteArray × ByteArray) :=
+  size_t message_len = lean_sarray_size(message);
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_secretbox_NONCEBYTES ||
+    sk_len != crypto_secretbox_KEYBYTES ||
+    message_len > crypto_secretbox_MESSAGEBYTES_MAX
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_secretbox_detached");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  lean_object* ciphertext = lean_alloc_sarray(
+    sizeof(uint8_t),
+    message_len,
+    message_len);
+  lean_object* mac = lean_alloc_sarray(
+    sizeof(uint8_t),
+    crypto_secretbox_MACBYTES,
+    crypto_secretbox_MACBYTES);
+
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  sodium_mprotect_readonly(secret_key);
+
+  int err = crypto_secretbox_detached(
+    lean_sarray_cptr(ciphertext),
+    lean_sarray_cptr(mac),
+    lean_sarray_cptr(message), message_len,
+    lean_sarray_cptr(nonce),
+    (uint8_t*) secret_key);
+
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    lean_dec(ciphertext);
+    lean_dec(mac);
+    lean_object* error_msg = lean_mk_string("crypto_secretbox_detached failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  lean_object* ret = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(ret, 0, ciphertext);
+  lean_ctor_set(ret, 1, mac);
+  return lean_io_result_mk_ok(ret);
+
+alloy c extern "lean_crypto_secretbox_open_detached"
+def openDetached (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& ByteArray) (nonce : @& ByteArray)
+    (secretKey : @& SecureArray tau) : IO ByteArray :=
+  size_t ciphertext_len = lean_sarray_size(ciphertext);
+  size_t sk_len = lean_ctor_get_usize(secretKey, 1);
+
+  if (
+    lean_sarray_size(nonce) != crypto_secretbox_NONCEBYTES ||
+    lean_sarray_size(mac) != crypto_secretbox_MACBYTES ||
+    sk_len != crypto_secretbox_KEYBYTES
+  ) {
+    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_secretbox_open_detached");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  lean_object* message = lean_alloc_sarray(
+    sizeof(uint8_t),
+    ciphertext_len,
+    ciphertext_len);
+
+  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  sodium_mprotect_readonly(secret_key);
+
+  int err = crypto_secretbox_open_detached(
+    lean_sarray_cptr(message),
+    lean_sarray_cptr(ciphertext),
+    lean_sarray_cptr(mac),
+    ciphertext_len,
+    lean_sarray_cptr(nonce),
+    (uint8_t*) secret_key);
+
+  sodium_mprotect_noaccess(secret_key);
+
+  if (err != 0) {
+    lean_dec(message);
+    lean_object* error_msg = lean_mk_string("crypto_secretbox_open_detached failed");
+    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
+    lean_ctor_set(io_error, 0, error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  return lean_io_result_mk_ok(message);
+
+end Sodium.FFI.SecretBox
