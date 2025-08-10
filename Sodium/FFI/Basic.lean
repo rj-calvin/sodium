@@ -40,9 +40,11 @@ end
 structure SecureArray (_ : Sodium σ) where
   private mk ::
   private ref : SecurePointed.nonemptyType.type
-  size : USize
+  private sz : USize
 
 namespace SecureArray
+
+opaque size {τ : Sodium σ} (x : SecureArray τ) : Nat := x.sz.toNat
 
 alloy c extern "lean_sodium_malloc"
 def new (ctx : @& Sodium σ) (size : USize) : IO (SecureArray ctx) :=
@@ -55,7 +57,6 @@ def new (ctx : @& Sodium σ) (size : USize) : IO (SecureArray ctx) :=
     return lean_io_result_mk_error(io_error);
   }
 
-  sodium_mlock(ptr, size);
   randombytes_buf(ptr, size);
   sodium_mprotect_noaccess(ptr);
 
@@ -95,18 +96,24 @@ def compare {ctx : @& Sodium σ} (b1 : @& SecureArray ctx) (b2 : @& SecureArray 
 
 instance {τ : Sodium σ} : Ord (SecureArray τ) := ⟨compare⟩
 
+instance {τ : Sodium σ} : BEq (SecureArray τ) where
+  beq x y := compare x y == .eq
+
 end SecureArray
 
 structure EntropyArray (_ : Sodium σ) where
   private mk ::
   private ref : SecurePointed.nonemptyType.type
-  off : USize
-  size : USize
+  private off' : USize
+  private sz : USize
 
 noncomputable instance {τ : Sodium σ} : Inhabited (EntropyArray τ) :=
-  ⟨{ ref := Classical.choice SecurePointed.nonemptyType.property, off := 0, size := 0 }⟩
+  ⟨{ ref := Classical.choice SecurePointed.nonemptyType.property, off' := 0, sz := 0 }⟩
 
 namespace EntropyArray
+
+opaque off {τ : Sodium σ} (x : EntropyArray τ) : Nat := x.off'.toNat
+opaque size {τ : Sodium σ} (x : EntropyArray τ) : Nat := x.sz.toNat
 
 alloy c extern "lean_sodium_randombytes_buf"
 def new (τ : @& Sodium σ) (size : USize) : IO (EntropyArray τ) :=

@@ -1,3 +1,4 @@
+import Sodium.FFI.KeyDeriv
 import Sodium.FFI.SecretBox
 import Sodium.Crypto.Monad
 
@@ -50,10 +51,10 @@ open FFI SecretBox
 -- ================================
 
 def SecretBoxSpec : Spec where
-  name := .mkSimple "xsalsa20poly1305"
-  secretKeyBytes := KEYBYTES.toNat
-  nonceBytes := NONCEBYTES.toNat
-  macBytes := MACBYTES.toNat
+  name := `xsalsa20poly1305
+  secretKeyBytes := KEYBYTES
+  nonceBytes := NONCEBYTES
+  macBytes := MACBYTES
 
 variable {α σ : Type} (τ : Sodium σ)
 
@@ -71,12 +72,17 @@ variable {τ}
 
 /-- Generate a fresh SecretBox key with compile-time size validation -/
 def mkFreshKey : CryptoM τ (SecretBoxKey τ) := do
-  let keyBytes ← keygen τ
-  if h : keyBytes.size = SecretBoxSpec.secretKeyBytes then
-    return {
-      bytes := keyBytes,
-      size_eq_secret_key_bytes := h
-    }
+  let key ← keygen τ
+  if h : key.size = SecretBoxSpec.secretKeyBytes then
+    return ⟨key, h⟩
+  else throwInvariantFailure
+
+def mkSubKey : CryptoM τ (SecretBoxKey τ) := do
+  let st ← get
+  let idx := st.ctx.index
+  let key ← KeyDeriv.derive τ SecretBoxSpec.secretKeyBytes idx.1 idx.2 st.mkey.bytes
+  if h : key.size = SecretBoxSpec.secretKeyBytes then
+    return ⟨key, h⟩
   else throwInvariantFailure
 
 -- ================================
@@ -89,13 +95,9 @@ def mkFreshKey : CryptoM τ (SecretBoxKey τ) := do
 def encrypt [ToJson α] (secretKey : SecretBoxKey τ) (message : α) : CryptoM τ SecretBoxCipherText := do
   let nonce ← mkFreshNonceId SecretBoxSpec
   let data := toJson message |>.compress.toUTF8
-  let cipherBytes ← easy τ data nonce.bytes secretKey.bytes
-  if h : cipherBytes.size ≥ SecretBoxSpec.macBytes then
-    return {
-      nonce,
-      bytes := cipherBytes,
-      size_ge_mac_bytes := h
-    }
+  let cipher ← easy τ data nonce.bytes secretKey.bytes
+  if h : cipher.size ≥ SecretBoxSpec.macBytes then
+    return ⟨cipher, nonce, h⟩
   else throwInvariantFailure
 
 /-- Decrypt message using SecretBox with secret key.
@@ -126,13 +128,9 @@ def encryptDetached [ToJson α] (secretKey : SecretBoxKey τ)
     (message : α) : CryptoM τ (DetachedCipherText SecretBoxSpec) := do
   let nonce ← mkFreshNonceId SecretBoxSpec
   let data := toJson message |>.compress.toUTF8
-  let (cipherBytes, macBytes) ← detached τ data nonce.bytes secretKey.bytes
-  if h : macBytes.size = SecretBoxSpec.macBytes then
-    let mac := {
-      bytes := macBytes,
-      size_eq_mac_bytes := h
-    }
-    return {bytes := cipherBytes, nonce, mac}
+  let (cipher, mac) ← detached τ data nonce.bytes secretKey.bytes
+  if h : mac.size = SecretBoxSpec.macBytes then
+    return {bytes := cipher, mac := ⟨mac, h⟩, nonce}
   else throwInvariantFailure
 
 /-- Decrypt message with separate ciphertext and MAC using secret key.

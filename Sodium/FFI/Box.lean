@@ -15,13 +15,13 @@ extern void* sodium_secure_of_lean(b_lean_obj_arg);
 end
 
 -- Constants for crypto_box
-def PUBLICKEYBYTES : USize := 32
-def SECRETKEYBYTES : USize := 32
-def NONCEBYTES : USize := 24
-def MACBYTES : USize := 16
-def SEEDBYTES : USize := 32
-def BEFORENMBYTES : USize := 32
-def SEALBYTES : USize := 48  -- PUBLICKEYBYTES + MACBYTES
+def PUBLICKEYBYTES : Nat := 32
+def SECRETKEYBYTES : Nat := 32
+def NONCEBYTES : Nat := 24
+def MACBYTES : Nat := 16
+def SEEDBYTES : Nat := 32
+def SHAREDBYTES : Nat := 32
+def SEALBYTES : Nat := 48  -- PUBLICKEYBYTES + MACBYTES
 
 alloy c extern "lean_crypto_box_keypair"
 def keypair (tau : @& Sodium σ) : IO (ByteArray × SecureArray tau) :=
@@ -36,32 +36,34 @@ def keypair (tau : @& Sodium σ) : IO (ByteArray × SecureArray tau) :=
     return secret_key_io;
   }
 
-  lean_object* secret_key_ref = lean_io_result_take_value(secret_key_io);
-  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secret_key_ref, 0));
-  sodium_mprotect_readwrite(secret_key);
+  lean_object* secret_key = lean_io_result_take_value(secret_key_io);
+  void* secret_key_ref = sodium_secure_of_lean(lean_ctor_get(secret_key, 0));
+  sodium_mprotect_readwrite(secret_key_ref);
 
-  int err = crypto_box_keypair(lean_sarray_cptr(public_key), (uint8_t*) secret_key);
+  int err = crypto_box_keypair(lean_sarray_cptr(public_key), (uint8_t*) secret_key_ref);
 
   if (err != 0) {
-    sodium_munlock(secret_key, crypto_box_SECRETKEYBYTES);
+    sodium_munlock(secret_key_ref, crypto_box_SECRETKEYBYTES);
     lean_dec(public_key);
-    lean_dec(secret_key_ref);
+    lean_dec(secret_key);
     lean_object* error_msg = lean_mk_string("crypto_box_keypair failed");
     lean_object* io_error = lean_alloc_ctor(7, 1, 0);
     lean_ctor_set(io_error, 0, error_msg);
     return lean_io_result_mk_error(io_error);
   }
 
-  sodium_mprotect_noaccess(secret_key);
+  sodium_mprotect_noaccess(secret_key_ref);
 
   lean_object* ret = lean_alloc_ctor(0, 2, 0);
   lean_ctor_set(ret, 0, public_key);
-  lean_ctor_set(ret, 1, secret_key_ref);
+  lean_ctor_set(ret, 1, secret_key);
+
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_box_seed_keypair"
 def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray × SecureArray tau) :=
   size_t seed_len = lean_ctor_get_usize(seed, 1);
+
   if (seed_len != crypto_box_SEEDBYTES) {
     lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_box_seed_keypair");
     lean_object* io_error = lean_alloc_ctor(7, 1, 0);
@@ -81,25 +83,25 @@ def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray
     return secret_key_io;
   }
 
-  lean_object* secret_key_ref = lean_io_result_take_value(secret_key_io);
-  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secret_key_ref, 0));
-  void* seed_ptr = sodium_secure_of_lean(lean_ctor_get(seed, 0));
+  lean_object* secret_key = lean_io_result_take_value(secret_key_io);
+  void* secret_key_ref = sodium_secure_of_lean(lean_ctor_get(secret_key, 0));
+  void* seed_ref = sodium_secure_of_lean(lean_ctor_get(seed, 0));
 
-  sodium_mprotect_readwrite(secret_key);
-  sodium_mprotect_readonly(seed_ptr);
+  sodium_mprotect_readwrite(secret_key_ref);
+  sodium_mprotect_readonly(seed_ref);
 
   int err = crypto_box_seed_keypair(
     lean_sarray_cptr(public_key),
-    (uint8_t*) secret_key,
-    (uint8_t*) seed_ptr);
+    (uint8_t*) secret_key_ref,
+    (uint8_t*) seed_ref);
 
-  sodium_mprotect_noaccess(secret_key);
-  sodium_mprotect_noaccess(seed_ptr);
+  sodium_mprotect_noaccess(secret_key_ref);
+  sodium_mprotect_noaccess(seed_ref);
 
   if (err != 0) {
-    sodium_munlock(secret_key, crypto_box_SECRETKEYBYTES);
+    sodium_munlock(secret_key_ref, crypto_box_SECRETKEYBYTES);
     lean_dec(public_key);
-    lean_dec(secret_key_ref);
+    lean_dec(secret_key);
     lean_object* error_msg = lean_mk_string("crypto_box_seed_keypair failed");
     lean_object* io_error = lean_alloc_ctor(7, 1, 0);
     lean_ctor_set(io_error, 0, error_msg);
@@ -108,7 +110,7 @@ def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray
 
   lean_object* ret = lean_alloc_ctor(0, 2, 0);
   lean_ctor_set(ret, 0, public_key);
-  lean_ctor_set(ret, 1, secret_key_ref);
+  lean_ctor_set(ret, 1, secret_key);
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_box_easy"
@@ -221,31 +223,31 @@ def beforenm (tau : @& Sodium σ) (publicKey : @& ByteArray) (secretKey : @& Sec
     return shared_secret_io;
   }
 
-  lean_object* shared_secret_ref = lean_io_result_take_value(shared_secret_io);
-  void* shared_secret = sodium_secure_of_lean(lean_ctor_get(shared_secret_ref, 0));
-  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
+  lean_object* shared_secret = lean_io_result_take_value(shared_secret_io);
+  void* shared_secret_ref = sodium_secure_of_lean(lean_ctor_get(shared_secret, 0));
+  void* secret_key_ref = sodium_secure_of_lean(lean_ctor_get(secretKey, 0));
 
-  sodium_mprotect_readwrite(shared_secret);
-  sodium_mprotect_readonly(secret_key);
+  sodium_mprotect_readwrite(shared_secret_ref);
+  sodium_mprotect_readonly(secret_key_ref);
 
   int err = crypto_box_beforenm(
-    (uint8_t*) shared_secret,
+    (uint8_t*) shared_secret_ref,
     lean_sarray_cptr(publicKey),
-    (uint8_t*) secret_key);
+    (uint8_t*) secret_key_ref);
 
-  sodium_mprotect_noaccess(shared_secret);
-  sodium_mprotect_noaccess(secret_key);
+  sodium_mprotect_noaccess(shared_secret_ref);
+  sodium_mprotect_noaccess(secret_key_ref);
 
   if (err != 0) {
-    sodium_munlock(shared_secret, crypto_box_BEFORENMBYTES);
-    lean_dec(shared_secret_ref);
+    sodium_munlock(shared_secret_ref, crypto_box_BEFORENMBYTES);
+    lean_dec(shared_secret);
     lean_object* error_msg = lean_mk_string("crypto_box_beforenm failed");
     lean_object* io_error = lean_alloc_ctor(7, 1, 0);
     lean_ctor_set(io_error, 0, error_msg);
     return lean_io_result_mk_error(io_error);
   }
 
-  return lean_io_result_mk_ok(shared_secret_ref);
+  return lean_io_result_mk_ok(shared_secret);
 
 alloy c extern "lean_crypto_box_easy_afternm"
 def easyAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)

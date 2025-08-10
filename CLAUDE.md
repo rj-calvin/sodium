@@ -92,10 +92,10 @@ The project includes comprehensive test modules in `Tests/` for each FFI compone
 
 ## Development Workflow
 
+1. Look for LibSodium source code in `.lake/build/libsodium-build/libsodium-1.0.20/`
 1. Identify LibSodium function to bind
 2. Design Lean type signature with appropriate safety guarantees
 3. Implement Alloy FFI binding in appropriate `Sodium/FFI/*.lean` file
-4. Add import to `Sodium.lean` if needed
 5. Check `lake build` to check for alloy compilation errors
 5. Check `lean-lsp` to check for type errors
 6. Create corresponding tests in `Tests/*.lean`

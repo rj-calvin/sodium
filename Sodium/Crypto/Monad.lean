@@ -1,18 +1,44 @@
-import Init.Control.StateRef
 import Sodium.Data.ByteArray
-import Sodium.FFI.Basic
+import Sodium.FFI.KeyDeriv
 import Sodium.Crypto.Spec
 
 open Lean Std Sodium
 
 namespace Sodium.Crypto
 
-namespace NonceId
+open FFI
 
 variable {spec : Spec}
 
+def MetaSpec : Spec where
+  name := `meta
+  nonceBytes := 8
+  seedBytes := 32
+  secretKeyBytes := 32
+  sessionKeyBytes := 32
+
+structure ContextId where
+  name : Name
+  deriving BEq, DecidableEq, Ord, Inhabited, Hashable, ToJson, FromJson
+
+namespace ContextId
+
+def index (ctx : ContextId) : UInt64 × UInt64 :=
+  match ctx.name with
+  | .num p n => (p.hash, n + 1)
+  | x => (x.hash, 0)
+
+def ofMVarId (mvarId : MVarId) : ContextId := ⟨mvarId.name⟩
+
+end ContextId
+
+namespace NonceId
+
 def hash : NonceId spec → UInt64 := ByteArray.hash ∘ NonceId.bytes
 instance : Hashable (NonceId spec) := ⟨hash⟩
+
+def toContextId (nonce : NonceId spec) :=
+  ContextId.mk (.num spec.name nonce.hash.toNat)
 
 /--
   Create a "unique" MVarId.
@@ -20,34 +46,35 @@ instance : Hashable (NonceId spec) := ⟨hash⟩
   Uniqueness is obviously not guaranteed in a purist sense, but can still be useful for
   creating synthetic goals.
 -/
-def toMVarId! (nonce : NonceId spec) :=
+def toMVarId (nonce : NonceId MetaSpec) :=
   MVarId.mk (.num spec.name nonce.hash.toNat)
-
-/--
-  Create a "unique" FVarId.
-
-  Uniqueness is obviously not guaranteed in a purist sense, but can still be useful for
-  creating synthetic free variables.
--/
-def toFVarId! (nonce : NonceId spec) :=
-  FVarId.mk (.num spec.name nonce.hash.toNat)
 
 end NonceId
 
-variable {σ : Type}
+variable {α σ : Type}
+
+private structure EntropyState (τ : Sodium σ) where
+  entropy : EntropyArray τ
+  nonces : NameMap (Σ spec, NonceId spec) := ∅
 
 structure CryptoState (τ : Sodium σ) where
-  private entropy : EntropyArray τ
-  private nonces : NameMap ByteArray := ∅
+  private mtx : Mutex (EntropyState τ)
+  ctx : ContextId
+  mkey : SecretKey τ MetaSpec
+  pkeys : NameMap (Σ spec, PublicKey spec) := ∅
+  skeys : NameMap (Σ spec, SecretKey τ spec) := ∅
+  sessions : NameMap (Σ spec, SessionKey τ spec) := ∅
+  secrets : NameMap (Σ spec, SharedSecret τ spec) := ∅
+  seeds : NameMap (Σ spec, Seed τ spec) := ∅
 
 inductive CryptoMessage
-  | outOfFuel
+  | insufficientEntropy (bytes : Nat)
   | invariantFailure (decl : Name)
   deriving BEq, Hashable, Inhabited
 
 @[coe] def CryptoMessage.toMessageData : CryptoMessage → MessageData
-  | .outOfFuel => m!"ran out of fuel"
-  | .invariantFailure decl => m!"invariant failed for {decl}"
+  | .insufficientEntropy bytes => m!"insufficient entropy bytes allocated (expected at least {bytes} bytes)"
+  | .invariantFailure decl => m!"invariant failure in {decl}"
 
 instance : ToMessageData CryptoMessage := ⟨CryptoMessage.toMessageData⟩
 
@@ -56,118 +83,138 @@ instance : ToMessageData CryptoMessage := ⟨CryptoMessage.toMessageData⟩
 
 instance : Coe CryptoMessage Exception := ⟨CryptoMessage.toException⟩
 
-abbrev CryptoM (τ : Sodium σ) := StateRefT (Mutex (CryptoState τ)) CoreM
+abbrev CryptoM (τ : Sodium σ) := StateRefT (CryptoState τ) CoreM
 
-def throwOutOfFuel {α : Type} {τ : Sodium σ} : CryptoM τ α :=
-  throw CryptoMessage.outOfFuel.toException
+variable {τ : Sodium σ}
 
-def throwInvariantFailure {α : Type} {τ : Sodium σ} (decl : Name := by exact decl_name%) : CryptoM τ α :=
+def throwInsufficientEntropy (bytes : Nat) : CryptoM τ α :=
+  throw (CryptoMessage.insufficientEntropy bytes).toException
+
+def throwInvariantFailure (decl : Name := by exact decl_name%) : CryptoM τ α :=
   throw (CryptoMessage.invariantFailure decl).toException
 
 namespace CryptoM
 
-register_option crypto.defaultFuelSize : Nat := {
-  defValue := 24 * 4096
+register_option crypto.entropyBytes : Nat := {
+  defValue := 24 * 256
   descr := "The number of random bytes to allocate for entropy."
 }
 
-def toCoreM {α : Type} (x : {σ : Type} → (τ : Sodium σ) → CryptoM τ α) (fuel? : Option Nat := none) : CoreM α := do
-  let fuel := fuel?.getD <| crypto.defaultFuelSize.get (← getOptions)
+def toCoreM (x : {σ : Type} → (τ : Sodium σ) → CryptoM τ α) (ctx : ContextId := ⟨.anonymous⟩) : CoreM α := do
   let τ ← init Unit
-  let entropy ← EntropyArray.new τ fuel
-  StateRefT'.run' (x τ) (← Mutex.new {entropy})
+  let entropy ← EntropyArray.new τ (crypto.entropyBytes.get (← getOptions)).toUSize
+  let key ← KeyDeriv.keygen τ
+  let mtx ← Mutex.new {entropy}
+  if h : key.size = MetaSpec.secretKeyBytes then
+    StateRefT'.run' (x τ) {mtx, ctx, mkey := ⟨key, h⟩}
+  else throwError (CryptoMessage.invariantFailure decl_name%).toMessageData
 
-def toIO {α : Type} (ctx : Elab.ContextInfo)
-    (x : {σ : Type} → (τ : Sodium σ) → CryptoM τ α) (fuel? : Option Nat := none) : IO α := do
-  ctx.runCoreM <| toCoreM x fuel?
+def toIO (ctx : Elab.ContextInfo) (x : {σ : Type} → (τ : Sodium σ) → CryptoM τ α) : IO α := do
+  ctx.runCoreM <| toCoreM x (ctx := ⟨ctx.currNamespace⟩)
 
-variable {τ : Sodium σ}
+def resetNonces : CryptoM τ Unit := do
+  let mtx := (← get).mtx
+  mtx.atomically <| modify ({· with nonces := ∅})
 
-def getStatus : CryptoM τ (Nat × Nat) := do
-  let mtx ← get
-  mtx.atomically fun ref => do
-    let st ← ref.get
-    return (st.entropy.off.toNat, st.entropy.size - st.entropy.off |>.toNat)
-
-def getFuel : CryptoM τ Nat :=
-  getStatus >>= pure ∘ Prod.snd
-
-def reset : CryptoM τ Unit := do
-  let mtx ← get
-  mtx.atomically fun ref =>
-    ref.modify ({· with nonces := ∅})
-
-def refuel : CryptoM τ Unit := do
-  let mtx ← get
-  mtx.atomically fun ref => do
-    let st ← ref.get
-    let entropy ← st.entropy.refresh τ
-    ref.set {st with entropy}
-
-def realloc (fuel : USize) : CryptoM τ Unit := do
-  let mtx ← get
-  mtx.atomically fun ref => do
-    let entropy ← EntropyArray.new τ fuel
-    ref.set {entropy}
-
-def mkFreshNonceId (spec : Spec := NameGeneratorSpec) : CryptoM τ (NonceId spec) := do
+def mkFreshNonceId (spec : Spec := MetaSpec) : CryptoM τ (NonceId spec) := do
   if h : spec.nonceBytes = 0 then
     return ⟨.empty, by simp [ByteArray.empty, ByteArray.size, ByteArray.emptyWithCapacity, h]⟩
-  let mtx ← get
-  let nonce? ← mtx.atomically fun ref => do
+  let mtx := (← get).mtx
+  mtx.atomically fun ref => do
     let st ← ref.get
-    match st.nonces.find? spec.name with
-    | some stale =>
-      let nonce := stale.succ
+    if let some ⟨_, stale⟩ := st.nonces.find? spec.name then
+      let nonce := stale.bytes.succ
       if h : !nonce.isZero ∧ nonce.size = spec.nonceBytes then
-        let nonces := st.nonces.insert spec.name nonce
+        let nonces := st.nonces.insert spec.name ⟨spec, ⟨nonce, h.2⟩⟩
         ref.set {st with nonces}
-        return some ⟨nonce, h.2⟩
-      else
-        let (nonce?, st) ← next st
-        ref.set st
-        return nonce?
-    | _ =>
-      let (nonce?, st) ← next st
-      ref.set st
-      return nonce?
-  match nonce? with
-  | some nonce => return nonce
-  | _ => throwOutOfFuel
+        return ⟨nonce, h.2⟩
+    let (nonce, st) ← next st
+    ref.set st
+    return nonce
 where
-  next (st : CryptoState τ) : BaseIO (Option (NonceId spec) × CryptoState τ) := do
-    let {nonces, entropy} := st
-    let (buf, entropy) ← entropy.extract τ spec.nonceBytes
-    if h : buf.size = spec.nonceBytes then
-      let nonces := nonces.insert spec.name buf
-      return (some ⟨buf, h⟩, {st with nonces, entropy})
-    else
-      return (none, st)
+  next (st : EntropyState τ) : CryptoM τ (NonceId spec × EntropyState τ) := do
+    let {nonces, entropy, ..} := st
 
-def mkFreshSeed (spec : Spec := NameGeneratorSpec) : CryptoM τ (Seed τ spec) := do
+    let (nonce, entropy) ←
+      if entropy.size - entropy.off < spec.nonceBytes then
+        let entropy ← entropy.refresh τ
+        entropy.extract τ spec.nonceBytes
+      else
+        entropy.extract τ spec.nonceBytes
+
+    if h : nonce.size = spec.nonceBytes then
+      let nonces := nonces.insert spec.name ⟨spec, ⟨nonce, h⟩⟩
+      return (⟨nonce, h⟩, {st with nonces, entropy})
+    else throwInsufficientEntropy spec.nonceBytes
+
+def mkFreshSeed : CryptoM τ (Seed τ spec) := do
   let seed ← SecureArray.new τ spec.seedBytes
   if h : seed.size = spec.seedBytes then
     return ⟨seed, h⟩
-  else
-    throwError m!"unreachable code has been reached in {decl_name%}"
+  else throwInvariantFailure
 
-def extractEntropy (size : USize) : CryptoM τ ByteArray := do
-  let mtx ← get
-  mtx.atomically fun ref => do
-    let st ← ref.get
-    let (buf, entropy) ← st.entropy.extract τ size
-    ref.set {st with entropy}
-    return buf
+def withMetaKey (ctx : ContextId) (x : {σ : Type} → (τ : Sodium σ) → CryptoM τ α) : CryptoM τ α := do
+  let st ← get
+  let idx := ctx.index
+  let key ← KeyDeriv.derive τ MetaSpec.secretKeyBytes idx.1 idx.2 st.mkey.bytes
+  if h : key.size = MetaSpec.secretKeyBytes then
+    liftM (StateRefT'.run' (x τ) {st with ctx, mkey := ⟨key, h⟩})
+  else throwInvariantFailure
 
-instance {τ : Sodium σ} : MonadNameGenerator (CryptoM τ) where
+def findSeed? (name : Name) : CryptoM τ (Option (Seed τ spec)) := do
+  let {seeds, ..} ← get
+  let some seed := seeds.find? name | return none
+  if h : spec = seed.1 then
+    return some (h ▸ seed.2)
+  else return none
+
+def findSession? (name : Name) : CryptoM τ (Option (SessionKey τ spec)) := do
+  let {sessions, ..} ← get
+  let some session := sessions.find? name | return none
+  if h : spec = session.1 then
+    return some (h ▸ session.2)
+  else return none
+
+def findSecret? (name : Name) : CryptoM τ (Option (SharedSecret τ spec)) := do
+  let {secrets, ..} ← get
+  let some secret := secrets.find? name | return none
+  if h : spec = secret.1 then
+    return some (h ▸ secret.2)
+  else return none
+
+def findKeyPair? (name : Name) : CryptoM τ (Option (KeyPair τ spec)) := do
+  let {pkeys, skeys, ..} ← get
+  let some public := pkeys.find? name | return none
+  let some secret := skeys.find? name | return none
+  if h : spec = public.1 ∧ spec = secret.1 then
+    return some ⟨h.1 ▸ public.2, h.2 ▸ secret.2⟩
+  else return none
+
+def findPublicKey? (name : Name) : CryptoM τ (Option (PublicKey spec)) := do
+  let {pkeys, ..} ← get
+  let some public := pkeys.find? name | return none
+  if h : spec = public.1 then
+    return some (h ▸ public.2)
+  else return none
+
+def findSecretKey? (name : Name) : CryptoM τ (Option (SecretKey τ spec)) := do
+  let {skeys, ..} ← get
+  let some secret := skeys.find? name | return none
+  if h : spec = secret.1 then
+    return some (h ▸ secret.2)
+  else return none
+
+instance : MonadNameGenerator (CryptoM τ) where
   getNGen := do
     let nonce ← mkFreshNonceId
-    return {namePrefix := NameGeneratorSpec.name, idx := nonce.hash.toNat}
+    return {namePrefix := MetaSpec.name, idx := nonce.hash.toNat}
   setNGen _ :=
     return () -- not allowed, so we ignore.
 
 end CryptoM
 
-export CryptoM (mkFreshNonceId mkFreshSeed getFuel refuel reset realloc extractEntropy)
+export CryptoM
+  (mkFreshNonceId mkFreshSeed withMetaKey resetNonces
+    findSeed? findSession? findSecret? findKeyPair? findPublicKey? findSecretKey?)
 
 end Sodium.Crypto

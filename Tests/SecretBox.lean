@@ -18,10 +18,10 @@ open Sodium.FFI.SecretBox
   try
     let ctx ← Sodium.init Unit
     let secretKey ← keygen ctx
-    if secretKey.size == KEYBYTES.toNat then
+    if secretKey.size == KEYBYTES then
       IO.println "✓ Secure key generation succeeded with correct size"
     else
-      IO.println s!"✗ Key size mismatch: expected {KEYBYTES.toNat}, got {secretKey.size}"
+      IO.println s!"✗ Key size mismatch: expected {KEYBYTES}, got {secretKey.size}"
   catch e =>
     IO.println s!"✗ Key generation failed: {e}"
 
@@ -32,7 +32,7 @@ open Sodium.FFI.SecretBox
     let secretKey ← keygen ctx
     
     let message := "Hello, SecretBox encryption!".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext ← easy ctx message nonce secretKey
     let decrypted ← openEasy ctx ciphertext nonce secretKey
@@ -61,7 +61,7 @@ open Sodium.FFI.SecretBox
   try
     let ctx ← Sodium.init Unit
     let secretKey ← keygen ctx
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     let shortCiphertext := ByteArray.mk #[1, 2, 3]  -- Too short
     let _ ← openEasy ctx shortCiphertext nonce secretKey
     IO.println "✗ Decryption should fail with too short ciphertext"
@@ -75,7 +75,7 @@ open Sodium.FFI.SecretBox
     let secretKey ← keygen ctx
     
     let message := "Detached SecretBox test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     -- Encrypt detached
     let (ciphertext, mac) ← detached ctx message nonce secretKey
@@ -83,7 +83,7 @@ open Sodium.FFI.SecretBox
     -- Decrypt detached
     let decrypted ← openDetached ctx ciphertext mac nonce secretKey
     
-    if decrypted == message && mac.size == MACBYTES.toNat then
+    if decrypted == message && mac.size == MACBYTES then
       IO.println "✓ Detached encryption/decryption succeeded"
       IO.println s!"✓ Detached MAC has correct size: {mac.size}"
     else
@@ -98,7 +98,7 @@ open Sodium.FFI.SecretBox
     let secretKey ← keygen ctx
     
     let emptyMessage := ByteArray.empty
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext ← easy ctx emptyMessage nonce secretKey
     let decrypted ← openEasy ctx ciphertext nonce secretKey
@@ -118,7 +118,7 @@ open Sodium.FFI.SecretBox
     let secretKey2 ← keygen ctx  -- Different key
     
     let message := "Authentication test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext ← easy ctx message nonce secretKey1
     let _ ← openEasy ctx ciphertext nonce secretKey2  -- Wrong key
@@ -133,12 +133,12 @@ open Sodium.FFI.SecretBox
     let secretKey ← keygen ctx
     
     let message := "MAC verification test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let (ciphertext, _mac) ← detached ctx message nonce secretKey
     
     -- Create wrong MAC
-    let wrongMac := ByteArray.mk (List.range MACBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let wrongMac := ByteArray.mk (List.range MACBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let _ ← openDetached ctx ciphertext wrongMac nonce secretKey
     IO.println "✗ Detached decryption should fail with wrong MAC"
@@ -152,8 +152,8 @@ open Sodium.FFI.SecretBox
     let secretKey ← keygen ctx
     
     let message := "Nonce uniqueness test".toUTF8
-    let nonce1 := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
-    let nonce2 := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (fun x => (x + 1) % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce1 := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce2 := ByteArray.mk (List.range NONCEBYTES |>.map (fun x => (x + 1) % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext1 ← easy ctx message nonce1 secretKey
     let ciphertext2 ← easy ctx message nonce2 secretKey
@@ -173,7 +173,7 @@ open Sodium.FFI.SecretBox
     let secretKey2 ← keygen ctx
     
     let message := "Key uniqueness test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext1 ← easy ctx message nonce secretKey1
     let ciphertext2 ← easy ctx message nonce secretKey2
@@ -195,7 +195,7 @@ open Sodium.FFI.SecretBox
     for i in [0:10] do
       try
         let message := s!"Message {i}".toUTF8
-        let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (fun x => (x + i) % 256) |>.map UInt8.ofNat |>.toArray)
+        let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (fun x => (x + i) % 256) |>.map UInt8.ofNat |>.toArray)
         
         let ciphertext ← easy ctx message nonce secretKey
         let decrypted ← openEasy ctx ciphertext nonce secretKey
@@ -217,7 +217,7 @@ open Sodium.FFI.SecretBox
     
     -- Create a 1KB message
     let largeMessage := ByteArray.mk (List.range 1024 |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext ← easy ctx largeMessage nonce secretKey
     let decrypted ← openEasy ctx ciphertext nonce secretKey
@@ -237,7 +237,7 @@ open Sodium.FFI.SecretBox
     let secretKey ← keygen ctx
     
     let message := "Deterministic test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext1 ← easy ctx message nonce secretKey
     let ciphertext2 ← easy ctx message nonce secretKey
@@ -259,7 +259,7 @@ open Sodium.FFI.SecretBox
     -- We can't directly compare SecureArray contents, but we can test
     -- that they produce different ciphertexts with the same input
     let message := "Key randomness test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext1 ← easy ctx message nonce secretKey1
     let ciphertext2 ← easy ctx message nonce secretKey2

@@ -6,3 +6,4 @@ import Tests.SecureArrayComparison
 import Tests.Box
 import Tests.SecretBox
 import Tests.ByteArray
+-- import Tests.KeyDeriv  -- Needs API updates

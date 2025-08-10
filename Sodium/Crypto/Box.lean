@@ -54,14 +54,14 @@ open FFI Box
 -- ================================
 
 def BoxSpec : Spec where
-  name := .mkSimple "curve25519xsalsa20poly1305"
-  secretKeyBytes := SECRETKEYBYTES.toNat
-  publicKeyBytes := PUBLICKEYBYTES.toNat
-  nonceBytes := NONCEBYTES.toNat
-  macBytes := MACBYTES.toNat
-  seedBytes := SEEDBYTES.toNat
-  beforeNmBytes := BEFORENMBYTES.toNat
-  sealBytes := SEALBYTES.toNat
+  name := `curve25519xsalsa20poly1305
+  secretKeyBytes := SECRETKEYBYTES
+  publicKeyBytes := PUBLICKEYBYTES
+  nonceBytes := NONCEBYTES
+  macBytes := MACBYTES
+  seedBytes := SEEDBYTES
+  sharedBytes := SHAREDBYTES
+  sealBytes := SEALBYTES
 
 variable {α σ : Type} (τ : Sodium σ)
 
@@ -81,31 +81,19 @@ variable {τ}
 
 /-- Generate a fresh Box keypair with compile-time size validation -/
 def mkFreshKeyPair : CryptoM τ (BoxKeyPair τ) := do
-  let (pubBytes, secBytes) ← keypair τ
-  if h : pubBytes.size = BoxSpec.publicKeyBytes ∧ secBytes.size = BoxSpec.secretKeyBytes then
-    let publicKey : BoxPublicKey := {
-      bytes := pubBytes,
-      size_eq_public_key_bytes := h.1
-    }
-    let secretKey : SecretKey τ BoxSpec := {
-      bytes := secBytes,
-      size_eq_secret_key_bytes := h.2
-    }
+  let (pub, sec) ← keypair τ
+  if h : pub.size = BoxSpec.publicKeyBytes ∧ sec.size = BoxSpec.secretKeyBytes then
+    let publicKey := ⟨pub, h.1⟩
+    let secretKey := ⟨sec, h.2⟩
     return ⟨publicKey, secretKey⟩
   else throwInvariantFailure
 
 /-- Generate a deterministic Box keypair from seed with compile-time size validation -/
 def mkDetKeyPair (seed : BoxSeed τ) : CryptoM τ (BoxKeyPair τ) := do
-  let (pubBytes, secBytes) ← seedKeypair τ seed.bytes
-  if h : pubBytes.size = BoxSpec.publicKeyBytes ∧ secBytes.size = BoxSpec.secretKeyBytes then
-    let publicKey : BoxPublicKey := {
-      bytes := pubBytes,
-      size_eq_public_key_bytes := h.1
-    }
-    let secretKey : SecretKey τ BoxSpec := {
-      bytes := secBytes,
-      size_eq_secret_key_bytes := h.2
-    }
+  let (pub, sec) ← seedKeypair τ seed.bytes
+  if h : pub.size = BoxSpec.publicKeyBytes ∧ sec.size = BoxSpec.secretKeyBytes then
+    let publicKey := ⟨pub, h.1⟩
+    let secretKey := ⟨sec, h.2⟩
     return ⟨publicKey, secretKey⟩
   else throwInvariantFailure
 
@@ -118,12 +106,9 @@ def mkDetKeyPair (seed : BoxSeed τ) : CryptoM τ (BoxKeyPair τ) := do
     **Performance**: Use this for encrypting multiple messages to the same recipient.
     The expensive Curve25519 scalar multiplication is done once upfront. -/
 def mkSharedSecret (keyPair : BoxKeyPair τ) (theirPublicKey : BoxPublicKey) : CryptoM τ (BoxSharedSecret τ) := do
-  let sharedBytes ← beforenm τ theirPublicKey.bytes keyPair.secret.bytes
-  if h : sharedBytes.size = BoxSpec.beforeNmBytes then
-    return {
-      bytes := sharedBytes,
-      size_eq_before_nm_bytes := h
-    }
+  let shared ← beforenm τ theirPublicKey.bytes keyPair.secret.bytes
+  if h : shared.size = BoxSpec.sharedBytes then
+    return ⟨shared, h⟩
   else throwInvariantFailure
 
 -- ================================
@@ -136,13 +121,9 @@ def mkSharedSecret (keyPair : BoxKeyPair τ) (theirPublicKey : BoxPublicKey) : C
 def encrypt [ToJson α] (keyPair : BoxKeyPair τ) (theirPublicKey : BoxPublicKey) (message : α) : CryptoM τ BoxCipherText := do
   let nonce ← mkFreshNonceId BoxSpec
   let data := toJson message |>.compress.toUTF8
-  let cipherBytes ← easy τ data nonce.bytes theirPublicKey.bytes keyPair.secret.bytes
-  if h : cipherBytes.size ≥ BoxSpec.macBytes then
-    return {
-      nonce,
-      bytes := cipherBytes,
-      size_ge_mac_bytes := h
-    }
+  let cipher ← easy τ data nonce.bytes theirPublicKey.bytes keyPair.secret.bytes
+  if h : cipher.size ≥ BoxSpec.macBytes then
+    return ⟨cipher, nonce, h⟩
   else throwInvariantFailure
 
 /-- Encrypt message using precomputed shared secret.
@@ -151,13 +132,9 @@ def encrypt [ToJson α] (keyPair : BoxKeyPair τ) (theirPublicKey : BoxPublicKey
 def encryptWithShared [ToJson α] (sharedSecret : BoxSharedSecret τ) (message : α) : CryptoM τ BoxCipherText := do
   let nonce ← mkFreshNonceId BoxSpec
   let data := toJson message |>.compress.toUTF8
-  let cipherBytes ← easyAfternm τ data nonce.bytes sharedSecret.bytes
-  if h : cipherBytes.size ≥ BoxSpec.macBytes then
-    return {
-      nonce,
-      bytes := cipherBytes,
-      size_ge_mac_bytes := h
-    }
+  let cipher ← easyAfternm τ data nonce.bytes sharedSecret.bytes
+  if h : cipher.size ≥ BoxSpec.macBytes then
+    return ⟨cipher, nonce, h⟩
   else throwInvariantFailure
 
 /-- Decrypt message using Box with keypair and their public key.
@@ -202,13 +179,9 @@ def encryptDetached [ToJson α] (keyPair : BoxKeyPair τ) (theirPublicKey : BoxP
     (message : α) : CryptoM τ (DetachedCipherText BoxSpec) := do
   let nonce ← mkFreshNonceId BoxSpec
   let data := toJson message |>.compress.toUTF8
-  let (cipherBytes, macBytes) ← detached τ data nonce.bytes theirPublicKey.bytes keyPair.secret.bytes
-  if h : macBytes.size = BoxSpec.macBytes then
-    let mac := {
-      bytes := macBytes,
-      size_eq_mac_bytes := h
-    }
-    return {bytes := cipherBytes, nonce, mac}
+  let (cipher, mac) ← detached τ data nonce.bytes theirPublicKey.bytes keyPair.secret.bytes
+  if h : mac.size = BoxSpec.macBytes then
+    return {bytes := cipher, mac := ⟨mac, h⟩, nonce}
   else throwInvariantFailure
 
 /-- Decrypt message with separate ciphertext and MAC using keypair.
@@ -237,13 +210,9 @@ def encryptDetachedWithShared [ToJson α] (sharedSecret : BoxSharedSecret τ)
     (message : α) : CryptoM τ (DetachedCipherText BoxSpec) := do
   let nonce ← mkFreshNonceId BoxSpec
   let data := toJson message |>.compress.toUTF8
-  let (cipherBytes, macBytes) ← detachedAfternm τ data nonce.bytes sharedSecret.bytes
-  if h : macBytes.size = BoxSpec.macBytes then
-    let mac := {
-      bytes := macBytes,
-      size_eq_mac_bytes := h
-    }
-    return {bytes := cipherBytes, nonce, mac}
+  let (cipher, mac) ← detachedAfternm τ data nonce.bytes sharedSecret.bytes
+  if h : mac.size = BoxSpec.macBytes then
+    return {bytes := cipher, mac := ⟨mac, h⟩, nonce}
   else throwInvariantFailure
 
 /-- Decrypt message with separate ciphertext and MAC using precomputed shared secret.
@@ -274,12 +243,9 @@ def decryptDetachedWithShared [FromJson α] (sharedSecret : BoxSharedSecret τ)
     **No nonce needed**: Uses ephemeral keypair internally for perfect forward secrecy. -/
 def sealTo [ToJson α] (theirPublicKey : BoxPublicKey) (message : α) : CryptoM τ (SealedCipherText BoxSpec) := do
   let data := toJson message |>.compress.toUTF8
-  let sealedBytes ← «seal» τ data theirPublicKey.bytes
-  if h : sealedBytes.size ≥ BoxSpec.sealBytes then
-    return {
-      bytes := sealedBytes,
-      size_ge_seal_bytes := h
-    }
+  let sealed ← «seal» τ data theirPublicKey.bytes
+  if h : sealed.size ≥ BoxSpec.sealBytes then
+    return ⟨sealed, h⟩
   else throwInvariantFailure
 
 /-- Decrypt sealed box using recipient's keypair.

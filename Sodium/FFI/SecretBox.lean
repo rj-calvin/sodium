@@ -15,9 +15,9 @@ extern void* sodium_secure_of_lean(b_lean_obj_arg);
 end
 
 -- Constants for crypto_secretbox
-def KEYBYTES : USize := 32
-def NONCEBYTES : USize := 24
-def MACBYTES : USize := 16
+def KEYBYTES : Nat := 32
+def NONCEBYTES : Nat := 24
+def MACBYTES : Nat := 16
 
 alloy c extern "lean_crypto_secretbox_keygen"
 def keygen (tau : @& Sodium σ) : IO (SecureArray tau) :=
@@ -27,14 +27,14 @@ def keygen (tau : @& Sodium σ) : IO (SecureArray tau) :=
     return secret_key_io;
   }
 
-  lean_object* secret_key_ref = lean_io_result_take_value(secret_key_io);
-  void* secret_key = sodium_secure_of_lean(lean_ctor_get(secret_key_ref, 0));
+  lean_object* secret_key = lean_io_result_take_value(secret_key_io);
+  void* secret_key_ref = sodium_secure_of_lean(lean_ctor_get(secret_key, 0));
 
-  sodium_mprotect_readwrite(secret_key);
-  crypto_secretbox_keygen((uint8_t*) secret_key);
-  sodium_mprotect_noaccess(secret_key);
+  sodium_mprotect_readwrite(secret_key_ref);
+  crypto_secretbox_keygen((uint8_t*) secret_key_ref);
+  sodium_mprotect_noaccess(secret_key_ref);
 
-  return lean_io_result_mk_ok(secret_key_ref);
+  return lean_io_result_mk_ok(secret_key);
 
 alloy c extern "lean_crypto_secretbox_easy"
 def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
