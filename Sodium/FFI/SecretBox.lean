@@ -81,7 +81,7 @@ def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
 
 alloy c extern "lean_crypto_secretbox_open_easy"
 def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteArray)
-    (secretKey : @& SecureArray tau) : IO ByteArray :=
+    (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -114,13 +114,13 @@ def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteAr
 
   if (err != 0) {
     lean_dec(message);
-    lean_object* error_msg = lean_mk_string("crypto_secretbox_open_easy failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(message);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, message);
+  return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_secretbox_detached"
 def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
@@ -176,7 +176,7 @@ def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray
 
 alloy c extern "lean_crypto_secretbox_open_detached"
 def openDetached (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& ByteArray) (nonce : @& ByteArray)
-    (secretKey : @& SecureArray tau) : IO ByteArray :=
+    (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -211,12 +211,12 @@ def openDetached (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& Byte
 
   if (err != 0) {
     lean_dec(message);
-    lean_object* error_msg = lean_mk_string("crypto_secretbox_open_detached failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(message);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, message);
+  return lean_io_result_mk_ok(some);
 
 end Sodium.FFI.SecretBox

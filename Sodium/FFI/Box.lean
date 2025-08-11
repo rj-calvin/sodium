@@ -115,7 +115,7 @@ def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray
 
 alloy c extern "lean_crypto_box_easy"
 def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO ByteArray :=
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
   size_t message_len = lean_sarray_size(message);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -150,17 +150,17 @@ def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
 
   if (err != 0) {
     lean_dec(ciphertext);
-    lean_object* error_msg = lean_mk_string("crypto_box_easy failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(ciphertext);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, ciphertext);
+  return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_open_easy"
 def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO ByteArray :=
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -195,16 +195,16 @@ def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteAr
 
   if (err != 0) {
     lean_dec(message);
-    lean_object* error_msg = lean_mk_string("crypto_box_open_easy failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(message);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, message);
+  return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_beforenm"
-def beforenm (tau : @& Sodium σ) (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (SecureArray tau) :=
+def beforenm (tau : @& Sodium σ) (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option (SecureArray tau)) :=
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
   if (
@@ -241,13 +241,13 @@ def beforenm (tau : @& Sodium σ) (publicKey : @& ByteArray) (secretKey : @& Sec
   if (err != 0) {
     sodium_munlock(shared_secret_ref, crypto_box_BEFORENMBYTES);
     lean_dec(shared_secret);
-    lean_object* error_msg = lean_mk_string("crypto_box_beforenm failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(shared_secret);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, shared_secret);
+  return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_easy_afternm"
 def easyAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
@@ -294,7 +294,7 @@ def easyAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteAr
 
 alloy c extern "lean_crypto_box_open_easy_afternm"
 def openEasyAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteArray)
-    (sharedSecret : @& SecureArray tau) : IO ByteArray :=
+    (sharedSecret : @& SecureArray tau) : IO (Option ByteArray) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
 
@@ -327,13 +327,13 @@ def openEasyAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @&
 
   if (err != 0) {
     lean_dec(message);
-    lean_object* error_msg = lean_mk_string("crypto_box_open_easy_afternm failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(message);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, message);
+  return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_detached_afternm"
 def detachedAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
@@ -389,7 +389,7 @@ def detachedAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& By
 
 alloy c extern "lean_crypto_box_open_detached_afternm"
 def openDetachedAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& ByteArray) (nonce : @& ByteArray)
-    (sharedSecret : @& SecureArray tau) : IO ByteArray :=
+    (sharedSecret : @& SecureArray tau) : IO (Option ByteArray) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
 
@@ -424,17 +424,17 @@ def openDetachedAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : 
 
   if (err != 0) {
     lean_dec(message);
-    lean_object* error_msg = lean_mk_string("crypto_box_open_detached_afternm failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(message);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, message);
+  return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_detached"
 def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (ByteArray × ByteArray) :=
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option (ByteArray × ByteArray)) :=
   size_t message_len = lean_sarray_size(message);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -475,20 +475,20 @@ def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray
   if (err != 0) {
     lean_dec(ciphertext);
     lean_dec(mac);
-    lean_object* error_msg = lean_mk_string("crypto_box_detached failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
   lean_object* ret = lean_alloc_ctor(0, 2, 0);
   lean_ctor_set(ret, 0, ciphertext);
   lean_ctor_set(ret, 1, mac);
-  return lean_io_result_mk_ok(ret);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, ret);
+  return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_open_detached"
 def openDetached (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& ByteArray) (nonce : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO ByteArray :=
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -525,16 +525,16 @@ def openDetached (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& Byte
 
   if (err != 0) {
     lean_dec(message);
-    lean_object* error_msg = lean_mk_string("crypto_box_open_detached failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(message);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, message);
+  return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_seal"
-def «seal» (tau : @& Sodium σ) (message : @& ByteArray) (publicKey : @& ByteArray) : IO ByteArray :=
+def «seal» (tau : @& Sodium σ) (message : @& ByteArray) (publicKey : @& ByteArray) : IO (Option ByteArray) :=
   size_t message_len = lean_sarray_size(message);
 
   if (
@@ -559,17 +559,17 @@ def «seal» (tau : @& Sodium σ) (message : @& ByteArray) (publicKey : @& ByteA
 
   if (err != 0) {
     lean_dec(sealed);
-    lean_object* error_msg = lean_mk_string("crypto_box_seal failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(sealed);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, sealed);
+  return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_seal_open"
 def sealOpen (tau : @& Sodium σ) (sealed : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO ByteArray :=
+    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
   size_t sealed_len = lean_sarray_size(sealed);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -602,12 +602,12 @@ def sealOpen (tau : @& Sodium σ) (sealed : @& ByteArray)
 
   if (err != 0) {
     lean_dec(message);
-    lean_object* error_msg = lean_mk_string("crypto_box_seal_open failed");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return lean_io_result_mk_ok(none);
   }
 
-  return lean_io_result_mk_ok(message);
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, message);
+  return lean_io_result_mk_ok(some);
 
 end Sodium.FFI.Box

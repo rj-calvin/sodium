@@ -48,9 +48,17 @@ structure Spec where
   headerBytes : Nat := 0
   /-- Maximum message size in bytes for streaming operations -/
   messageBytes : Nat := 0
+  /-- Extensions -/
+  extShape : Array Nat := #[]
   deriving BEq, Ord, DecidableEq, Repr, TypeName, Hashable, Inhabited, ToJson, FromJson
 
 instance : Coe Spec Name := ⟨Spec.name⟩
+
+class SpecSupport (spec : Spec) (m : Spec → Type) (sα : Spec) where
+  liftSpec : m spec → m sα
+  withSpec : m sα → m spec
+
+export SpecSupport (liftSpec withSpec)
 
 variable {σ : Type}
 
@@ -135,6 +143,11 @@ structure Context (spec : Spec) where
 structure SessionKey (τ : Sodium σ) (spec : Spec) where
   bytes : SecureArray τ
   size_eq_session_key_bytes : bytes.size = spec.sessionKeyBytes
+
+/-- Session shared keypair. Generated from key exchange (X25519). -/
+structure Session (τ : Sodium σ) (spec : Spec) where
+  rx : SessionKey τ spec
+  tx : SessionKey τ spec
 
 /-- Salt for password hashing (Argon2). Random value preventing rainbow table attacks. -/
 structure Salt (τ : Sodium σ) (spec : Spec) where

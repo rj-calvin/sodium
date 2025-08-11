@@ -1,9 +1,8 @@
-import Lean.Data.Json
 import Alloy.C
 
 open scoped Alloy.C
 
-alloy c include <sodium.h> <lean/lean.h> <string.h>
+alloy c include <sodium.h> <lean/lean.h> <string.h> <stdio.h> <stdlib.h>
 
 structure Sodium (σ : Type) where private mk ::
 
@@ -13,9 +12,8 @@ alloy c extern "lean_sodium_init"
 def init (σ : Type) : IO (Sodium σ) :=
   if (sodium_init() < 0) {
     lean_object* error_msg = lean_mk_string("Failed to initialize LibSodium")
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0)
-    lean_ctor_set(io_error, 0, error_msg)
-    return lean_io_result_mk_error(io_error)
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
   }
 
   lean_object* ctx = lean_alloc_ctor(0, 0, 0)
@@ -52,8 +50,7 @@ def new (ctx : @& Sodium σ) (size : USize) : IO (SecureArray ctx) :=
 
   if (ptr == NULL) {
     lean_object* error_msg = lean_mk_string("Failed to allocate secure memory");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
     return lean_io_result_mk_error(io_error);
   }
 
@@ -99,6 +96,191 @@ instance {τ : Sodium σ} : Ord (SecureArray τ) := ⟨compare⟩
 instance {τ : Sodium σ} : BEq (SecureArray τ) where
   beq x y := compare x y == .eq
 
+alloy c extern "lean_sodium_load_secret_key"
+def ofFile (τ : @& Sodium σ) (fileKey : @& SecureArray τ) (filePath : @& System.FilePath) (expectedSize : USize) : IO (SecureArray τ) :=
+  const char* path = lean_string_cstr(filePath);
+  void* file_key_ptr = of_lean<SecurePointed>(lean_ctor_get(fileKey, 0));
+
+  FILE* file = fopen(path, "rb");
+  if (file == NULL) {
+    lean_object* error_msg = lean_mk_string("Failed to open encrypted file for reading");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  unsigned char header[crypto_secretstream_xchacha20poly1305_HEADERBYTES];
+  if (fread(header, 1, sizeof(header), file) != sizeof(header)) {
+    fclose(file);
+    lean_object* error_msg = lean_mk_string("Failed to read encryption header");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  crypto_secretstream_xchacha20poly1305_state state;
+  sodium_mprotect_readonly(file_key_ptr);
+  if (crypto_secretstream_xchacha20poly1305_init_pull(&state, header, (unsigned char*)file_key_ptr) != 0) {
+    sodium_mprotect_noaccess(file_key_ptr);
+    fclose(file);
+    lean_object* error_msg = lean_mk_string("Failed to initialize decryption");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+  sodium_mprotect_noaccess(file_key_ptr);
+
+  size_t ciphertext_len = expectedSize + crypto_secretstream_xchacha20poly1305_ABYTES;
+  unsigned char* ciphertext = (unsigned char*)malloc(ciphertext_len);
+  if (ciphertext == NULL) {
+    sodium_memzero(&state, sizeof(state));
+    fclose(file);
+    lean_object* error_msg = lean_mk_string("Failed to allocate memory for ciphertext");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  size_t bytes_read = fread(ciphertext, 1, ciphertext_len, file);
+  fclose(file);
+
+  if (bytes_read != ciphertext_len) {
+    sodium_memzero(ciphertext, ciphertext_len);
+    free(ciphertext);
+    sodium_memzero(&state, sizeof(state));
+    lean_object* error_msg = lean_mk_string("Encrypted file has incorrect size");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  void* secure_ptr = sodium_malloc(expectedSize);
+  if (secure_ptr == NULL) {
+    sodium_memzero(ciphertext, ciphertext_len);
+    free(ciphertext);
+    sodium_memzero(&state, sizeof(state));
+    lean_object* error_msg = lean_mk_string("Failed to allocate secure memory");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  sodium_mprotect_readwrite(secure_ptr);
+
+  unsigned long long decrypted_len;
+  unsigned char tag;
+  if (crypto_secretstream_xchacha20poly1305_pull(&state, (unsigned char*)secure_ptr, &decrypted_len, &tag,
+                                                ciphertext, ciphertext_len, NULL, 0) != 0) {
+    sodium_memzero(secure_ptr, expectedSize);
+    sodium_free(secure_ptr);
+    sodium_memzero(ciphertext, ciphertext_len);
+    free(ciphertext);
+    sodium_memzero(&state, sizeof(state));
+    lean_object* error_msg = lean_mk_string("Authentication failed - file may be corrupted or tampered");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  sodium_memzero(ciphertext, ciphertext_len);
+  free(ciphertext);
+  sodium_memzero(&state, sizeof(state));
+
+  if (decrypted_len != expectedSize || tag != crypto_secretstream_xchacha20poly1305_TAG_FINAL) {
+    sodium_memzero(secure_ptr, expectedSize);
+    sodium_free(secure_ptr);
+    lean_object* error_msg = lean_mk_string("Decrypted key size mismatch or invalid final tag");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  sodium_mprotect_noaccess(secure_ptr);
+
+  lean_object* secure_pointed = to_lean<SecurePointed>(secure_ptr);
+  lean_object* secure_ref = lean_alloc_ctor(0, 1, sizeof(size_t));
+  lean_ctor_set(secure_ref, 0, secure_pointed);
+  lean_ctor_set_usize(secure_ref, 1, expectedSize);
+
+  return lean_io_result_mk_ok(secure_ref);
+
+alloy c extern "lean_sodium_store_secret_key"
+def toFile {τ : Sodium σ} (buf : @& SecureArray τ) (fileKey : @& SecureArray τ) (filePath : @& System.FilePath) : IO Unit :=
+  const char* path = lean_string_cstr(filePath);
+  size_t key_size = lean_ctor_get_usize(buf, 1);
+  void* secure_ptr = of_lean<SecurePointed>(lean_ctor_get(buf, 0));
+  void* file_key_ptr = of_lean<SecurePointed>(lean_ctor_get(fileKey, 0));
+
+  FILE* file = fopen(path, "wb");
+  if (file == NULL) {
+    lean_object* error_msg = lean_mk_string("Failed to create encrypted file");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  crypto_secretstream_xchacha20poly1305_state state;
+  unsigned char header[crypto_secretstream_xchacha20poly1305_HEADERBYTES];
+
+  sodium_mprotect_readonly(file_key_ptr);
+  if (crypto_secretstream_xchacha20poly1305_init_push(&state, header, (unsigned char*)file_key_ptr) != 0) {
+    sodium_mprotect_noaccess(file_key_ptr);
+    fclose(file);
+    lean_object* error_msg = lean_mk_string("Failed to initialize encryption");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+  sodium_mprotect_noaccess(file_key_ptr);
+
+  if (fwrite(header, 1, sizeof(header), file) != sizeof(header)) {
+    sodium_memzero(&state, sizeof(state));
+    fclose(file);
+    lean_object* error_msg = lean_mk_string("Failed to write encryption header");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  size_t ciphertext_len = key_size + crypto_secretstream_xchacha20poly1305_ABYTES;
+  unsigned char* ciphertext = (unsigned char*)malloc(ciphertext_len);
+  if (ciphertext == NULL) {
+    sodium_memzero(&state, sizeof(state));
+    fclose(file);
+    lean_object* error_msg = lean_mk_string("Failed to allocate memory for ciphertext");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  unsigned long long actual_ciphertext_len;
+  sodium_mprotect_readonly(secure_ptr);
+  if (crypto_secretstream_xchacha20poly1305_push(&state, ciphertext, &actual_ciphertext_len,
+                                               (unsigned char*)secure_ptr, key_size, NULL, 0,
+                                               crypto_secretstream_xchacha20poly1305_TAG_FINAL) != 0) {
+    sodium_mprotect_noaccess(secure_ptr);
+    sodium_memzero(ciphertext, ciphertext_len);
+    free(ciphertext);
+    sodium_memzero(&state, sizeof(state));
+    fclose(file);
+    lean_object* error_msg = lean_mk_string("Failed to encrypt key data");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+  sodium_mprotect_noaccess(secure_ptr);
+
+  if (fwrite(ciphertext, 1, actual_ciphertext_len, file) != actual_ciphertext_len) {
+    sodium_memzero(ciphertext, ciphertext_len);
+    free(ciphertext);
+    sodium_memzero(&state, sizeof(state));
+    fclose(file);
+    lean_object* error_msg = lean_mk_string("Failed to write encrypted data");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  sodium_memzero(ciphertext, ciphertext_len);
+  free(ciphertext);
+  sodium_memzero(&state, sizeof(state));
+
+  if (fflush(file) != 0) {
+    fclose(file);
+    lean_object* error_msg = lean_mk_string("Failed to flush encrypted file");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  fclose(file);
+  return lean_io_result_mk_ok(lean_box(0));
+
 end SecureArray
 
 structure EntropyArray (_ : Sodium σ) where
@@ -121,8 +303,7 @@ def new (τ : @& Sodium σ) (size : USize) : IO (EntropyArray τ) :=
 
   if (ptr == NULL) {
     lean_object* error_msg = lean_mk_string("Failed to allocate secure memory");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
     return lean_io_result_mk_error(io_error);
   }
 

@@ -35,7 +35,8 @@ open Sodium.FFI.SecretBox
     let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext ← easy ctx message nonce secretKey
-    let decrypted ← openEasy ctx ciphertext nonce secretKey
+    let some decrypted ← openEasy ctx ciphertext nonce secretKey
+      | do IO.println "✗ SecretBox decryption failed unexpectedly"; return
     
     if decrypted == message then
       IO.println "✓ SecretBox encryption/decryption round-trip succeeded"
@@ -63,8 +64,10 @@ open Sodium.FFI.SecretBox
     let secretKey ← keygen ctx
     let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     let shortCiphertext := ByteArray.mk #[1, 2, 3]  -- Too short
-    let _ ← openEasy ctx shortCiphertext nonce secretKey
-    IO.println "✗ Decryption should fail with too short ciphertext"
+    let result ← openEasy ctx shortCiphertext nonce secretKey
+    match result with
+    | none => IO.println "✓ Decryption correctly rejected short ciphertext: spec violation"
+    | some _ => IO.println "✗ Decryption should fail with too short ciphertext"
   catch e =>
     IO.println s!"✓ Decryption correctly rejected short ciphertext: {e}"
 
@@ -81,7 +84,8 @@ open Sodium.FFI.SecretBox
     let (ciphertext, mac) ← detached ctx message nonce secretKey
     
     -- Decrypt detached
-    let decrypted ← openDetached ctx ciphertext mac nonce secretKey
+    let some decrypted ← openDetached ctx ciphertext mac nonce secretKey
+      | do IO.println "✗ Detached decryption failed unexpectedly"; return
     
     if decrypted == message && mac.size == MACBYTES then
       IO.println "✓ Detached encryption/decryption succeeded"
@@ -101,7 +105,8 @@ open Sodium.FFI.SecretBox
     let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext ← easy ctx emptyMessage nonce secretKey
-    let decrypted ← openEasy ctx ciphertext nonce secretKey
+    let some decrypted ← openEasy ctx ciphertext nonce secretKey
+      | do IO.println "✗ Empty message decryption failed unexpectedly"; return
     
     if decrypted == emptyMessage then
       IO.println "✓ Empty message encryption/decryption succeeded"
@@ -121,8 +126,10 @@ open Sodium.FFI.SecretBox
     let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext ← easy ctx message nonce secretKey1
-    let _ ← openEasy ctx ciphertext nonce secretKey2  -- Wrong key
-    IO.println "✗ Decryption should fail with wrong key"
+    let result ← openEasy ctx ciphertext nonce secretKey2  -- Wrong key
+    match result with
+    | none => IO.println "✓ Decryption correctly failed with wrong key: authentication failed"
+    | some _ => IO.println "✗ Decryption should fail with wrong key"
   catch e =>
     IO.println s!"✓ Decryption correctly failed with wrong key: {e}"
 
@@ -140,8 +147,10 @@ open Sodium.FFI.SecretBox
     -- Create wrong MAC
     let wrongMac := ByteArray.mk (List.range MACBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
-    let _ ← openDetached ctx ciphertext wrongMac nonce secretKey
-    IO.println "✗ Detached decryption should fail with wrong MAC"
+    let result ← openDetached ctx ciphertext wrongMac nonce secretKey
+    match result with
+    | none => IO.println "✓ Detached decryption correctly failed with wrong MAC: authentication failed"
+    | some _ => IO.println "✗ Detached decryption should fail with wrong MAC"
   catch e =>
     IO.println s!"✓ Detached decryption correctly failed with wrong MAC: {e}"
 
@@ -198,7 +207,8 @@ open Sodium.FFI.SecretBox
         let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (fun x => (x + i) % 256) |>.map UInt8.ofNat |>.toArray)
         
         let ciphertext ← easy ctx message nonce secretKey
-        let decrypted ← openEasy ctx ciphertext nonce secretKey
+        let some decrypted ← openEasy ctx ciphertext nonce secretKey
+          | continue
         
         if decrypted == message then
           success_count := success_count + 1
@@ -220,7 +230,8 @@ open Sodium.FFI.SecretBox
     let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
     
     let ciphertext ← easy ctx largeMessage nonce secretKey
-    let decrypted ← openEasy ctx ciphertext nonce secretKey
+    let some decrypted ← openEasy ctx ciphertext nonce secretKey
+      | do IO.println "✗ Large message decryption failed unexpectedly"; return
     
     if decrypted == largeMessage then
       IO.println "✓ Large message (1KB) encryption/decryption succeeded"

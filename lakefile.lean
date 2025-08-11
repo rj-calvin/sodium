@@ -99,7 +99,7 @@ lean_lib «Sodium» where
       #[Module.oNoExportFacet, `module.alloy.c.o.noexport]
 
 lean_lib Tests where
-  roots := #[`Tests, `Sodium]
+  roots := #[`Tests]
   precompileModules := true
   nativeFacets := fun shouldExport =>
     if shouldExport then
