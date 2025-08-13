@@ -1,10 +1,10 @@
 import «Sodium».FFI.Basic
 import «Sodium».FFI.Box
-import «Sodium».Data.ByteArray
+import «Sodium».Data.ByteVector
 
 namespace Sodium.Tests.BoxFFI
 
-open Sodium.FFI.Box
+open Sodium FFI.Box
 
 -- =============================================================================
 -- Test Constants and Size Validations
@@ -28,7 +28,7 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey, _secretKey) ← keypair ctx
+    let (publicKey, _secretKey) ← keypair (τ := ctx)
     if publicKey.size == PUBLICKEYBYTES then
       IO.println "✓ Keypair generation succeeded with correct public key size"
     else
@@ -40,9 +40,9 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let seed ← SecureArray.new ctx SEEDBYTES
-    let (publicKey1, _secretKey1) ← seedKeypair ctx seed
-    let (publicKey2, _secretKey2) ← seedKeypair ctx seed
+    let seed ← SecureVector.new (τ := ctx) SEEDBYTES
+    let (publicKey1, _secretKey1) ← seedKeypair (τ := ctx) seed
+    let (publicKey2, _secretKey2) ← seedKeypair (τ := ctx) seed
 
     if publicKey1.size == PUBLICKEYBYTES then
       IO.println "✓ Seed keypair generation succeeded with correct size"
@@ -58,15 +58,6 @@ open Sodium.FFI.Box
   catch e =>
     IO.println s!"✗ Seed keypair generation failed: {e}"
 
--- Test seed keypair with wrong seed size (should fail)
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let wrongSeed ← SecureArray.new ctx (SEEDBYTES + 1)  -- Wrong size
-    let _ ← seedKeypair ctx wrongSeed
-    IO.println "✗ Seed keypair should fail with wrong seed size"
-  catch e =>
-    IO.println s!"✓ Seed keypair correctly rejected wrong seed size: {e}"
 
 -- =============================================================================
 -- Test Shared Secret Generation
@@ -76,26 +67,14 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (_publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, _secretKey2) ← keypair ctx
-    let some _sharedSecret ← beforenm ctx publicKey2 secretKey1
+    let (_publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, _secretKey2) ← keypair (τ := ctx)
+    let some _sharedSecret ← beforenm (τ := ctx) publicKey2 secretKey1
       | do IO.println "✗ Shared secret generation failed unexpectedly"; return
     IO.println "✓ Shared secret generation succeeded"
   catch e =>
     IO.println s!"✗ Shared secret generation failed: {e}"
 
--- Test shared secret with wrong public key size (should fail)
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let (_publicKey, secretKey) ← keypair ctx
-    let wrongPublicKey := ByteArray.mk #[1, 2, 3]  -- Wrong size
-    let result ← beforenm ctx wrongPublicKey secretKey
-    match result with
-    | none => IO.println "✓ Shared secret correctly rejected wrong public key: invalid key"
-    | some _ => IO.println "✗ Shared secret should fail with wrong public key size"
-  catch e =>
-    IO.println s!"✓ Shared secret correctly rejected wrong public key size: {e}"
 
 -- =============================================================================
 -- Test Encryption/Decryption Operations
@@ -105,18 +84,19 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, secretKey2) ← keypair ctx
+    let (publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
-    let message := "Hello, Box encryption!".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let message := "Hello, Box encryption!".toUTF8.toVector
+    let nonce : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast (by sorry)
 
     -- Encrypt from 1 to 2
-    let some ciphertext ← easy ctx message nonce publicKey2 secretKey1
+    let some ciphertext ← easy (τ := ctx) message nonce publicKey2 secretKey1
       | do IO.println "✗ Box encryption failed unexpectedly"; return
 
     -- Decrypt from 1 to 2
-    let result ← openEasy ctx ciphertext nonce publicKey1 secretKey2
+    let result ← openEasy (τ := ctx) ciphertext nonce publicKey1 secretKey2
     let some decrypted := result
       | do IO.println "✗ Box decryption failed unexpectedly"; return
 
@@ -128,31 +108,7 @@ open Sodium.FFI.Box
   catch e =>
     IO.println s!"✗ Box encryption/decryption failed: {e}"
 
--- Test encryption with wrong nonce size (should fail)
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let (publicKey, secretKey) ← keypair ctx
-    let message := "test".toUTF8
-    let wrongNonce := ByteArray.mk #[1, 2, 3]  -- Wrong size
-    let _ ← easy ctx message wrongNonce publicKey secretKey
-    IO.println "✗ Encryption should fail with wrong nonce size"
-  catch e =>
-    IO.println s!"✓ Encryption correctly rejected wrong nonce size: {e}"
 
--- Test decryption with wrong ciphertext size (should fail)
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let (publicKey, secretKey) ← keypair ctx
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
-    let shortCiphertext := ByteArray.mk #[1, 2, 3]  -- Too short
-    let result ← openEasy ctx shortCiphertext nonce publicKey secretKey
-    match result with
-    | none => IO.println "✓ Decryption correctly rejected short ciphertext: spec violation"
-    | some _ => IO.println "✗ Decryption should fail with too short ciphertext"
-  catch e =>
-    IO.println s!"✓ Decryption correctly rejected short ciphertext: {e}"
 
 -- =============================================================================
 -- Test Shared Secret Encryption/Decryption
@@ -162,23 +118,23 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, secretKey2) ← keypair ctx
+    let (publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
     -- Generate shared secrets (both should be identical)
-    let some sharedSecret1 ← beforenm ctx publicKey2 secretKey1
+    let some sharedSecret1 ← beforenm (τ := ctx) publicKey2 secretKey1
       | do IO.println "✗ Shared secret generation 1 failed unexpectedly"; return
-    let some sharedSecret2 ← beforenm ctx publicKey1 secretKey2
+    let some sharedSecret2 ← beforenm (τ := ctx) publicKey1 secretKey2
       | do IO.println "✗ Shared secret generation 2 failed unexpectedly"; return
 
-    let message := "Shared secret encryption test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let message := "Shared secret encryption test".toUTF8.toVector
+    let nonce := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
     -- Encrypt with first shared secret
-    let ciphertext ← easyAfternm ctx message nonce sharedSecret1
+    let ciphertext ← easyAfternm (τ := ctx) message nonce sharedSecret1
 
     -- Decrypt with second shared secret
-    let result ← openEasyAfternm ctx ciphertext nonce sharedSecret2
+    let result ← openEasyAfternm (τ := ctx) ciphertext nonce sharedSecret2
     let some decrypted := result
       | do IO.println "✗ Shared secret decryption failed unexpectedly"; return
 
@@ -198,18 +154,18 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, secretKey2) ← keypair ctx
+    let (publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
-    let message := "Detached encryption test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let message := "Detached encryption test".toUTF8.toVector
+    let nonce := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
     -- Encrypt detached
-    let some (ciphertext, mac) ← detached ctx message nonce publicKey2 secretKey1
+    let some (ciphertext, mac) ← detached (τ := ctx) message nonce publicKey2 secretKey1
       | do IO.println "✗ Detached encryption failed unexpectedly"; return
 
     -- Decrypt detached
-    let some decrypted ← openDetached ctx ciphertext mac nonce publicKey1 secretKey2
+    let some decrypted ← openDetached (τ := ctx) ciphertext mac nonce publicKey1 secretKey2
       | do IO.println "✗ Detached decryption failed unexpectedly"; return
 
     if decrypted == message then
@@ -230,22 +186,22 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, secretKey2) ← keypair ctx
+    let (publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
-    let some sharedSecret1 ← beforenm ctx publicKey2 secretKey1
+    let some sharedSecret1 ← beforenm (τ := ctx) publicKey2 secretKey1
       | do IO.println "✗ Shared secret generation 1 failed unexpectedly"; return
-    let some sharedSecret2 ← beforenm ctx publicKey1 secretKey2
+    let some sharedSecret2 ← beforenm (τ := ctx) publicKey1 secretKey2
       | do IO.println "✗ Shared secret generation 2 failed unexpectedly"; return
 
-    let message := "Detached shared secret test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let message := "Detached shared secret test".toUTF8.toVector
+    let nonce := ByteVector.mk (n := NONCEBYTES) (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
     -- Encrypt detached with shared secret
-    let (ciphertext, mac) ← detachedAfternm ctx message nonce sharedSecret1
+    let (ciphertext, mac) ← detachedAfternm (τ := ctx) message nonce sharedSecret1
 
     -- Decrypt detached with shared secret
-    let some decrypted ← openDetachedAfternm ctx ciphertext mac nonce sharedSecret2
+    let some decrypted ← openDetachedAfternm (τ := ctx) ciphertext mac nonce sharedSecret2
       | do IO.println "✗ Detached shared secret decryption failed unexpectedly"; return
 
     if decrypted == message then
@@ -264,16 +220,16 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey, secretKey) ← keypair ctx
+    let (publicKey, secretKey) ← keypair (τ := ctx)
 
-    let message := "Sealed box test message".toUTF8
+    let message := "Sealed box test message".toUTF8.toVector
 
     -- Seal to public key
-    let some sealed ← «seal» ctx message publicKey
+    let some sealed ← easyAnonymous (τ := ctx) message publicKey
       | do IO.println "✗ Sealed box encryption failed unexpectedly"; return
 
     -- Open with keypair
-    let some decrypted ← sealOpen ctx sealed publicKey secretKey
+    let some decrypted ← openAnonymous (τ := ctx) sealed publicKey secretKey
       | do IO.println "✗ Sealed box decryption failed unexpectedly"; return
 
     if decrypted == message then
@@ -291,16 +247,6 @@ open Sodium.FFI.Box
   catch e =>
     IO.println s!"✗ Sealed box encryption/decryption failed: {e}"
 
--- Test sealed box with wrong public key size (should fail)
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let message := "test".toUTF8
-    let wrongPublicKey := ByteArray.mk #[1, 2, 3]  -- Wrong size
-    let _ ← «seal» ctx message wrongPublicKey
-    IO.println "✗ Sealed box should fail with wrong public key size"
-  catch e =>
-    IO.println s!"✓ Sealed box correctly rejected wrong public key size: {e}"
 
 -- =============================================================================
 -- Test Error Handling and Edge Cases
@@ -310,15 +256,15 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, secretKey2) ← keypair ctx
+    let (publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
-    let emptyMessage := ByteArray.empty
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let emptyMessage := ByteVector.empty
+    let nonce := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
-    let some ciphertext ← easy ctx emptyMessage nonce publicKey2 secretKey1
+    let some ciphertext ← easy (τ := ctx) emptyMessage nonce publicKey2 secretKey1
       | do IO.println "✗ Empty message encryption failed unexpectedly"; return
-    let result ← openEasy ctx ciphertext nonce publicKey1 secretKey2
+    let result ← openEasy (τ := ctx) ciphertext nonce publicKey1 secretKey2
     let some decrypted := result
       | do IO.println "✗ Empty message decryption failed unexpectedly"; return
 
@@ -334,16 +280,16 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (_publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, _secretKey2) ← keypair ctx
-    let (publicKey3, secretKey3) ← keypair ctx  -- Wrong keypair
+    let (_publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, _secretKey2) ← keypair (τ := ctx)
+    let (publicKey3, secretKey3) ← keypair (τ := ctx)  -- Wrong keypair
 
-    let message := "Authentication test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let message := "Authentication test".toUTF8.toVector
+    let nonce := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
-    let some ciphertext ← easy ctx message nonce publicKey2 secretKey1
+    let some ciphertext ← easy (τ := ctx) message nonce publicKey2 secretKey1
       | do IO.println "✗ Authentication test encryption failed unexpectedly"; return
-    let result ← openEasy ctx ciphertext nonce publicKey3 secretKey3  -- Wrong keys
+    let result ← openEasy (τ := ctx) ciphertext nonce publicKey3 secretKey3  -- Wrong keys
     match result with
     | none => IO.println "✓ Decryption correctly failed with wrong keypair: authentication failed"
     | some _ => IO.println "✗ Decryption should fail with wrong keypair"
@@ -354,19 +300,19 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, secretKey2) ← keypair ctx
+    let (publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
-    let message := "MAC verification test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let message := "MAC verification test".toUTF8.toVector
+    let nonce := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
-    let some (ciphertext, _mac) ← detached ctx message nonce publicKey2 secretKey1
+    let some (ciphertext, _mac) ← detached (τ := ctx) message nonce publicKey2 secretKey1
       | do IO.println "✗ Detached encryption failed unexpectedly"; return
 
     -- Create wrong MAC
-    let wrongMac := ByteArray.mk (List.range MACBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let wrongMac := ByteVector.mk (List.range MACBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
-    let result ← openDetached ctx ciphertext wrongMac nonce publicKey1 secretKey2
+    let result ← openDetached (τ := ctx) ciphertext wrongMac nonce publicKey1 secretKey2
     match result with
     | none => IO.println "✓ Detached decryption correctly failed with wrong MAC: authentication failed"
     | some _ => IO.println "✗ Detached decryption should fail with wrong MAC"
@@ -381,16 +327,16 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (_publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, _secretKey2) ← keypair ctx
+    let (_publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, _secretKey2) ← keypair (τ := ctx)
 
-    let message := "Nonce uniqueness test".toUTF8
-    let nonce1 := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
-    let nonce2 := ByteArray.mk (List.range NONCEBYTES |>.map (fun x => (x + 1) % 256) |>.map UInt8.ofNat |>.toArray)
+    let message := "Nonce uniqueness test".toUTF8.toVector
+    let nonce1 := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce2 := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (fun x => (x + 1) % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
-    let some ciphertext1 ← easy ctx message nonce1 publicKey2 secretKey1
+    let some ciphertext1 ← easy (τ := ctx) message nonce1 publicKey2 secretKey1
       | do IO.println "✗ Semantic security test encryption 1 failed"; return
-    let some ciphertext2 ← easy ctx message nonce2 publicKey2 secretKey1
+    let some ciphertext2 ← easy (τ := ctx) message nonce2 publicKey2 secretKey1
       | do IO.println "✗ Semantic security test encryption 2 failed"; return
 
     if ciphertext1 != ciphertext2 then
@@ -405,21 +351,21 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (_publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, _secretKey2) ← keypair ctx
-    let (publicKey3, _secretKey3) ← keypair ctx
+    let (_publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, _secretKey2) ← keypair (τ := ctx)
+    let (publicKey3, _secretKey3) ← keypair (τ := ctx)
 
-    let some sharedSecret1 ← beforenm ctx publicKey2 secretKey1
+    let some sharedSecret1 ← beforenm (τ := ctx) publicKey2 secretKey1
       | do IO.println "✗ Shared secret generation 1 failed unexpectedly"; return
-    let some sharedSecret2 ← beforenm ctx publicKey3 secretKey1
+    let some sharedSecret2 ← beforenm (τ := ctx) publicKey3 secretKey1
       | do IO.println "✗ Shared secret generation 2 failed unexpectedly"; return
 
     -- Encrypt same message with both shared secrets
-    let message := "Shared secret uniqueness test".toUTF8
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let message := "Shared secret uniqueness test".toUTF8.toVector
+    let nonce := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
-    let ciphertext1 ← easyAfternm ctx message nonce sharedSecret1
-    let ciphertext2 ← easyAfternm ctx message nonce sharedSecret2
+    let ciphertext1 ← easyAfternm (τ := ctx) message nonce sharedSecret1
+    let ciphertext2 ← easyAfternm (τ := ctx) message nonce sharedSecret2
 
     if ciphertext1 != ciphertext2 then
       IO.println "✓ Different keypairs produce different shared secrets"
@@ -437,18 +383,18 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, secretKey2) ← keypair ctx
+    let (publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
     let mut success_count := 0
     for i in [0:10] do
       try
-        let message := s!"Message {i}".toUTF8
-        let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (fun x => (x + i) % 256) |>.map UInt8.ofNat |>.toArray)
+        let message := s!"Message {i}".toUTF8.toVector
+        let nonce := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (fun x => (x + i) % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
-        let some ciphertext ← easy ctx message nonce publicKey2 secretKey1
+        let some ciphertext ← easy (τ := ctx) message nonce publicKey2 secretKey1
           | continue
-        let result ← openEasy ctx ciphertext nonce publicKey1 secretKey2
+        let result ← openEasy (τ := ctx) ciphertext nonce publicKey1 secretKey2
         let some decrypted := result
           | continue
 
@@ -466,16 +412,17 @@ open Sodium.FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey1, secretKey1) ← keypair ctx
-    let (publicKey2, secretKey2) ← keypair ctx
+    let (publicKey1, secretKey1) ← keypair (τ := ctx)
+    let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
     -- Create a 1KB message
-    let largeMessage := ByteArray.mk (List.range 1024 |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
-    let nonce := ByteArray.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
+    let largeMessageArray := List.range 1024 |>.map (· % 256) |>.map UInt8.ofNat |>.toArray
+    let largeMessage := (ByteArray.mk largeMessageArray).toVector
+    let nonce := ByteVector.mk (List.range NONCEBYTES.toNat |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
 
-    let some ciphertext ← easy ctx largeMessage nonce publicKey2 secretKey1
+    let some ciphertext ← easy (τ := ctx) largeMessage nonce publicKey2 secretKey1
       | do IO.println "✗ Large message encryption failed unexpectedly"; return
-    let result ← openEasy ctx ciphertext nonce publicKey1 secretKey2
+    let result ← openEasy (τ := ctx) ciphertext nonce publicKey1 secretKey2
     let some decrypted := result
       | do IO.println "✗ Large message decryption failed unexpectedly"; return
 

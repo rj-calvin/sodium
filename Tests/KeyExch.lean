@@ -1,10 +1,8 @@
-import «Sodium».FFI.Basic
 import «Sodium».FFI.KeyExch
-import «Sodium».Data.ByteArray
 
-namespace Sodium.Tests.KeyExchFFI
+namespace Sodium.Tests.KeyExch
 
-open Sodium.FFI.KeyExch
+open Sodium FFI KeyExch
 
 -- =============================================================================
 -- Test Constants and Size Validations
@@ -25,7 +23,7 @@ open Sodium.FFI.KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (publicKey, _secretKey) ← keypair ctx
+    let (publicKey, _secretKey) ← keypair (τ := ctx)
     if publicKey.size == PUBLICKEYBYTES then
       IO.println "✓ KeyExch keypair generation succeeded with correct public key size"
     else
@@ -37,9 +35,9 @@ open Sodium.FFI.KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let seed ← SecureArray.new ctx SEEDBYTES
-    let (publicKey1, _secretKey1) ← seedKeypair ctx seed
-    let (publicKey2, _secretKey2) ← seedKeypair ctx seed
+    let seed ← SecureVector.new (τ := ctx) SEEDBYTES
+    let (publicKey1, _secretKey1) ← seedKeypair (τ := ctx) seed
+    let (publicKey2, _secretKey2) ← seedKeypair (τ := ctx) seed
 
     if publicKey1.size == PUBLICKEYBYTES then
       IO.println "✓ KeyExch seed keypair generation succeeded with correct size"
@@ -55,16 +53,6 @@ open Sodium.FFI.KeyExch
   catch e =>
     IO.println s!"✗ KeyExch seed keypair generation failed: {e}"
 
--- Test seed keypair with wrong seed size (should fail)
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let wrongSeed ← SecureArray.new ctx (SEEDBYTES + 1)  -- Wrong size
-    let _ ← seedKeypair ctx wrongSeed
-    IO.println "✗ KeyExch seed keypair should fail with wrong seed size"
-  catch e =>
-    IO.println s!"✓ KeyExch seed keypair correctly rejected wrong seed size: {e}"
-
 -- =============================================================================
 -- Test Session Key Exchange Operations
 -- =============================================================================
@@ -73,15 +61,15 @@ open Sodium.FFI.KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (clientPk, clientSk) ← keypair ctx
-    let (serverPk, serverSk) ← keypair ctx
+    let (clientPk, clientSk) ← keypair (τ := ctx)
+    let (serverPk, serverSk) ← keypair (τ := ctx)
 
     -- Client derives session keys
-    let some (clientRx, clientTx) ← clientSessionKeys ctx clientPk clientSk serverPk
+    let some (clientRx, clientTx) ← clientSessionKeys (τ := ctx) clientPk clientSk serverPk
       | do IO.println "✗ Client session key derivation failed"; return
 
     -- Server derives session keys
-    let some (serverRx, serverTx) ← serverSessionKeys ctx serverPk serverSk clientPk
+    let some (serverRx, serverTx) ← serverSessionKeys (τ := ctx) serverPk serverSk clientPk
       | do IO.println "✗ Server session key derivation failed"; return
 
     -- Verify key sizes
@@ -108,21 +96,21 @@ open Sodium.FFI.KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let seed1 ← SecureArray.new ctx SEEDBYTES
-    let seed2 ← SecureArray.new ctx SEEDBYTES
+    let seed1 ← SecureVector.new (τ := ctx) SEEDBYTES
+    let seed2 ← SecureVector.new (τ := ctx) SEEDBYTES
 
     -- Generate deterministic keypairs
-    let (clientPk, clientSk) ← seedKeypair ctx seed1
-    let (serverPk, serverSk) ← seedKeypair ctx seed2
+    let (clientPk, clientSk) ← seedKeypair (τ := ctx) seed1
+    let (serverPk, serverSk) ← seedKeypair (τ := ctx) seed2
 
     -- Derive session keys twice with same inputs
-    let some (clientRx1, clientTx1) ← clientSessionKeys ctx clientPk clientSk serverPk
+    let some (clientRx1, clientTx1) ← clientSessionKeys (τ := ctx) clientPk clientSk serverPk
       | do IO.println "✗ Client session key derivation failed"; return
-    let some (clientRx2, clientTx2) ← clientSessionKeys ctx clientPk clientSk serverPk
+    let some (clientRx2, clientTx2) ← clientSessionKeys (τ := ctx) clientPk clientSk serverPk
       | do IO.println "✗ Client session key derivation failed"; return
-    let some (serverRx1, serverTx1) ← serverSessionKeys ctx serverPk serverSk clientPk
+    let some (serverRx1, serverTx1) ← serverSessionKeys (τ := ctx) serverPk serverSk clientPk
       | do IO.println "✗ Server session key derivation failed"; return
-    let some (serverRx2, serverTx2) ← serverSessionKeys ctx serverPk serverSk clientPk
+    let some (serverRx2, serverTx2) ← serverSessionKeys (τ := ctx) serverPk serverSk clientPk
       | do IO.println "✗ Server session key derivation failed"; return
 
     -- Verify deterministic session key generation
@@ -146,56 +134,6 @@ open Sodium.FFI.KeyExch
     IO.println s!"✗ Deterministic session key derivation failed: {e}"
 
 -- =============================================================================
--- Test Error Handling and Input Validation
--- =============================================================================
-
--- Test client session keys with wrong client public key size
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let (_, clientSk) ← keypair ctx
-    let (serverPk, _) ← keypair ctx
-    let wrongClientPk := ByteArray.mk #[1, 2, 3]  -- Wrong size
-    let _ ← clientSessionKeys ctx wrongClientPk clientSk serverPk
-    IO.println "✗ Client session keys should fail with wrong client public key size"
-  catch e =>
-    IO.println s!"✓ Client session keys correctly rejected wrong client public key size: {e}"
-
--- Test client session keys with wrong server public key size
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let (clientPk, clientSk) ← keypair ctx
-    let wrongServerPk := ByteArray.mk #[1, 2, 3]  -- Wrong size
-    let _ ← clientSessionKeys ctx clientPk clientSk wrongServerPk
-    IO.println "✗ Client session keys should fail with wrong server public key size"
-  catch e =>
-    IO.println s!"✓ Client session keys correctly rejected wrong server public key size: {e}"
-
--- Test server session keys with wrong server public key size
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let (clientPk, _) ← keypair ctx
-    let (_, serverSk) ← keypair ctx
-    let wrongServerPk := ByteArray.mk #[1, 2, 3]  -- Wrong size
-    let _ ← serverSessionKeys ctx wrongServerPk serverSk clientPk
-    IO.println "✗ Server session keys should fail with wrong server public key size"
-  catch e =>
-    IO.println s!"✓ Server session keys correctly rejected wrong server public key size: {e}"
-
--- Test server session keys with wrong client public key size
-#eval show IO Unit from do
-  try
-    let ctx ← Sodium.init Unit
-    let (serverPk, serverSk) ← keypair ctx
-    let wrongClientPk := ByteArray.mk #[1, 2, 3]  -- Wrong size
-    let _ ← serverSessionKeys ctx serverPk serverSk wrongClientPk
-    IO.println "✗ Server session keys should fail with wrong client public key size"
-  catch e =>
-    IO.println s!"✓ Server session keys correctly rejected wrong client public key size: {e}"
-
--- =============================================================================
 -- Test Security Properties
 -- =============================================================================
 
@@ -203,13 +141,13 @@ open Sodium.FFI.KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (clientPk1, clientSk1) ← keypair ctx
-    let (clientPk2, clientSk2) ← keypair ctx
-    let (serverPk, _) ← keypair ctx
+    let (clientPk1, clientSk1) ← keypair (τ := ctx)
+    let (clientPk2, clientSk2) ← keypair (τ := ctx)
+    let (serverPk, _) ← keypair (τ := ctx)
 
-    let some (clientRx1, clientTx1) ← clientSessionKeys ctx clientPk1 clientSk1 serverPk
+    let some (clientRx1, clientTx1) ← clientSessionKeys (τ := ctx) clientPk1 clientSk1 serverPk
       | do IO.println "✗ Client session key derivation 1 failed"; return
-    let some (clientRx2, clientTx2) ← clientSessionKeys ctx clientPk2 clientSk2 serverPk
+    let some (clientRx2, clientTx2) ← clientSessionKeys (τ := ctx) clientPk2 clientSk2 serverPk
       | do IO.println "✗ Client session key derivation 2 failed"; return
 
     if clientRx1 != clientRx2 && clientTx1 != clientTx2 then
@@ -224,13 +162,13 @@ open Sodium.FFI.KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (clientPk, clientSk) ← keypair ctx
-    let (serverPk1, _) ← keypair ctx
-    let (serverPk2, _) ← keypair ctx
+    let (clientPk, clientSk) ← keypair (τ := ctx)
+    let (serverPk1, _) ← keypair (τ := ctx)
+    let (serverPk2, _) ← keypair (τ := ctx)
 
-    let some (clientRx1, clientTx1) ← clientSessionKeys ctx clientPk clientSk serverPk1
+    let some (clientRx1, clientTx1) ← clientSessionKeys (τ := ctx) clientPk clientSk serverPk1
       | do IO.println "✗ Client session key derivation with server 1 failed"; return
-    let some (clientRx2, clientTx2) ← clientSessionKeys ctx clientPk clientSk serverPk2
+    let some (clientRx2, clientTx2) ← clientSessionKeys (τ := ctx) clientPk clientSk serverPk2
       | do IO.println "✗ Client session key derivation with server 2 failed"; return
 
     if clientRx1 != clientRx2 && clientTx1 != clientTx2 then
@@ -245,10 +183,10 @@ open Sodium.FFI.KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (clientPk, clientSk) ← keypair ctx
-    let (serverPk, _) ← keypair ctx
+    let (clientPk, clientSk) ← keypair (τ := ctx)
+    let (serverPk, _) ← keypair (τ := ctx)
 
-    let some (clientRx, clientTx) ← clientSessionKeys ctx clientPk clientSk serverPk
+    let some (clientRx, clientTx) ← clientSessionKeys (τ := ctx) clientPk clientSk serverPk
       | do IO.println "✗ Client session key derivation failed in memory test"; return
 
     if clientRx != clientTx then
@@ -269,15 +207,15 @@ open Sodium.FFI.KeyExch
     let ctx ← Sodium.init Unit
 
     -- Step 1: Generate long-term identity keypairs
-    let (alicePk, aliceSk) ← keypair ctx
-    let (bobPk, bobSk) ← keypair ctx
+    let (alicePk, aliceSk) ← keypair (τ := ctx)
+    let (bobPk, bobSk) ← keypair (τ := ctx)
 
     -- Step 2: Alice (client) derives session keys
-    let some (aliceRx, aliceTx) ← clientSessionKeys ctx alicePk aliceSk bobPk
+    let some (aliceRx, aliceTx) ← clientSessionKeys (τ := ctx) alicePk aliceSk bobPk
       | do IO.println "✗ Alice session key derivation failed"; return
 
     -- Step 3: Bob (server) derives session keys
-    let some (bobRx, bobTx) ← serverSessionKeys ctx bobPk bobSk alicePk
+    let some (bobRx, bobTx) ← serverSessionKeys (τ := ctx) bobPk bobSk alicePk
       | do IO.println "✗ Bob session key derivation failed"; return
 
     -- Step 4: Verify protocol correctness
@@ -305,12 +243,12 @@ open Sodium.FFI.KeyExch
 
     for _ in [0:10] do
       try
-        let (clientPk, clientSk) ← keypair ctx
-        let (serverPk, serverSk) ← keypair ctx
+        let (clientPk, clientSk) ← keypair (τ := ctx)
+        let (serverPk, serverSk) ← keypair (τ := ctx)
 
-        let some (clientRx, clientTx) ← clientSessionKeys ctx clientPk clientSk serverPk
+        let some (clientRx, clientTx) ← clientSessionKeys (τ := ctx) clientPk clientSk serverPk
           | continue
-        let some (serverRx, serverTx) ← serverSessionKeys ctx serverPk serverSk clientPk
+        let some (serverRx, serverTx) ← serverSessionKeys (τ := ctx) serverPk serverSk clientPk
           | continue
 
         if clientTx == serverRx && clientRx == serverTx then
@@ -327,15 +265,15 @@ open Sodium.FFI.KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let (clientPk, clientSk) ← keypair ctx
+    let (clientPk, clientSk) ← keypair (τ := ctx)
     let mut unique_sessions := 0
 
     -- Generate session keys with 5 different servers
-    let mut session_keys : Array (SecureArray _) := #[]
+    let mut session_keys : Array (SecureVector ctx _) := #[]
     for _ in [0:5] do
       try
-        let (serverPk, _) ← keypair ctx
-        let some (clientRx, _) ← clientSessionKeys ctx clientPk clientSk serverPk
+        let (serverPk, _) ← keypair (τ := ctx)
+        let some (clientRx, _) ← clientSessionKeys (τ := ctx) clientPk clientSk serverPk
           | continue
 
         -- Check if this session key is unique
@@ -361,4 +299,4 @@ open Sodium.FFI.KeyExch
 
 #eval IO.println "\n=== KeyExch FFI Tests Complete ==="
 
-end Sodium.Tests.KeyExchFFI
+end Sodium.Tests.KeyExch

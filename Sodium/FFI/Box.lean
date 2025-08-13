@@ -6,7 +6,7 @@ alloy c include <sodium.h> <lean/lean.h>
 
 namespace Sodium.FFI.Box
 
-variable {σ : Type}
+variable {n m : Nat} {σ : Type}
 
 alloy c section
 extern lean_obj_res lean_sodium_malloc(b_lean_obj_arg, size_t, lean_obj_arg);
@@ -20,17 +20,19 @@ def SECRETKEYBYTES : Nat := 32
 def NONCEBYTES : Nat := 24
 def MACBYTES : Nat := 16
 def SEEDBYTES : Nat := 32
-def SHAREDBYTES : Nat := 32
+def BEFORENMBYTES : Nat := 32
 def SEALBYTES : Nat := 48  -- PUBLICKEYBYTES + MACBYTES
 
+abbrev SHAREDBYTES : Nat := BEFORENMBYTES
+
 alloy c extern "lean_crypto_box_keypair"
-def keypair (tau : @& Sodium σ) : IO (ByteArray × SecureArray tau) :=
+def keypair {τ : @& Sodium σ} : IO (ByteVector PUBLICKEYBYTES × SecureVector τ SECRETKEYBYTES) :=
   lean_object* public_key = lean_alloc_sarray(
     sizeof(uint8_t),
     crypto_box_PUBLICKEYBYTES,
     crypto_box_PUBLICKEYBYTES)
 
-  lean_object* secret_key_io = lean_sodium_malloc(tau, crypto_box_SECRETKEYBYTES, _1);
+  lean_object* secret_key_io = lean_sodium_malloc(τ, crypto_box_SECRETKEYBYTES, _1);
 
   if (lean_io_result_is_error(secret_key_io)) {
     return secret_key_io;
@@ -61,7 +63,7 @@ def keypair (tau : @& Sodium σ) : IO (ByteArray × SecureArray tau) :=
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_box_seed_keypair"
-def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray × SecureArray tau) :=
+def seedKeypair {τ : @& Sodium σ} (seed : @& SecureVector τ SEEDBYTES) : IO (ByteVector PUBLICKEYBYTES × SecureVector τ SECRETKEYBYTES) :=
   size_t seed_len = lean_ctor_get_usize(seed, 1);
 
   if (seed_len != crypto_box_SEEDBYTES) {
@@ -76,7 +78,7 @@ def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray
     crypto_box_PUBLICKEYBYTES,
     crypto_box_PUBLICKEYBYTES);
 
-  lean_object* secret_key_io = lean_sodium_malloc(tau, crypto_box_SECRETKEYBYTES, _2);
+  lean_object* secret_key_io = lean_sodium_malloc(τ, crypto_box_SECRETKEYBYTES, _2);
 
   if (lean_io_result_is_error(secret_key_io)) {
     lean_dec(public_key);
@@ -114,8 +116,9 @@ def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_box_easy"
-def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
+def easy {τ : @& Sodium σ} (message : @& ByteVector n) (nonce : @& ByteVector NONCEBYTES)
+    (publicKey : @& ByteVector PUBLICKEYBYTES) (secretKey : @& SecureVector τ SECRETKEYBYTES)
+    : IO (Option (ByteVector (MACBYTES + n))) :=
   size_t message_len = lean_sarray_size(message);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -159,9 +162,10 @@ def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_open_easy"
-def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
-  size_t ciphertext_len = lean_sarray_size(ciphertext);
+def openEasy {τ : @& Sodium σ} (cipher : @& ByteVector (MACBYTES + n)) (nonce : @& ByteVector NONCEBYTES)
+    (publicKey : @& ByteVector PUBLICKEYBYTES) (secretKey : @& SecureVector τ SECRETKEYBYTES)
+    : IO (Option (ByteVector n)) :=
+  size_t ciphertext_len = lean_sarray_size(cipher);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
   if (
@@ -186,7 +190,7 @@ def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteAr
 
   int err = crypto_box_open_easy(
     lean_sarray_cptr(message),
-    lean_sarray_cptr(ciphertext), ciphertext_len,
+    lean_sarray_cptr(cipher), ciphertext_len,
     lean_sarray_cptr(nonce),
     lean_sarray_cptr(publicKey),
     (uint8_t*) secret_key);
@@ -204,7 +208,10 @@ def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteAr
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_beforenm"
-def beforenm (tau : @& Sodium σ) (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option (SecureArray tau)) :=
+def beforenm {τ : @& Sodium σ}
+    (publicKey : @& ByteVector PUBLICKEYBYTES)
+    (secretKey : @& SecureVector τ SECRETKEYBYTES)
+    : IO (Option (SecureVector τ SHAREDBYTES)) :=
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
   if (
@@ -217,7 +224,7 @@ def beforenm (tau : @& Sodium σ) (publicKey : @& ByteArray) (secretKey : @& Sec
     return lean_io_result_mk_error(io_error);
   }
 
-  lean_object* shared_secret_io = lean_sodium_malloc(tau, crypto_box_BEFORENMBYTES, _3);
+  lean_object* shared_secret_io = lean_sodium_malloc(τ, crypto_box_BEFORENMBYTES, _3);
 
   if (lean_io_result_is_error(shared_secret_io)) {
     return shared_secret_io;
@@ -250,8 +257,11 @@ def beforenm (tau : @& Sodium σ) (publicKey : @& ByteArray) (secretKey : @& Sec
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_easy_afternm"
-def easyAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
-    (sharedSecret : @& SecureArray tau) : IO ByteArray :=
+def easyAfternm {τ : @& Sodium σ}
+    (message : @& ByteVector n)
+    (nonce : @& ByteVector NONCEBYTES)
+    (sharedSecret : @& SecureVector τ SHAREDBYTES)
+    : IO (ByteVector (MACBYTES + n)) :=
   size_t message_len = lean_sarray_size(message);
   size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
 
@@ -293,8 +303,11 @@ def easyAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteAr
   return lean_io_result_mk_ok(ciphertext);
 
 alloy c extern "lean_crypto_box_open_easy_afternm"
-def openEasyAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteArray)
-    (sharedSecret : @& SecureArray tau) : IO (Option ByteArray) :=
+def openEasyAfternm {τ : @& Sodium σ}
+    (ciphertext : @& ByteVector (MACBYTES + n))
+    (nonce : @& ByteVector NONCEBYTES)
+    (sharedSecret : @& SecureVector τ SHAREDBYTES)
+    : IO (Option (ByteVector n)) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
 
@@ -336,8 +349,11 @@ def openEasyAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @&
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_detached_afternm"
-def detachedAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
-    (sharedSecret : @& SecureArray tau) : IO (ByteArray × ByteArray) :=
+def detachedAfternm {τ : @& Sodium σ}
+    (message : @& ByteVector n)
+    (nonce : @& ByteVector NONCEBYTES)
+    (sharedSecret : @& SecureVector τ SHAREDBYTES)
+    : IO (ByteVector n × ByteVector MACBYTES) :=
   size_t message_len = lean_sarray_size(message);
   size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
 
@@ -388,8 +404,12 @@ def detachedAfternm (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& By
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_box_open_detached_afternm"
-def openDetachedAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& ByteArray) (nonce : @& ByteArray)
-    (sharedSecret : @& SecureArray tau) : IO (Option ByteArray) :=
+def openDetachedAfternm {τ : @& Sodium σ}
+    (ciphertext : @& ByteVector n)
+    (mac : @& ByteVector MACBYTES)
+    (nonce : @& ByteVector NONCEBYTES)
+    (sharedSecret : @& SecureVector τ SHAREDBYTES)
+    : IO (Option (ByteVector n)) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t shared_len = lean_ctor_get_usize(sharedSecret, 1);
 
@@ -433,8 +453,12 @@ def openDetachedAfternm (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : 
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_detached"
-def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option (ByteArray × ByteArray)) :=
+def detached {τ : @& Sodium σ}
+    (message : @& ByteVector n)
+    (nonce : @& ByteVector NONCEBYTES)
+    (publicKey : @& ByteVector PUBLICKEYBYTES)
+    (secretKey : @& SecureVector τ SECRETKEYBYTES)
+    : IO (Option (ByteVector n × ByteVector MACBYTES)) :=
   size_t message_len = lean_sarray_size(message);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -487,8 +511,13 @@ def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_open_detached"
-def openDetached (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& ByteArray) (nonce : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
+def openDetached {τ : @& Sodium σ}
+    (ciphertext : @& ByteVector n)
+    (mac : @& ByteVector MACBYTES)
+    (nonce : @& ByteVector NONCEBYTES)
+    (publicKey : @& ByteVector PUBLICKEYBYTES)
+    (secretKey : @& SecureVector τ SECRETKEYBYTES)
+    : IO (Option (ByteVector n)) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -534,7 +563,10 @@ def openDetached (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& Byte
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_seal"
-def «seal» (tau : @& Sodium σ) (message : @& ByteArray) (publicKey : @& ByteArray) : IO (Option ByteArray) :=
+def easyAnonymous {τ : @& Sodium σ}
+    (message : @& ByteVector n)
+    (publicKey : @& ByteVector PUBLICKEYBYTES)
+    : IO (Option (ByteVector (SEALBYTES + n))) :=
   size_t message_len = lean_sarray_size(message);
 
   if (
@@ -568,8 +600,11 @@ def «seal» (tau : @& Sodium σ) (message : @& ByteArray) (publicKey : @& ByteA
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_box_seal_open"
-def sealOpen (tau : @& Sodium σ) (sealed : @& ByteArray)
-    (publicKey : @& ByteArray) (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
+def openAnonymous {τ : @& Sodium σ}
+    (sealed : @& ByteVector (SEALBYTES + n))
+    (publicKey : @& ByteVector PUBLICKEYBYTES)
+    (secretKey : @& SecureVector τ SECRETKEYBYTES)
+    : IO (Option (ByteVector n)) :=
   size_t sealed_len = lean_sarray_size(sealed);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 

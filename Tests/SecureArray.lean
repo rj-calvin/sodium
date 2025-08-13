@@ -1,60 +1,60 @@
 import «Sodium».FFI.Basic
 
-namespace Sodium.Tests.SecureArray
+namespace Sodium.Tests.SecureVector
 
--- Test basic SecureArray allocation
+-- Test basic SecureVector allocation
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let _arr ← SecureArray.new ctx 32
-    IO.println "✓ SecureArray allocation succeeded"
+    let _arr ← SecureVector.new (τ := ctx) 32
+    IO.println "✓ SecureVector allocation succeeded"
   catch e =>
-    IO.println s!"✗ SecureArray allocation failed: {e}"
+    IO.println s!"✗ SecureVector allocation failed: {e}"
 
--- Test SecureArray allocation with different sizes
+-- Test SecureVector allocation with different sizes
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let _small ← SecureArray.new ctx 1
-    let _medium ← SecureArray.new ctx 256  
-    let _large ← SecureArray.new ctx 4096
-    IO.println "✓ SecureArray allocation with various sizes succeeded"
+    let _small ← SecureVector.new (τ := ctx) 1
+    let _medium ← SecureVector.new (τ := ctx) 256
+    let _large ← SecureVector.new (τ := ctx) 4096
+    IO.println "✓ SecureVector allocation with various sizes succeeded"
   catch e =>
-    IO.println s!"✗ SecureArray allocation with various sizes failed: {e}"
+    IO.println s!"✗ SecureVector allocation with various sizes failed: {e}"
 
--- Test SecureArray zero checking on fresh allocation
+-- Test SecureVector zero checking on fresh allocation
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let arr ← SecureArray.new ctx 32
-    -- Fresh SecureArrays are filled with random data, so should not be zero
-    let isZero := SecureArray.isZero arr
+    let arr ← SecureVector.new ctx 32
+    -- Fresh SecureVectors are filled with random data, so should not be zero
+    let isZero := SecureVector.isZero arr
     if isZero then
-      IO.println "? SecureArray is zero (unexpected but possible with random data)"
+      IO.println "? SecureVector is zero (unexpected but possible with random data)"
     else
-      IO.println "✓ SecureArray is not zero (expected with random initialization)"
+      IO.println "✓ SecureVector is not zero (expected with random initialization)"
   catch e =>
-    IO.println s!"✗ SecureArray zero check failed: {e}"
+    IO.println s!"✗ SecureVector zero check failed: {e}"
 
--- Test SecureArray allocation with zero size
+-- Test SecureVector allocation with zero size
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let arr ← SecureArray.new ctx 0
-    let isZero := SecureArray.isZero arr
-    IO.println s!"✓ SecureArray with size 0 created, isZero: {isZero}"
+    let arr ← SecureVector.new ctx 0
+    let isZero := SecureVector.isZero arr
+    IO.println s!"✓ SecureVector with size 0 created, isZero: {isZero}"
   catch e =>
-    IO.println s!"✗ SecureArray with size 0 failed: {e}"
+    IO.println s!"✗ SecureVector with size 0 failed: {e}"
 
--- Test multiple SecureArray allocations
+-- Test multiple SecureVector allocations
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let _arr1 ← SecureArray.new ctx 32
-    let _arr2 ← SecureArray.new ctx 32
-    let _arr3 ← SecureArray.new ctx 64
-    IO.println "✓ Multiple SecureArray allocations succeeded"
+    let _arr1 ← SecureVector.new ctx 32
+    let _arr2 ← SecureVector.new ctx 32
+    let _arr3 ← SecureVector.new ctx 64
+    IO.println "✓ Multiple SecureVector allocations succeeded"
   catch e =>
-    IO.println s!"✗ Multiple SecureArray allocations failed: {e}"
+    IO.println s!"✗ Multiple SecureVector allocations failed: {e}"
 
-end Sodium.Tests.SecureArray
+end Sodium.Tests.SecureVector

@@ -1,3 +1,5 @@
+import Sodium.Data.ByteVector
+
 import Alloy.C
 
 open scoped Alloy.C
@@ -19,7 +21,7 @@ def init (σ : Type) : IO (Sodium σ) :=
   lean_object* ctx = lean_alloc_ctor(0, 0, 0)
   return lean_io_result_mk_ok(ctx)
 
-variable {σ : Type}
+variable {n m : USize} {σ : Type}
 
 private alloy c opaque_extern_type SecurePointed => void where
   finalize(ptr) := sodium_free(ptr)
@@ -35,17 +37,24 @@ LEAN_EXPORT void* sodium_secure_of_lean(b_lean_obj_arg obj) {
 }
 end
 
-structure SecureArray (_ : Sodium σ) where
+structure SecureVector (_ : Sodium σ) (n : USize) where
   private mk ::
   private ref : SecurePointed.nonemptyType.type
-  private sz : USize
+  usize : USize
+  usize_rfl : usize = n
 
-namespace SecureArray
+noncomputable instance {τ : Sodium σ} : Nonempty (SecureVector τ n) :=
+  ⟨{ ref := Classical.choice SecurePointed.nonemptyType.property, usize := n, usize_rfl := rfl }⟩
 
-opaque size {τ : Sodium σ} (x : SecureArray τ) : Nat := x.sz.toNat
+noncomputable instance {τ : Sodium σ} : Inhabited (SecureVector τ n) :=
+  ⟨{ ref := Classical.choice SecurePointed.nonemptyType.property, usize := n, usize_rfl := rfl }⟩
+
+namespace SecureVector
+
+abbrev size {τ : Sodium σ} (x : SecureVector τ n) : Nat := x.usize.toNat
 
 alloy c extern "lean_sodium_malloc"
-def new (ctx : @& Sodium σ) (size : USize) : IO (SecureArray ctx) :=
+def new {τ : @& Sodium σ} (size : USize) : IO (SecureVector τ size) :=
   void* ptr = sodium_malloc(size);
 
   if (ptr == NULL) {
@@ -65,7 +74,7 @@ def new (ctx : @& Sodium σ) (size : USize) : IO (SecureArray ctx) :=
   return lean_io_result_mk_ok(secure_ref);
 
 alloy c extern "lean_sodium_is_zero"
-def isZero {ctx : @& Sodium σ} (buf : @& SecureArray ctx) : Bool :=
+def isZero {τ : @& Sodium σ} (buf : @& SecureVector τ n) : Bool :=
   size_t len = lean_ctor_get_usize(buf, 1);
   void* ptr = of_lean<SecurePointed>(lean_ctor_get(buf, 0));
   sodium_mprotect_readonly(ptr);
@@ -74,7 +83,7 @@ def isZero {ctx : @& Sodium σ} (buf : @& SecureArray ctx) : Bool :=
   return result == 1;
 
 alloy c extern "lean_sodium_memcmp"
-def compare {ctx : @& Sodium σ} (b1 : @& SecureArray ctx) (b2 : @& SecureArray ctx) : Ordering :=
+def compare {τ : @& Sodium σ} (b1 : @& SecureVector τ n) (b2 : @& SecureVector τ m) : Ordering :=
   size_t len1 = lean_ctor_get_usize(b1, 1);
   size_t len2 = lean_ctor_get_usize(b2, 1);
 
@@ -91,13 +100,14 @@ def compare {ctx : @& Sodium σ} (b1 : @& SecureArray ctx) (b2 : @& SecureArray 
   sodium_mprotect_noaccess(ptr1);
   return result + 1;
 
-instance {τ : Sodium σ} : Ord (SecureArray τ) := ⟨compare⟩
+instance {τ : Sodium σ} : Ord (SecureVector τ n) := ⟨compare⟩
 
-instance {τ : Sodium σ} : BEq (SecureArray τ) where
+instance {τ : Sodium σ} : BEq (SecureVector τ n) where
   beq x y := compare x y == .eq
 
 alloy c extern "lean_sodium_load_secret_key"
-def ofFile (τ : @& Sodium σ) (fileKey : @& SecureArray τ) (filePath : @& System.FilePath) (expectedSize : USize) : IO (SecureArray τ) :=
+def ofFile {τ : @& Sodium σ} (fileKey : @& SecureVector τ m) (filePath : @& System.FilePath)
+    (expectedSize : USize) : IO (SecureVector τ expectedSize) :=
   const char* path = lean_string_cstr(filePath);
   void* file_key_ptr = of_lean<SecurePointed>(lean_ctor_get(fileKey, 0));
 
@@ -197,7 +207,7 @@ def ofFile (τ : @& Sodium σ) (fileKey : @& SecureArray τ) (filePath : @& Syst
   return lean_io_result_mk_ok(secure_ref);
 
 alloy c extern "lean_sodium_store_secret_key"
-def toFile {τ : Sodium σ} (buf : @& SecureArray τ) (fileKey : @& SecureArray τ) (filePath : @& System.FilePath) : IO Unit :=
+def toFile {τ : @& Sodium σ} (buf : @& SecureVector τ n) (fileKey : @& SecureVector τ m) (filePath : @& System.FilePath) : IO Unit :=
   const char* path = lean_string_cstr(filePath);
   size_t key_size = lean_ctor_get_usize(buf, 1);
   void* secure_ptr = of_lean<SecurePointed>(lean_ctor_get(buf, 0));
@@ -281,24 +291,34 @@ def toFile {τ : Sodium σ} (buf : @& SecureArray τ) (fileKey : @& SecureArray 
   fclose(file);
   return lean_io_result_mk_ok(lean_box(0));
 
-end SecureArray
+protected def cast {τ : Sodium σ} (h : n = m := by native_decide) (a : SecureVector τ n) : SecureVector τ m :=
+  ⟨a.ref, a.usize, by simpa only [a.usize_rfl]⟩
 
-structure EntropyArray (_ : Sodium σ) where
+def cast? {τ : Sodium σ} (a : SecureVector τ n) : Option (SecureVector τ m) :=
+  if h : a.usize = m then some ⟨a.ref, a.usize, h⟩
+  else none
+
+end SecureVector
+
+structure EntropyVector (_ : Sodium σ) where
   private mk ::
   private ref : SecurePointed.nonemptyType.type
-  private off' : USize
-  private sz : USize
+  uoff : USize
+  usize : USize
 
-noncomputable instance {τ : Sodium σ} : Inhabited (EntropyArray τ) :=
-  ⟨{ ref := Classical.choice SecurePointed.nonemptyType.property, off' := 0, sz := 0 }⟩
+noncomputable instance {τ : Sodium σ} : Nonempty (EntropyVector τ) :=
+  ⟨{ ref := Classical.choice SecurePointed.nonemptyType.property, uoff := 0, usize := 0 }⟩
 
-namespace EntropyArray
+noncomputable instance {τ : Sodium σ} : Inhabited (EntropyVector τ) :=
+  ⟨{ ref := Classical.choice SecurePointed.nonemptyType.property, uoff := 0, usize := 0 }⟩
 
-opaque off {τ : Sodium σ} (x : EntropyArray τ) : Nat := x.off'.toNat
-opaque size {τ : Sodium σ} (x : EntropyArray τ) : Nat := x.sz.toNat
+namespace EntropyVector
+
+abbrev size {τ : Sodium σ} (x : EntropyVector τ) : Nat := x.usize.toNat
+abbrev off {τ : Sodium σ} (x : EntropyVector τ) : Nat := x.uoff.toNat
 
 alloy c extern "lean_sodium_randombytes_buf"
-def new (τ : @& Sodium σ) (size : USize) : IO (EntropyArray τ) :=
+def new {τ : @& Sodium σ} (size : USize) : IO (EntropyVector τ) :=
   void* ptr = sodium_malloc(size);
 
   if (ptr == NULL) {
@@ -320,7 +340,7 @@ def new (τ : @& Sodium σ) (size : USize) : IO (EntropyArray τ) :=
   return lean_io_result_mk_ok(secure_ref);
 
 alloy c extern "lean_sodium_randombytes_buf_refresh"
-def refresh (τ : @& Sodium σ) (arr : EntropyArray τ) : BaseIO (EntropyArray τ) :=
+def refresh {τ : @& Sodium σ} (arr : EntropyVector τ) : BaseIO (EntropyVector τ) :=
   void* ptr = of_lean<SecurePointed>(lean_ctor_get(arr, 0));
   size_t size = lean_ctor_get_usize(arr, 2);
 
@@ -336,7 +356,7 @@ Copy a slice from an EntropyArray to a ByteArray for safe data extraction.
 Extracted data is zeroed from the source EntropyArray.
 -/
 alloy c extern "lean_entropy_copy_slice"
-def extract (τ : @& Sodium σ) (src : EntropyArray τ) (len : USize) : BaseIO (ByteArray × EntropyArray τ) :=
+def extract {τ : @& Sodium σ} (src : EntropyVector τ) (len : USize) : BaseIO (ByteArray × EntropyVector τ) :=
   size_t off = lean_ctor_get_usize(src, 1);
   size_t size = lean_ctor_get_usize(src, 2);
   size_t clamped_len = (off >= size) ? 0 : (off + len > size) ? (size - off) : len;
@@ -366,6 +386,6 @@ def extract (τ : @& Sodium σ) (src : EntropyArray τ) (len : USize) : BaseIO (
 
   return lean_io_result_mk_ok(result_pair);
 
-end EntropyArray
+end EntropyVector
 
 end Sodium

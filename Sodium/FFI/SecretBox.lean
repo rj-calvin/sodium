@@ -6,7 +6,7 @@ alloy c include <sodium.h> <lean/lean.h>
 
 namespace Sodium.FFI.SecretBox
 
-variable {σ : Type}
+variable {n m : Nat} {σ : Type}
 
 alloy c section
 extern lean_obj_res lean_sodium_malloc(b_lean_obj_arg, size_t, lean_obj_arg);
@@ -20,8 +20,8 @@ def NONCEBYTES : Nat := 24
 def MACBYTES : Nat := 16
 
 alloy c extern "lean_crypto_secretbox_keygen"
-def keygen (tau : @& Sodium σ) : IO (SecureArray tau) :=
-  lean_object* secret_key_io = lean_sodium_malloc(tau, crypto_secretbox_KEYBYTES, _1);
+def keygen {τ : @& Sodium σ} : IO (SecureVector τ KEYBYTES) :=
+  lean_object* secret_key_io = lean_sodium_malloc(τ, crypto_secretbox_KEYBYTES, _1);
 
   if (lean_io_result_is_error(secret_key_io)) {
     return secret_key_io;
@@ -37,8 +37,8 @@ def keygen (tau : @& Sodium σ) : IO (SecureArray tau) :=
   return lean_io_result_mk_ok(secret_key);
 
 alloy c extern "lean_crypto_secretbox_easy"
-def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
-    (secretKey : @& SecureArray tau) : IO ByteArray :=
+def easy {τ : @& Sodium σ} (message : @& ByteVector n) (nonce : @& ByteVector NONCEBYTES)
+    (secretKey : @& SecureVector τ KEYBYTES) : IO (ByteVector (MACBYTES + n)) :=
   size_t message_len = lean_sarray_size(message);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -80,8 +80,8 @@ def easy (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
   return lean_io_result_mk_ok(ciphertext);
 
 alloy c extern "lean_crypto_secretbox_open_easy"
-def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteArray)
-    (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
+def openEasy {τ : @& Sodium σ} (ciphertext : @& ByteVector (MACBYTES + n)) (nonce : @& ByteVector NONCEBYTES)
+    (secretKey : @& SecureVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -123,8 +123,8 @@ def openEasy (tau : @& Sodium σ) (ciphertext : @& ByteArray) (nonce : @& ByteAr
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_secretbox_detached"
-def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray)
-    (secretKey : @& SecureArray tau) : IO (ByteArray × ByteArray) :=
+def detached {τ : @& Sodium σ} (message : @& ByteVector n) (nonce : @& ByteVector NONCEBYTES)
+    (secretKey : @& SecureVector τ KEYBYTES) : IO (ByteVector n × ByteVector MACBYTES) :=
   size_t message_len = lean_sarray_size(message);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -175,8 +175,8 @@ def detached (tau : @& Sodium σ) (message : @& ByteArray) (nonce : @& ByteArray
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_secretbox_open_detached"
-def openDetached (tau : @& Sodium σ) (ciphertext : @& ByteArray) (mac : @& ByteArray) (nonce : @& ByteArray)
-    (secretKey : @& SecureArray tau) : IO (Option ByteArray) :=
+def openDetached {τ : @& Sodium σ} (ciphertext : @& ByteVector n) (mac : @& ByteVector MACBYTES) (nonce : @& ByteVector NONCEBYTES)
+    (secretKey : @& SecureVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 

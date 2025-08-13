@@ -1,3 +1,4 @@
+import Batteries.Data.ByteArray
 import Alloy.C
 
 open Lean

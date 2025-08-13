@@ -21,13 +21,13 @@ def SEEDBYTES : Nat := 32
 def SESSIONKEYBYTES : Nat := 32
 
 alloy c extern "lean_crypto_kx_keypair"
-def keypair (tau : @& Sodium σ) : IO (ByteArray × SecureArray tau) :=
+def keypair {τ : @& Sodium σ} : IO (ByteVector PUBLICKEYBYTES × SecureVector τ SECRETKEYBYTES) :=
   lean_object* public_key = lean_alloc_sarray(
     sizeof(uint8_t),
     crypto_kx_PUBLICKEYBYTES,
     crypto_kx_PUBLICKEYBYTES);
 
-  lean_object* secret_key_io = lean_sodium_malloc(tau, crypto_kx_SECRETKEYBYTES, _1);
+  lean_object* secret_key_io = lean_sodium_malloc(τ, crypto_kx_SECRETKEYBYTES, _1);
 
   if (lean_io_result_is_error(secret_key_io)) {
     lean_dec(public_key);
@@ -59,7 +59,7 @@ def keypair (tau : @& Sodium σ) : IO (ByteArray × SecureArray tau) :=
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_kx_seed_keypair"
-def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray × SecureArray tau) :=
+def seedKeypair {τ : @& Sodium σ} (seed : @& SecureVector τ SEEDBYTES) : IO (ByteVector PUBLICKEYBYTES × SecureVector τ SECRETKEYBYTES) :=
   size_t seed_len = lean_ctor_get_usize(seed, 1);
 
   if (seed_len != crypto_kx_SEEDBYTES) {
@@ -74,7 +74,7 @@ def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray
     crypto_kx_PUBLICKEYBYTES,
     crypto_kx_PUBLICKEYBYTES);
 
-  lean_object* secret_key_io = lean_sodium_malloc(tau, crypto_kx_SECRETKEYBYTES, _2);
+  lean_object* secret_key_io = lean_sodium_malloc(τ, crypto_kx_SECRETKEYBYTES, _2);
 
   if (lean_io_result_is_error(secret_key_io)) {
     lean_dec(public_key);
@@ -112,8 +112,11 @@ def seedKeypair (tau : @& Sodium σ) (seed : @& SecureArray tau) : IO (ByteArray
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_kx_client_session_keys"
-def clientSessionKeys (tau : @& Sodium σ) (clientPublicKey : @& ByteArray) (clientSecretKey : @& SecureArray tau)
-    (serverPublicKey : @& ByteArray) : IO (Option (SecureArray tau × SecureArray tau)) :=
+def clientSessionKeys {τ : @& Sodium σ}
+    (clientPublicKey : @& ByteVector PUBLICKEYBYTES)
+    (clientSecretKey : @& SecureVector τ SECRETKEYBYTES)
+    (serverPublicKey : @& ByteVector PUBLICKEYBYTES)
+    : IO (Option (SecureVector τ SESSIONKEYBYTES × SecureVector τ SESSIONKEYBYTES)) :=
   size_t client_sk_len = lean_ctor_get_usize(clientSecretKey, 1);
 
   if (
@@ -127,12 +130,12 @@ def clientSessionKeys (tau : @& Sodium σ) (clientPublicKey : @& ByteArray) (cli
     return lean_io_result_mk_error(io_error);
   }
 
-  lean_object* rx_key_io = lean_sodium_malloc(tau, crypto_kx_SESSIONKEYBYTES, _4);
+  lean_object* rx_key_io = lean_sodium_malloc(τ, crypto_kx_SESSIONKEYBYTES, _4);
   if (lean_io_result_is_error(rx_key_io)) {
     return rx_key_io;
   }
 
-  lean_object* tx_key_io = lean_sodium_malloc(tau, crypto_kx_SESSIONKEYBYTES, _4);
+  lean_object* tx_key_io = lean_sodium_malloc(τ, crypto_kx_SESSIONKEYBYTES, _4);
   if (lean_io_result_is_error(tx_key_io)) {
     lean_dec(rx_key_io);
     return tx_key_io;
@@ -177,8 +180,11 @@ def clientSessionKeys (tau : @& Sodium σ) (clientPublicKey : @& ByteArray) (cli
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_kx_server_session_keys"
-def serverSessionKeys (tau : @& Sodium σ) (serverPublicKey : @& ByteArray) (serverSecretKey : @& SecureArray tau)
-    (clientPublicKey : @& ByteArray) : IO (Option (SecureArray tau × SecureArray tau)) :=
+def serverSessionKeys {τ : @& Sodium σ}
+    (serverPublicKey : @& ByteVector PUBLICKEYBYTES)
+    (serverSecretKey : @& SecureVector τ SECRETKEYBYTES)
+    (clientPublicKey : @& ByteVector PUBLICKEYBYTES)
+    : IO (Option (SecureVector τ SESSIONKEYBYTES × SecureVector τ SESSIONKEYBYTES)) :=
   size_t server_sk_len = lean_ctor_get_usize(serverSecretKey, 1);
 
   if (
@@ -192,12 +198,12 @@ def serverSessionKeys (tau : @& Sodium σ) (serverPublicKey : @& ByteArray) (ser
     return lean_io_result_mk_error(io_error);
   }
 
-  lean_object* rx_key_io = lean_sodium_malloc(tau, crypto_kx_SESSIONKEYBYTES, _4);
+  lean_object* rx_key_io = lean_sodium_malloc(τ, crypto_kx_SESSIONKEYBYTES, _4);
   if (lean_io_result_is_error(rx_key_io)) {
     return rx_key_io;
   }
 
-  lean_object* tx_key_io = lean_sodium_malloc(tau, crypto_kx_SESSIONKEYBYTES, _4);
+  lean_object* tx_key_io = lean_sodium_malloc(τ, crypto_kx_SESSIONKEYBYTES, _4);
   if (lean_io_result_is_error(tx_key_io)) {
     lean_dec(rx_key_io);
     return tx_key_io;

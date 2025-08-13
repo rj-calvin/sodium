@@ -6,7 +6,7 @@ alloy c include <sodium.h> <lean/lean.h> <string.h>
 
 namespace Sodium.FFI.PwHash
 
-variable {σ : Type}
+variable {n : Nat} {σ : Type}
 
 alloy c section
 extern lean_obj_res lean_sodium_malloc(b_lean_obj_arg, size_t, lean_obj_arg);
@@ -15,33 +15,33 @@ extern void* sodium_secure_of_lean(b_lean_obj_arg);
 end
 
 -- Constants for crypto_pwhash (Argon2id default)
-def SALTBYTES : USize := 16
-def STRBYTES : USize := 128
-def PASSWD_MIN : USize := 0
-def PASSWD_MAX : USize := 4294967295
+def SALTBYTES : Nat := 16
+def STRBYTES : Nat := 128
+def PASSWD_MIN : Nat := 0
+def PASSWD_MAX : Nat := 4294967295
 
 -- Opslimit constants
-def OPSLIMIT_INTERACTIVE : USize := 2
-def OPSLIMIT_MODERATE : USize := 3
-def OPSLIMIT_SENSITIVE : USize := 4
+def OPSLIMIT_INTERACTIVE : Nat := 2
+def OPSLIMIT_MODERATE : Nat := 3
+def OPSLIMIT_SENSITIVE : Nat := 4
 
 -- Memlimit constants (in bytes)
-def MEMLIMIT_INTERACTIVE : USize := 67108864
-def MEMLIMIT_MODERATE : USize := 268435456
-def MEMLIMIT_SENSITIVE : USize := 1073741824
+def MEMLIMIT_INTERACTIVE : Nat := 67108864
+def MEMLIMIT_MODERATE : Nat := 268435456
+def MEMLIMIT_SENSITIVE : Nat := 1073741824
 
 -- Algorithm identifiers
-def ALG_ARGON2ID13 : USize := 2
-def ALG_ARGON2I13 : USize := 1
-def ALG_DEFAULT : USize := ALG_ARGON2ID13
+def ALG_ARGON2ID13 : Nat := 2
+def ALG_ARGON2I13 : Nat := 1
+def ALG_DEFAULT : Nat := ALG_ARGON2ID13
 
 -- Output size limits
-def BYTES_MIN : USize := 16
-def BYTES_MAX : USize := 4294967295
+def BYTES_MIN : Nat := 16
+def BYTES_MAX : Nat := 4294967295
 
 -- Password hashing for storage/verification (Argon2id default)
 alloy c extern "lean_crypto_pwhash_str"
-def str (tau : @& Sodium σ) (password : @& SecureArray tau) (opslimit : USize) (memlimit : USize) : IO String :=
+def str {τ : @& Sodium σ} (password : @& SecureVector τ n) (opslimit : USize) (memlimit : USize) : IO String :=
   size_t password_len = lean_ctor_get_usize(password, 1);
 
   if (password_len > crypto_pwhash_PASSWD_MAX) {
@@ -86,7 +86,7 @@ def str (tau : @& Sodium σ) (password : @& SecureArray tau) (opslimit : USize) 
 
 -- Password verification against stored hash
 alloy c extern "lean_crypto_pwhash_str_verify"
-def strVerify (tau : @& Sodium σ) (hashStr : String) (password : @& SecureArray tau) : IO Bool :=
+def strVerify {τ : @& Sodium σ} (hashStr : String) (password : @& SecureVector τ n) : IO Bool :=
   size_t password_len = lean_ctor_get_usize(password, 1);
 
   if (password_len > crypto_pwhash_PASSWD_MAX) {
@@ -111,8 +111,8 @@ def strVerify (tau : @& Sodium σ) (hashStr : String) (password : @& SecureArray
 
 -- Key derivation from password to secure array
 alloy c extern "lean_crypto_pwhash"
-def derive (tau : @& Sodium σ) (password : @& SecureArray tau) (salt : @& ByteArray)
-    (outLen : USize) (opslimit : USize) (memlimit : USize) (alg : USize) : IO (SecureArray tau) :=
+def derive {τ : @& Sodium σ} (password : @& SecureVector τ n) (salt : @& ByteVector SALTBYTES)
+    (outLen : USize) (opslimit : USize) (memlimit : USize) (alg : USize) : IO (SecureVector τ outLen) :=
   size_t password_len = lean_ctor_get_usize(password, 1);
   size_t salt_len = lean_sarray_byte_size(salt);
 
@@ -130,14 +130,14 @@ def derive (tau : @& Sodium σ) (password : @& SecureArray tau) (salt : @& ByteA
     return lean_io_result_mk_error(io_error);
   }
 
-  lean_object* secret_key_io = lean_sodium_malloc(tau, outLen, _7);
+  lean_object* secret_key_io = lean_sodium_malloc(τ, outLen, _8);
 
   if (lean_io_result_is_error(secret_key_io)) {
     return secret_key_io;
   }
 
   lean_object* secret_key = lean_io_result_take_value(secret_key_io);
-  void* secret_key_ref = sodium_secure_of_lean(lean_ctor_get(secret_key_ref, 0));
+  void* secret_key_ref = sodium_secure_of_lean(lean_ctor_get(secret_key, 0));
   void* password_ref = sodium_secure_of_lean(lean_ctor_get(password, 0));
 
   sodium_mprotect_readwrite(secret_key_ref);

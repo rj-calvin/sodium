@@ -1,7 +1,8 @@
 import Lake
 open Lake DSL System
 
-require alloy from git "https://github.com/tydeu/lean4-alloy.git"@"master"
+require alloy from git "https://github.com/tydeu/lean4-alloy.git" @ "master"
+require aesop from git "https://github.com/leanprover-community/aesop.git" @ "v4.21.0"
 require "leanprover-community" / "batteries" @ git "v4.21.0"
 
 package «sodium» where

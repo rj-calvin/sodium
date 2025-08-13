@@ -18,8 +18,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureArray.new τ keySize
-  let fileKey ← SecureArray.new τ 32  -- 32 bytes for secretstream encryption key
+  let testKey ← SecureVector.new τ keySize
+  let fileKey ← SecureVector.new τ 32  -- 32 bytes for secretstream encryption key
   let filename := "test_encrypted_load.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -28,7 +28,7 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
     testKey.toFile fileKey testPath
 
     -- Load key from encrypted file
-    let loadedKey ← SecureArray.ofFile τ fileKey testPath 32
+    let loadedKey ← SecureVector.ofFile τ fileKey testPath 32
 
     -- Verify size
     if loadedKey.size == 32 then
@@ -52,8 +52,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let smallKeySize : USize := 8
-  let testKey ← SecureArray.new τ smallKeySize
-  let fileKey ← SecureArray.new τ 32
+  let testKey ← SecureVector.new τ smallKeySize
+  let fileKey ← SecureVector.new τ 32
   let filename := "test_key_wrong_size.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -63,7 +63,7 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 
     -- Try to load as 32-byte key (should fail)
     try
-      let _ ← SecureArray.ofFile τ fileKey testPath 32
+      let _ ← SecureVector.ofFile τ fileKey testPath 32
       IO.println "✗ Should have failed with size mismatch"
     catch _ =>
       IO.println "✓ Correctly rejected file with wrong size"
@@ -77,10 +77,10 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 -- Test non-existent file error
 #eval show IO Unit from do
   let τ ← init Unit
-  let fileKey ← SecureArray.new τ 32
+  let fileKey ← SecureVector.new τ 32
 
   try
-    let _ ← SecureArray.ofFile τ fileKey "nonexistent_file.key" 32
+    let _ ← SecureVector.ofFile τ fileKey "nonexistent_file.key" 32
     IO.println "✗ Should have failed with file not found"
   catch _ =>
     IO.println "✓ Correctly handled non-existent file"
@@ -89,8 +89,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureArray.new τ keySize
-  let fileKey ← SecureArray.new τ 32
+  let testKey ← SecureVector.new τ keySize
+  let fileKey ← SecureVector.new τ 32
   let filename := "test_secret_key.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -105,7 +105,7 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
     testKey.toFile fileKey testPath
 
     -- Load into SecureArray
-    let secureArray ← SecureArray.ofFile τ fileKey testPath 32
+    let secureArray ← SecureVector.ofFile τ fileKey testPath 32
 
     -- Wrap in SecretKey if size matches
     if h : secureArray.size = testSpec.secretKeyBytes then

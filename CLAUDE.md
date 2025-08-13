@@ -75,8 +75,7 @@ The project includes comprehensive test modules in `Tests/` for each FFI compone
   ```c
   // Create IO.Error.userError
   lean_object* error_msg = lean_mk_string("Error message")
-  lean_object* io_error = lean_alloc_ctor(7, 1, 0)  // userError constructor (tag 7)
-  lean_ctor_set(io_error, 0, error_msg)
+  lean_object* io_error = lean_mk_io_user_error(error_msg)
   return lean_io_result_mk_error(io_error)
   ```
 - In Lean, use try/catch syntax to handle exceptions:

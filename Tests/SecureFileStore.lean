@@ -15,8 +15,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureArray.new τ keySize
-  let fileKey ← SecureArray.new τ 32  -- 32 bytes for secretstream encryption key
+  let testKey ← SecureVector.new τ keySize
+  let fileKey ← SecureVector.new τ 32  -- 32 bytes for secretstream encryption key
   let filename := "test_store_roundtrip.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -25,7 +25,7 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
     testKey.toFile fileKey testPath
 
     -- Load the key from encrypted file
-    let loadedKey ← SecureArray.ofFile τ fileKey testPath keySize
+    let loadedKey ← SecureVector.ofFile τ fileKey testPath keySize
 
     -- Verify keys match
     if testKey.compare loadedKey == .eq then
@@ -43,8 +43,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureArray.new τ keySize
-  let fileKey ← SecureArray.new τ 32
+  let testKey ← SecureVector.new τ keySize
+  let fileKey ← SecureVector.new τ 32
 
   -- Test with directory that doesn't exist
   let invalidPath : FilePath := "/nonexistent/directory/key.bin"
@@ -58,8 +58,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureArray.new τ keySize
-  let fileKey ← SecureArray.new τ 32
+  let testKey ← SecureVector.new τ keySize
+  let fileKey ← SecureVector.new τ 32
   let filename := "test_store_size.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -85,8 +85,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureArray.new τ keySize
-  let fileKey ← SecureArray.new τ 32
+  let testKey ← SecureVector.new τ keySize
+  let fileKey ← SecureVector.new τ 32
   let filename := "test_store_atomic.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -114,15 +114,15 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 
   for size in sizes do
     let keySize : USize := size.toUSize
-    let testKey ← SecureArray.new τ keySize
-    let fileKey ← SecureArray.new τ 32
+    let testKey ← SecureVector.new τ keySize
+    let fileKey ← SecureVector.new τ 32
     let filename := s!"test_store_size_{keySize}.tmp"
     let testPath := System.FilePath.mk ".lake" / filename
 
     try
       -- Store and verify round-trip
       testKey.toFile fileKey testPath
-      let loadedKey ← SecureArray.ofFile τ fileKey testPath keySize
+      let loadedKey ← SecureVector.ofFile τ fileKey testPath keySize
 
       if testKey.compare loadedKey == .eq then
         IO.println s!"✓ {keySize}-byte key storage/load successful"
