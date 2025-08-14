@@ -16,6 +16,9 @@ structure Spec where
 
 namespace Spec
 
+abbrev toJson (spec : Spec) : Json := instToJsonSpec.toJson spec
+abbrev fromJson? (json : Json) : Except String Spec := instFromJsonSpec.fromJson? json
+
 @[inline, always_inline]
 def shapeOf (spec : Spec) (name : Name) : Nat := spec.shapes.findD name 0
 
@@ -28,9 +31,6 @@ instance {spec : Spec} {name : Name} : Decidable (name ∈ spec) :=
   inferInstanceAs <| Decidable (spec.shapes.contains name)
 
 -- Utility functions for working with shapes
-
-/-- Check if a shape name exists in the specification -/
-def hasShape (spec : Spec) (name : Name) : Bool := spec.shapes.contains name
 
 /-- Add or update a shape with the given size -/
 def addShape (spec : Spec) (name : Name) (size : Nat) : Spec :=
@@ -97,6 +97,7 @@ instance : GetElem? Spec Name Nat (fun s n => s.HasValidShape n) where
     if IsValidShape shape then some shape
     else none
 
+attribute [simp, grind] GetElem.getElem
 attribute [simp, grind] GetElem?.getElem!
 attribute [simp, grind] GetElem?.getElem?
 
@@ -112,9 +113,12 @@ theorem getElem?_eq_some_iff : ∀ (s : Spec) n m, s[n]? = some m ↔ m = s.shap
 
 end Spec
 
+open FFI KeyExch in
 def UniqId : Spec where
   name := `_uniq
-  shapes := RBMap.empty |>.insert `nonce 8
+  shapes := RBMap.empty
+    |>.insert `nonce 8
+    |>.insert `seed SEEDBYTES
 
 open FFI KeyDeriv in
 def Blake2b : Spec where
@@ -127,7 +131,6 @@ open FFI KeyExch in
 def Curve25519 : Spec where
   name := `curve25519
   shapes := RBMap.empty
-    |>.insert `seed SEEDBYTES
     |>.insert `publickey PUBLICKEYBYTES
     |>.insert `secretkey SECRETKEYBYTES
     |>.insert `sessionkey SESSIONKEYBYTES
@@ -149,6 +152,7 @@ def Poly1305 : Spec where
 
 abbrev XSalsa20Poly1305 := XSalsa20 ++ Poly1305
 abbrev Curve25519XSalsa20Poly1305 := Curve25519 ++ XSalsa20Poly1305
+abbrev Curve25519Blake2b := Curve25519 ++ Blake2b
 
 @[simp] theorem uniqid_nonce_eq : UniqId.shapeOf `nonce = 8 := by native_decide
 @[simp] theorem uniqid_nonce_valid : Spec.IsValidShape <| UniqId.shapeOf `nonce := by native_decide
@@ -156,8 +160,17 @@ abbrev Curve25519XSalsa20Poly1305 := Curve25519 ++ XSalsa20Poly1305
   rw [← uniqid_nonce_eq]
   exact uniqid_nonce_valid
 
+@[simp] theorem uniqid_seed_eq : UniqId.shapeOf `seed = FFI.KeyExch.SEEDBYTES := by native_decide
+@[simp] theorem uniqid_seed_valid : Spec.IsValidShape <| UniqId.shapeOf `seed := by native_decide
+@[simp] theorem uniqid_seed_support : Spec.IsValidShape FFI.KeyExch.SEEDBYTES := by
+  rw [← uniqid_seed_eq]
+  exact uniqid_seed_valid
+
 instance : UniqId.HasValidShape `nonce := by
   simp only [Spec.has_valid_shape_iff, uniqid_nonce_eq, uniqid_nonce_support]
+
+instance : UniqId.HasValidShape `seed := by
+  simp only [Spec.has_valid_shape_iff, uniqid_seed_eq, uniqid_seed_support]
 
 @[simp] theorem blake2b_metakey_eq : Blake2b.shapeOf `metakey = FFI.KeyDeriv.KEYBYTES := by native_decide
 @[simp] theorem blake2b_metakey_valid : Spec.IsValidShape <| Blake2b.shapeOf `metakey := by native_decide
@@ -176,12 +189,6 @@ instance : Blake2b.HasValidShape `metakey := by
 
 instance : Blake2b.HasValidShape `context := by
   simp only [Spec.has_valid_shape_iff, blake2b_context_eq, blake2b_context_support]
-
-@[simp] theorem curve25519_seed_eq : Curve25519.shapeOf `seed = FFI.KeyExch.SEEDBYTES := by native_decide
-@[simp] theorem curve25519_seed_valid : Spec.IsValidShape <| Curve25519.shapeOf `seed := by native_decide
-@[simp] theorem curve25519_seed_support : Spec.IsValidShape FFI.KeyExch.SEEDBYTES := by
-  rw [← curve25519_seed_eq]
-  exact curve25519_seed_valid
 
 @[simp] theorem curve25519_publickey_eq : Curve25519.shapeOf `publickey = FFI.KeyExch.PUBLICKEYBYTES := by native_decide
 @[simp] theorem curve25519_publickey_valid : Spec.IsValidShape <| Curve25519.shapeOf `publickey := by native_decide
@@ -206,9 +213,6 @@ instance : Blake2b.HasValidShape `context := by
 @[simp] theorem curve25519_sharedkey_support : Spec.IsValidShape FFI.Box.SHAREDBYTES := by
   rw [← curve25519_sharedkey_eq]
   exact curve25519_sharedkey_valid
-
-instance : Curve25519.HasValidShape `seed := by
-  simp only [Spec.has_valid_shape_iff, curve25519_seed_eq, curve25519_seed_support]
 
 instance : Curve25519.HasValidShape `publickey := by
   simp only [Spec.has_valid_shape_iff, curve25519_publickey_eq, curve25519_publickey_support]
@@ -264,7 +268,6 @@ instance : XSalsa20Poly1305.HasValidShape `mac := by native_decide
 instance : XSalsa20Poly1305.HasValidShape `seal := by native_decide
 
 instance : Curve25519XSalsa20Poly1305.HasValidShape `nonce := by native_decide
-instance : Curve25519XSalsa20Poly1305.HasValidShape `seed := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `mac := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `seal := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `symmkey := by native_decide
@@ -272,5 +275,12 @@ instance : Curve25519XSalsa20Poly1305.HasValidShape `publickey := by native_deci
 instance : Curve25519XSalsa20Poly1305.HasValidShape `secretkey := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `sessionkey := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `sharedkey := by native_decide
+
+instance : Curve25519Blake2b.HasValidShape `publickey := by native_decide
+instance : Curve25519Blake2b.HasValidShape `secretkey := by native_decide
+instance : Curve25519Blake2b.HasValidShape `sessionkey := by native_decide
+instance : Curve25519Blake2b.HasValidShape `sharedkey := by native_decide
+instance : Curve25519Blake2b.HasValidShape `metakey := by native_decide
+instance : Curve25519Blake2b.HasValidShape `context := by native_decide
 
 end Sodium.Crypto

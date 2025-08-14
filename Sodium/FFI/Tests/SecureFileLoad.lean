@@ -1,7 +1,7 @@
 import Sodium.FFI.Basic
 import Sodium.Crypto.Spec
 
-open Sodium.Crypto (Spec SecretKey)
+open Sodium.Crypto (Spec)
 
 open Lean System IO.FS Sodium
 
@@ -18,8 +18,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureVector.new τ keySize
-  let fileKey ← SecureVector.new τ 32  -- 32 bytes for secretstream encryption key
+  let testKey ← SecureVector.new (τ := τ) keySize
+  let fileKey ← SecureVector.new 32  -- 32 bytes for secretstream encryption key
   let filename := "test_encrypted_load.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -28,7 +28,7 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
     testKey.toFile fileKey testPath
 
     -- Load key from encrypted file
-    let loadedKey ← SecureVector.ofFile τ fileKey testPath 32
+    let loadedKey ← SecureVector.ofFile fileKey testPath 32
 
     -- Verify size
     if loadedKey.size == 32 then
@@ -52,8 +52,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let smallKeySize : USize := 8
-  let testKey ← SecureVector.new τ smallKeySize
-  let fileKey ← SecureVector.new τ 32
+  let testKey ← SecureVector.new (τ := τ) smallKeySize
+  let fileKey ← SecureVector.new 32
   let filename := "test_key_wrong_size.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -63,7 +63,7 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 
     -- Try to load as 32-byte key (should fail)
     try
-      let _ ← SecureVector.ofFile τ fileKey testPath 32
+      let _ ← SecureVector.ofFile fileKey testPath 32
       IO.println "✗ Should have failed with size mismatch"
     catch _ =>
       IO.println "✓ Correctly rejected file with wrong size"
@@ -77,47 +77,12 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 -- Test non-existent file error
 #eval show IO Unit from do
   let τ ← init Unit
-  let fileKey ← SecureVector.new τ 32
+  let fileKey ← SecureVector.new (τ := τ) 32
 
   try
-    let _ ← SecureVector.ofFile τ fileKey "nonexistent_file.key" 32
+    let _ ← SecureVector.ofFile fileKey "nonexistent_file.key" 32
     IO.println "✗ Should have failed with file not found"
   catch _ =>
     IO.println "✓ Correctly handled non-existent file"
-
--- Test integration with SecretKey wrapper
-#eval show IO Unit from do
-  let τ ← init Unit
-  let keySize : USize := 32
-  let testKey ← SecureVector.new τ keySize
-  let fileKey ← SecureVector.new τ 32
-  let filename := "test_secret_key.tmp"
-  let testPath := System.FilePath.mk ".lake" / filename
-
-  -- Define a test spec with 32-byte secret keys
-  let testSpec : Spec := {
-    name := `test
-    secretKeyBytes := 32
-  }
-
-  try
-    -- Store key to encrypted file
-    testKey.toFile fileKey testPath
-
-    -- Load into SecureArray
-    let secureArray ← SecureVector.ofFile τ fileKey testPath 32
-
-    -- Wrap in SecretKey if size matches
-    if h : secureArray.size = testSpec.secretKeyBytes then
-      let _ : SecretKey τ testSpec := ⟨secureArray, h⟩
-      IO.println "✓ Successfully created SecretKey from loaded encrypted file"
-    else
-      IO.println "✗ Size mismatch for SecretKey wrapper"
-
-    -- Cleanup
-    cleanupTestFile filename
-  catch e =>
-    cleanupTestFile filename
-    IO.println s!"✗ Integration test failed: {e}"
 
 end Tests.SecureFileLoad

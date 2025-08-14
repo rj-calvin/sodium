@@ -112,45 +112,53 @@ open ByteArray
 #eval show IO Unit from do
   let original := ByteArray.mk #[72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100] -- "Hello World"
   let encoded := toBase64 original
-  let decoded := ofBase64 encoded
-
-  if decoded == original then
-    IO.println s!"✓ Base64 roundtrip successful: '{encoded}'"
-  else
-    IO.println "✗ Base64 roundtrip failed"
+  match ofBase64? encoded with
+  | some decoded =>
+    if decoded == original then
+      IO.println s!"✓ Base64 roundtrip successful: '{encoded}'"
+    else
+      IO.println "✗ Base64 roundtrip failed"
+  | none =>
+    IO.println "✗ Base64 decoding failed"
 
 -- Test Base64 with empty array
 #eval show IO Unit from do
   let empty := ByteArray.empty
   let encoded := toBase64 empty
-  let decoded := ofBase64 encoded
-
-  if decoded == empty then
-    IO.println "✓ Base64 empty array roundtrip successful"
-  else
-    IO.println "✗ Base64 empty array roundtrip failed"
+  match ofBase64? encoded with
+  | some decoded =>
+    if decoded == empty then
+      IO.println "✓ Base64 empty array roundtrip successful"
+    else
+      IO.println "✗ Base64 empty array roundtrip failed"
+  | none =>
+    IO.println "✗ Base64 empty array decoding failed"
 
 -- Test Base64 with single byte
 #eval show IO Unit from do
   let single := ByteArray.mk #[42]
   let encoded := toBase64 single
-  let decoded := ofBase64 encoded
-
-  if decoded == single then
-    IO.println "✓ Base64 single byte roundtrip successful"
-  else
-    IO.println "✗ Base64 single byte roundtrip failed"
+  match ofBase64? encoded with
+  | some decoded =>
+    if decoded == single then
+      IO.println "✓ Base64 single byte roundtrip successful"
+    else
+      IO.println "✗ Base64 single byte roundtrip failed"
+  | none =>
+    IO.println "✗ Base64 single byte decoding failed"
 
 -- Test Base64 with binary data (all byte values)
 #eval show IO Unit from do
   let binary := ByteArray.mk (List.range 256 |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
   let encoded := toBase64 binary
-  let decoded := ofBase64 encoded
-
-  if decoded == binary then
-    IO.println "✓ Base64 binary data roundtrip successful"
-  else
-    IO.println "✗ Base64 binary data roundtrip failed"
+  match ofBase64? encoded with
+  | some decoded =>
+    if decoded == binary then
+      IO.println "✓ Base64 binary data roundtrip successful"
+    else
+      IO.println "✗ Base64 binary data roundtrip failed"
+  | none =>
+    IO.println "✗ Base64 binary data decoding failed"
 
 -- Test JSON serialization/deserialization
 #eval show IO Unit from do
@@ -206,12 +214,32 @@ open ByteArray
   -- Test with bytes that might cause Base64 issues
   let challenging := ByteArray.mk #[0, 255, 127, 128, 1, 254]
   let encoded := toBase64 challenging
-  let decoded := ofBase64 encoded
+  match ofBase64? encoded with
+  | some decoded =>
+    if decoded == challenging then
+      IO.println "✓ Base64 challenging bytes roundtrip successful"
+    else
+      IO.println "✗ Base64 challenging bytes roundtrip failed"
+  | none =>
+    IO.println "✗ Base64 challenging bytes decoding failed"
 
-  if decoded == challenging then
-    IO.println "✓ Base64 challenging bytes roundtrip successful"
+-- Test Base64 error handling with invalid input
+#eval show IO Unit from do
+  -- Test with clearly invalid Base64 strings
+  let invalid_inputs := ["invalid!", "abc", "=invalid=", "123@#$"]
+  let mut error_count := 0
+
+  for invalid in invalid_inputs do
+    match ofBase64? invalid with
+    | some _ =>
+      IO.println s!"✗ Expected error for invalid Base64: '{invalid}'"
+    | none =>
+      error_count := error_count + 1
+
+  if error_count == invalid_inputs.length then
+    IO.println s!"✓ All {error_count} invalid Base64 inputs properly rejected"
   else
-    IO.println "✗ Base64 challenging bytes roundtrip failed"
+    IO.println s!"✗ Only {error_count}/{invalid_inputs.length} invalid inputs rejected"
 
 -- Test succ with all 255s (should wrap to all 0s + 1 extra byte conceptually)
 #eval show IO Unit from do
@@ -260,14 +288,16 @@ open ByteArray
 #eval show IO Unit from do
   let large := ByteArray.mk (List.range 1000 |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
   let encoded := toBase64 large
-  let decoded := ofBase64 encoded
-  let _incremented := succ large
-  let _zero_check := isZero large
-
-  if decoded == large then
-    IO.println "✓ Large array (1000 bytes) operations completed successfully"
-  else
-    IO.println "✗ Large array operations failed"
+  match ofBase64? encoded with
+  | some decoded =>
+    let _incremented := succ large
+    let _zero_check := isZero large
+    if decoded == large then
+      IO.println "✓ Large array (1000 bytes) operations completed successfully"
+    else
+      IO.println "✗ Large array operations failed"
+  | none =>
+    IO.println "✗ Large array Base64 decoding failed"
 
 #eval IO.println "\n=== ByteArray Data Tests Complete ==="
 

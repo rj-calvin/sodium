@@ -291,7 +291,7 @@ def toFile {τ : @& Sodium σ} (buf : @& SecureVector τ n) (fileKey : @& Secure
   fclose(file);
   return lean_io_result_mk_ok(lean_box(0));
 
-protected def cast {τ : Sodium σ} (h : n = m := by native_decide) (a : SecureVector τ n) : SecureVector τ m :=
+protected def cast {τ : Sodium σ} (h : n = m := by simp) (a : SecureVector τ n) : SecureVector τ m :=
   ⟨a.ref, a.usize, by simpa only [a.usize_rfl]⟩
 
 def cast? {τ : Sodium σ} (a : SecureVector τ n) : Option (SecureVector τ m) :=

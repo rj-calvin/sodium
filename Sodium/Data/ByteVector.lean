@@ -1,6 +1,6 @@
 import Sodium.Data.ByteArray
 
-open Alloy.C
+open Lean Alloy.C
 
 alloy c include <lean/lean.h> <sodium.h> <string.h>
 
@@ -111,6 +111,20 @@ def toList (bs : ByteVector n) : List UInt8 := bs.toArray.toList
 -- @[inline] def findFinIdx? (a : ByteVector n) (p : UInt8 → Bool) (start := 0) : Option (Fin n.toNat) :=
 --   let b := a.toArray.findFinIdx? p start
 --   a.usize_toArray ▸ b
+
+abbrev toBase64 (bs : ByteVector n) : String := bs.toArray.toBase64
+
+def ofBase64? (s : String) : Option (ByteVector n) := do
+  let data ← ByteArray.ofBase64? s
+  if h : data.size = n then some ⟨data, h⟩
+  else none
+
+instance : ToJson (ByteVector n) := ⟨Json.str ∘ toBase64⟩
+instance : FromJson (ByteVector n) := ⟨fun json => do
+  let str ← Json.getStr? json
+  match ofBase64? str with
+  | some bytes => pure bytes
+  | none => throw "expected Base64 encoding"⟩
 
 instance : BEq (ByteVector n) where
   beq x y := compare x.toArray y.toArray == .eq

@@ -26,7 +26,7 @@ namespace Sodium.Tests.SecureVector
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let arr ← SecureVector.new ctx 32
+    let arr ← SecureVector.new (τ := ctx) 32
     -- Fresh SecureVectors are filled with random data, so should not be zero
     let isZero := SecureVector.isZero arr
     if isZero then
@@ -40,7 +40,7 @@ namespace Sodium.Tests.SecureVector
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let arr ← SecureVector.new ctx 0
+    let arr ← SecureVector.new (τ := ctx) 0
     let isZero := SecureVector.isZero arr
     IO.println s!"✓ SecureVector with size 0 created, isZero: {isZero}"
   catch e =>
@@ -50,9 +50,9 @@ namespace Sodium.Tests.SecureVector
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let _arr1 ← SecureVector.new ctx 32
-    let _arr2 ← SecureVector.new ctx 32
-    let _arr3 ← SecureVector.new ctx 64
+    let _arr1 ← SecureVector.new (τ := ctx) 32
+    let _arr2 ← SecureVector.new (τ := ctx) 32
+    let _arr3 ← SecureVector.new (τ := ctx) 64
     IO.println "✓ Multiple SecureVector allocations succeeded"
   catch e =>
     IO.println s!"✗ Multiple SecureVector allocations failed: {e}"

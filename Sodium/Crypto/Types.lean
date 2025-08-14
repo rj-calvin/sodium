@@ -73,6 +73,7 @@ end DecryptResult
 
 structure Nonce (spec : Spec) [h : spec.HasValidShape `nonce] where
   data : ByteVector (spec.shapeOf `nonce)
+  deriving ToJson, FromJson
 
 structure SymmKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `symmkey] where
   data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `symmkey) (by simp [h.shape_is_valid])
@@ -82,6 +83,7 @@ structure SecretKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `secr
 
 structure PublicKey (spec : Spec) [h : spec.HasValidShape `publickey] where
   data : ByteVector (spec.shapeOf `publickey)
+  deriving ToJson, FromJson
 
 structure SharedKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `sharedkey] where
   data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `sharedkey) (by simp [h.shape_is_valid])
@@ -105,24 +107,30 @@ structure Seed (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `seed] whe
 
 structure Mac (spec : Spec) [h : spec.HasValidShape `mac] where
   data : ByteVector (spec.shapeOf `mac)
+  deriving ToJson, FromJson
 
 structure AuthTag (spec : Spec) where
   data : ByteVector (spec.shapeOf `tag)
+  deriving ToJson, FromJson
 
 structure HashOutput (spec : Spec) where
   data : ByteVector (spec.shapeOf `hash)
+  deriving ToJson, FromJson
 
 structure Salt (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `salt] where
   data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `salt) (by simp [h.shape_is_valid])
 
 structure Context (spec : Spec) [h : spec.HasValidShape `context] where
   data : ByteVector (spec.shapeOf `context)
+  deriving ToJson, FromJson
 
 structure StreamHeader (spec : Spec) where
   data : ByteVector (spec.shapeOf `header)
+  deriving ToJson, FromJson
 
 structure Signature (spec : Spec) where
   data : ByteVector (spec.shapeOf `signature)
+  deriving ToJson, FromJson
 
 structure CipherText (spec : Spec) [spec.HasValidShape `nonce] where
   size : Nat
@@ -130,25 +138,79 @@ structure CipherText (spec : Spec) [spec.HasValidShape `nonce] where
   nonce : Nonce spec
   shapeOf_mac_le_size : spec.shapeOf `mac ≤ size
 
-structure DetachedCipherText (spec : Spec) [spec.HasValidShape `mac] [spec.HasValidShape `nonce] where
-  data : ByteArray
-  mac : Mac spec
-  nonce : Nonce spec
+namespace CipherText
+
+variable {spec : Spec} [spec.HasValidShape `nonce]
+
+instance : ToJson (CipherText spec) where
+  toJson cipher := json% {
+    size : $cipher.size,
+    data : $cipher.data,
+    nonce : $cipher.nonce
+  }
+
+instance : FromJson (CipherText spec) where
+  fromJson? json := do
+    let size ← json.getObjValAs? Nat "size"
+    let data ← json.getObjValAs? (ByteVector size) "data"
+    let nonce ← json.getObjValAs? (Nonce spec) "nonce"
+    if h : spec.shapeOf `mac ≤ size then
+      return ⟨size, data, nonce, h⟩
+    else
+      throw "expected data to contain embedded mac"
+
+end CipherText
 
 structure TaggedCipherText (spec : Spec) where
-  data : ByteArray
-  size_ge_shapeOf_tag : data.size ≥ spec.shapeOf `tag
+  size : Nat
+  data : ByteVector size
+  shapeOf_tag_le_size : spec.shapeOf `tag ≤ size
+
+namespace TaggedCipherText
+
+variable {spec : Spec}
+
+instance : ToJson (TaggedCipherText spec) where
+  toJson cipher := json% {
+    size : $cipher.size,
+    data : $cipher.data
+  }
+
+instance : FromJson (TaggedCipherText spec) where
+  fromJson? json := do
+    let size ← json.getObjValAs? Nat "size"
+    let data ← json.getObjValAs? (ByteVector size) "data"
+    if h : spec.shapeOf `tag ≤ size then
+      return ⟨size, data, h⟩
+    else
+      throw "expected data to contain embedded tag"
+
+end TaggedCipherText
 
 structure SealedCipherText (spec : Spec) where
   size : Nat
   data : ByteVector size
   shapeOf_seal_le_size : spec.shapeOf `seal ≤ size
 
-structure Message (α : Type) [ToJson α] where
-  val : α
-  json_shape_is_valid : Spec.IsValidShape (toJson val).compress.toUTF8.size
+namespace SealedCipherText
 
-instance {α : Type} [ToJson α] : ToJson (Message α) where
-  toJson x := toJson x.val
+variable {spec : Spec}
+
+instance : ToJson (SealedCipherText spec) where
+  toJson cipher := json% {
+    size : $cipher.size,
+    data : $cipher.data
+  }
+
+instance : FromJson (SealedCipherText spec) where
+  fromJson? json := do
+    let size ← json.getObjValAs? Nat "size"
+    let data ← json.getObjValAs? (ByteVector size) "data"
+    if h : spec.shapeOf `seal ≤ size then
+      return ⟨size, data, h⟩
+    else
+      throw "expected data to contain embedded seal"
+
+end SealedCipherText
 
 end Sodium.Crypto

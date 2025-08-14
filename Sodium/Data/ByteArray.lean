@@ -59,24 +59,36 @@ def toBase64 (buf : @& ByteArray) : String :=
   return str;
 
 alloy c extern "lean_sodium_base642bin"
-def ofBase64 (str : @& String) : ByteArray :=
-  const uint8_t* b64 = (const uint8_t*) lean_string_cstr(str);
+def ofBase64? (str : @& String) : Option ByteArray :=
+  const uint8_t* b64 = lean_string_cstr(str);
   size_t b64_len = lean_string_size(str);
-  size_t bin_maxlen = b64_len / 4 * 3;
+  size_t bin_maxlen = b64_len / 4 * 3 + 1;
   lean_object* bin = lean_alloc_sarray(sizeof(uint8_t), bin_maxlen, bin_maxlen);
   size_t bin_len;
 
-  sodium_base642bin(
+  int err = sodium_base642bin(
     (uint8_t*) lean_sarray_cptr(bin), bin_maxlen,
     b64, b64_len,
-    NULL, &bin_len, NULL,
+    " \r\n\t", &bin_len, NULL,
     sodium_base64_VARIANT_URLSAFE
   );
 
+  if (err != 0) {
+    lean_dec(bin);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return none;
+  }
+
   lean_sarray_set_size(bin, bin_len);
-  return bin;
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, bin);
+  return some;
 
 instance : ToJson ByteArray := ⟨Json.str ∘ toBase64⟩
-instance : FromJson ByteArray := ⟨(Json.getStr? · >>= pure ∘ ofBase64)⟩
+instance : FromJson ByteArray := ⟨fun json => do
+  let str ← Json.getStr? json
+  match ofBase64? str with
+  | some bytes => pure bytes
+  | none => throw "expected Base64 encoding"⟩
 
 end ByteArray
