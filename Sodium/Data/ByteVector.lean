@@ -55,15 +55,21 @@ def isZero (x : ByteVector n) : Bool := x.toArray.isZero
 def get! : (ByteVector n) → Nat → UInt8
   | ⟨bs, _⟩, i => bs[i]!
 
--- def get : (a : ByteVector n) → (i : Nat) → (h : i < n := by get_elem_tactic) → UInt8
---   | ⟨bs, hb⟩, i, h => bs[i]'(by
---     refine Nat.lt_of_le_of_ne ?_ ?_
---     . sorry
---     . sorry
---   )
+def get : (a : ByteVector n) → (i : Nat) → (h : i < n := by get_elem_tactic) → UInt8
+  | ⟨bs, hb⟩, i, h => bs[i]'(by
+    refine Nat.lt_of_le_of_ne ?_ ?_
+    . subst hb
+      simp_all only [gt_iff_lt]
+      exact Nat.le_of_succ_le h
+    . subst hb
+      simp_all only [gt_iff_lt]
+      intro a
+      subst a
+      simp_all only [Nat.lt_irrefl]
+  )
 
--- instance : GetElem (ByteVector n) Nat UInt8 fun _ i => i < n where
---   getElem xs i _ := xs.get i
+instance : GetElem (ByteVector n) Nat UInt8 fun _ i => i < n where
+  getElem xs i _ := xs.get i
 
 -- instance : GetElem (ByteVector n) USize UInt8 fun _ i => i.toFin < n where
 --   getElem xs i h := xs.uget i (by sorry)
@@ -71,8 +77,8 @@ def get! : (ByteVector n) → Nat → UInt8
 def set! : (ByteVector n) → Nat → UInt8 → ByteVector n
   | ⟨bs, hb⟩, i, b => ⟨bs.set! i b, by simp [ByteArray.set!, ByteArray.size]; rw [← hb]; rfl⟩
 
--- def set : (a : ByteVector n) → (i : USize) → UInt8 → (h : i < n := by get_elem_tactic) → ByteVector n
---   | ⟨bs, hb⟩, i, b, h => ⟨bs.set i.toNat b (by sorry), by simp [ByteArray.set, ByteArray.size]; rw [← hb]; rfl⟩
+def set : (a : ByteVector n) → (i : Nat) → UInt8 → (h : i < n := by get_elem_tactic) → ByteVector n
+  | ⟨bs, hb⟩, i, b, h => ⟨bs.set i b (by subst hb; simp_all only [gt_iff_lt]), by simp [ByteArray.set, ByteArray.size]; rw [← hb]; rfl⟩
 
 -- def uset : (a : ByteVector n) → (i : USize) → UInt8 → (h : i < n := by get_elem_tactic) → ByteVector n
 --   | ⟨bs, hb⟩, i, v, h => ⟨bs.uset i v (by sorry), by simp [ByteArray.uset, ByteArray.size]; rw [← hb]; rfl⟩
@@ -88,17 +94,17 @@ instance : Hashable (ByteVector n) where
 --     simp [ByteArray.copySlice, ByteArray.usize, ByteArray.size]
 --     sorry
 
--- protected def append {n m : Nat} (a : ByteVector n) (b : ByteVector m) : ByteVector (n + m) where
---   toArray := b.toArray.copySlice 0 a.toArray n m false
---   size_toArray := by
---     simp [ByteArray.copySlice, ByteArray.size]
---     rw [← ByteArray.size, ← ByteArray.size]
---     rw [a.size_toArray, b.size_toArray]
---     simp only [Nat.min_self]
---     omega
+protected def append {n m : Nat} (a : ByteVector n) (b : ByteVector m) : ByteVector (n + m) where
+  toArray := b.toArray.copySlice 0 a.toArray n m false
+  size_toArray := by
+    simp [ByteArray.copySlice, ByteArray.size]
+    rw [← ByteArray.size, ← ByteArray.size]
+    rw [a.size_toArray, b.size_toArray]
+    simp only [Nat.min_self]
+    omega
 
--- instance {n m : Nat} : HAppend (ByteVector n) (ByteVector m) (ByteVector (n + m)) :=
---   ⟨ByteVector.append⟩
+instance {n m : Nat} : HAppend (ByteVector n) (ByteVector m) (ByteVector (n + m)) :=
+  ⟨ByteVector.append⟩
 
 def toList (bs : ByteVector n) : List UInt8 := bs.toArray.toList
 
@@ -108,9 +114,9 @@ def toList (bs : ByteVector n) : List UInt8 := bs.toArray.toList
 @[inline] protected def cast (h : n = m := by native_decide) (x : ByteVector n) : ByteVector m :=
   ⟨x.toArray, by rw [← h]; exact x.size_toArray⟩
 
--- @[inline] def findFinIdx? (a : ByteVector n) (p : UInt8 → Bool) (start := 0) : Option (Fin n.toNat) :=
---   let b := a.toArray.findFinIdx? p start
---   a.usize_toArray ▸ b
+@[inline] def findFinIdx? (a : ByteVector n) (p : UInt8 → Bool) (start := 0) : Option (Fin n) :=
+  let b := a.toArray.findFinIdx? p start
+  a.size_toArray ▸ b
 
 abbrev toBase64 (bs : ByteVector n) : String := bs.toArray.toBase64
 
@@ -118,6 +124,9 @@ def ofBase64? (s : String) : Option (ByteVector n) := do
   let data ← ByteArray.ofBase64? s
   if h : data.size = n then some ⟨data, h⟩
   else none
+
+abbrev toUInt64LE (bs : ByteVector 8) : UInt64 := bs.toArray.toUInt64LE!
+abbrev toUInt64BE (bs : ByteVector 8) : UInt64 := bs.toArray.toUInt64BE!
 
 instance : ToJson (ByteVector n) := ⟨Json.str ∘ toBase64⟩
 instance : FromJson (ByteVector n) := ⟨fun json => do
@@ -143,5 +152,8 @@ abbrev toVector? (bs : ByteArray) : Option (ByteVector n) :=
 
 abbrev toVector! (bs : ByteArray) : ByteVector n :=
   bs.toVector?.get!
+
+@[simp]
+theorem toVector_size : ∀ bs : ByteArray, bs.toVector.size = bs.size := by intro; rfl
 
 end ByteArray

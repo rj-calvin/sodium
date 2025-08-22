@@ -100,5 +100,9 @@ lean_lib «Sodium» where
       #[Module.oNoExportFacet, `module.alloy.c.o.noexport]
 
 lean_exe Debug where
-  root := `Sodium
+  nativeFacets := fun shouldExport =>
+    if shouldExport then
+      #[Module.oExportFacet, `module.alloy.c.o.export]
+    else
+      #[Module.oNoExportFacet, `module.alloy.c.o.noexport]
   moreLeancArgs := #["-g", "-O0"]  -- Debug symbols, no optimization

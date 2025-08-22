@@ -65,7 +65,7 @@ import «Sodium».FFI.Basic
 #eval testSodiumInit
 ```
 
-The project includes comprehensive test modules in `Tests/` for each FFI component.
+The project includes comprehensive test modules in `Sodium/FFI/Tests/` for each FFI component.
 
 ### Error Handling in FFI
 
@@ -97,6 +97,6 @@ The project includes comprehensive test modules in `Tests/` for each FFI compone
 3. Implement Alloy FFI binding in appropriate `Sodium/FFI/*.lean` file
 5. Check `lake build` to check for alloy compilation errors
 5. Check `lean-lsp` to check for type errors
-6. Create corresponding tests in `Tests/*.lean`
+6. Create corresponding tests in `Sodium/FFI/Tests/*.lean`
 8. Add `#eval` commands to verify test expressions - use `lean-lsp` to check messages
 9. Test functionality and document any special usage requirements

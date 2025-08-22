@@ -75,6 +75,9 @@ structure Nonce (spec : Spec) [h : spec.HasValidShape `nonce] where
   data : ByteVector (spec.shapeOf `nonce)
   deriving ToJson, FromJson
 
+structure Seed (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `seed] where
+  data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `seed) (by simp [h.shape_is_valid])
+
 structure SymmKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `symmkey] where
   data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `symmkey) (by simp [h.shape_is_valid])
 
@@ -88,32 +91,19 @@ structure PublicKey (spec : Spec) [h : spec.HasValidShape `publickey] where
 structure SharedKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `sharedkey] where
   data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `sharedkey) (by simp [h.shape_is_valid])
 
-structure SessionKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `sessionkey] where
-  data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `sessionkey) (by simp [h.shape_is_valid])
-
 structure KeyPair (τ : Sodium σ) (spec : Spec) [spec.HasValidShape `publickey] [spec.HasValidShape `secretkey] where
   pkey : PublicKey spec
   skey : SecretKey τ spec
 
-structure Session (τ : Sodium σ) (spec : Spec) [spec.HasValidShape `sessionkey] where
-  rx : SessionKey τ spec
-  tx : SessionKey τ spec
-
-structure MetaKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `metakey] where
-  data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `metakey) (by simp [h.shape_is_valid])
-
-structure Seed (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `seed] where
-  data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `seed) (by simp [h.shape_is_valid])
+structure Session (τ : Sodium σ) (spec : Spec) [spec.HasValidShape `symmkey] where
+  rx : SymmKey τ spec
+  tx : SymmKey τ spec
 
 structure Mac (spec : Spec) [h : spec.HasValidShape `mac] where
   data : ByteVector (spec.shapeOf `mac)
   deriving ToJson, FromJson
 
-structure AuthTag (spec : Spec) where
-  data : ByteVector (spec.shapeOf `tag)
-  deriving ToJson, FromJson
-
-structure HashOutput (spec : Spec) where
+structure Hash (spec : Spec) where
   data : ByteVector (spec.shapeOf `hash)
   deriving ToJson, FromJson
 
@@ -124,7 +114,7 @@ structure Context (spec : Spec) [h : spec.HasValidShape `context] where
   data : ByteVector (spec.shapeOf `context)
   deriving ToJson, FromJson
 
-structure StreamHeader (spec : Spec) where
+structure Header (spec : Spec) where
   data : ByteVector (spec.shapeOf `header)
   deriving ToJson, FromJson
 
@@ -161,32 +151,6 @@ instance : FromJson (CipherText spec) where
 
 end CipherText
 
-structure TaggedCipherText (spec : Spec) where
-  size : Nat
-  data : ByteVector size
-  shapeOf_tag_le_size : spec.shapeOf `tag ≤ size
-
-namespace TaggedCipherText
-
-variable {spec : Spec}
-
-instance : ToJson (TaggedCipherText spec) where
-  toJson cipher := json% {
-    size : $cipher.size,
-    data : $cipher.data
-  }
-
-instance : FromJson (TaggedCipherText spec) where
-  fromJson? json := do
-    let size ← json.getObjValAs? Nat "size"
-    let data ← json.getObjValAs? (ByteVector size) "data"
-    if h : spec.shapeOf `tag ≤ size then
-      return ⟨size, data, h⟩
-    else
-      throw "expected data to contain embedded tag"
-
-end TaggedCipherText
-
 structure SealedCipherText (spec : Spec) where
   size : Nat
   data : ByteVector size
@@ -212,5 +176,31 @@ instance : FromJson (SealedCipherText spec) where
       throw "expected data to contain embedded seal"
 
 end SealedCipherText
+
+structure CipherChunk (spec : Spec) where
+  size : Nat
+  data : ByteVector size
+  shapeOf_mac_le_size : spec.shapeOf `mac ≤ size
+
+namespace CipherChunk
+
+variable {spec : Spec}
+
+instance : ToJson (CipherChunk spec) where
+  toJson cipher := json% {
+    size : $cipher.size,
+    data : $cipher.data
+  }
+
+instance : FromJson (CipherChunk spec) where
+  fromJson? json := do
+    let size ← json.getObjValAs? Nat "size"
+    let data ← json.getObjValAs? (ByteVector size) "data"
+    if h : spec.shapeOf `mac ≤ size then
+      return ⟨size, data, h⟩
+    else
+      throw "expected data to contain embedded mac"
+
+end CipherChunk
 
 end Sodium.Crypto
