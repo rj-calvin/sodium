@@ -1,6 +1,6 @@
 import «Sodium».FFI.Aead
 
-namespace Sodium.Tests.AEAD
+namespace Sodium.FFI.Tests.AEAD
 
 open Sodium.FFI.Aead
 
@@ -75,4 +75,4 @@ open Sodium.FFI.Aead
   | none =>
     IO.println "✓ Correctly rejected message with corrupted MAC"
 
-end Sodium.Tests.AEAD
+end Sodium.FFI.Tests.AEAD

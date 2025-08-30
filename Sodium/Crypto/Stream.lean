@@ -12,9 +12,9 @@ variable {α ε σ : Type} {τ : Sodium σ}
 
 structure SecretEncoder (τ : Sodium σ) where
   private mk ::
-  stream : SecureStream τ
-  header : Header XChaCha20Poly1305
   closed : IO.Ref Bool
+  header : Header XChaCha20Poly1305
+  stream : SecureStream τ
 
 namespace SecretEncoder
 
@@ -30,13 +30,13 @@ def isClosed (encoder : SecretEncoder τ) : CryptoM τ Bool :=
 def close (encoder : SecretEncoder τ) : CryptoM τ Unit :=
   encoder.closed.set true
 
-def push [ToChunks α] (encoder : SecretEncoder τ) (x : α) (final := false) : CryptoM τ (IO.AsyncList IO.Error (CipherChunk XChaCha20Poly1305)) := do
+def push [ToChunks α] (encoder : SecretEncoder τ) (x : α) (prio : Task.Priority := .dedicated) (final := false) : CryptoM τ (IO.AsyncList IO.Error (CipherChunk XChaCha20Poly1305)) := do
   have : XChaCha20Poly1305.shapeOf `mac = ABYTES := by native_decide
   if ← encoder.closed.get then return ∅
   let chunks := toChunks x |>.map (String.toUTF8 ∘ Json.compress)
   let some last := chunks.getLast?
     | return ∅
-  let messages ← chunks.dropLast.foldIO (prio := .dedicated) fun chunk => do
+  let messages ← chunks.dropLast.foldIO (prio := prio) fun chunk => do
     let cipher ← streamPush encoder.stream chunk.toVector .empty .message
     return ⟨cipher.size, cipher, by simp [this]⟩
   let terminal ← Server.ServerTask.IO.asTask <| do
@@ -45,13 +45,20 @@ def push [ToChunks α] (encoder : SecretEncoder τ) (x : α) (final := false) : 
   if final then encoder.closed.set true
   return messages.append <| .delayed <| terminal.mapCheap (·.map pure)
 
+def rekey (encoder : SecretEncoder τ) : CryptoM τ (IO.AsyncList IO.Error (CipherChunk XChaCha20Poly1305)) := do
+  have : XChaCha20Poly1305.shapeOf `mac = ABYTES := by native_decide
+  if ← encoder.closed.get then return ∅
+  let cipher ← streamPush encoder.stream (json% null).compress.toUTF8.toVector .empty .rekey
+  streamRekey encoder.stream
+  return .ofList [⟨cipher.size, cipher, by simp [this]⟩]
+
 end SecretEncoder
 
 structure SecretDecoder (τ : Sodium σ) where
   private mk ::
-  stream : SecureStream τ
-  buffer : IO.Ref (List Json)
   closed : IO.Ref Bool
+  buffer : IO.Ref (List Json)
+  stream : SecureStream τ
 
 namespace SecretDecoder
 
@@ -96,11 +103,9 @@ def pull [FromChunks α] (decoder : SecretDecoder τ) (src : List (CipherChunk X
         break
 
     match tag with
-    | .message =>
-      decoder.buffer.modify fun acc => acc ++ [json]
     | .rekey =>
       streamRekey decoder.stream
-      decoder.buffer.modify fun acc => acc ++ [json]
+    | .message => decoder.buffer.modify fun acc => acc ++ [json]
     | .push =>
       let acc := (← decoder.buffer.swap []) ++ [json]
       match fromChunks? acc with

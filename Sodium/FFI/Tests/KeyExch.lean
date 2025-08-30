@@ -1,6 +1,6 @@
 import «Sodium».FFI.KeyExch
 
-namespace Sodium.Tests.KeyExch
+namespace Sodium.FFI.Tests.KeyExch
 
 open Sodium FFI KeyExch
 
@@ -297,6 +297,4 @@ open Sodium FFI KeyExch
   catch e =>
     IO.println s!"✗ Multiple server scenario failed: {e}"
 
-#eval IO.println "\n=== KeyExch FFI Tests Complete ==="
-
-end Sodium.Tests.KeyExch
+end Sodium.FFI.Tests.KeyExch

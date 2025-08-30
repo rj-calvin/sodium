@@ -5,7 +5,7 @@ open Sodium.Crypto (Spec)
 
 open Lean System IO.FS Sodium
 
-namespace Tests.SecureFileLoad
+namespace Sodium.FFI.Tests.SecureFileLoad
 
 -- Test helper to remove test files
 def cleanupTestFile (filename : FilePath) : IO Unit := do
@@ -85,4 +85,4 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
   catch _ =>
     IO.println "✓ Correctly handled non-existent file"
 
-end Tests.SecureFileLoad
+end Sodium.FFI.Tests.SecureFileLoad

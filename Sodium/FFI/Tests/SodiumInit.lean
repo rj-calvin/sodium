@@ -1,6 +1,6 @@
 import «Sodium».FFI.Basic
 
-namespace Sodium.Tests.SodiumInit
+namespace Sodium.FFI.Tests.SodiumInit
 
 -- Test basic Sodium initialization
 #eval show IO Unit from do
@@ -29,4 +29,4 @@ namespace Sodium.Tests.SodiumInit
   catch e =>
     IO.println s!"✗ Sodium context creation failed: {e}"
 
-end Sodium.Tests.SodiumInit
+end Sodium.FFI.Tests.SodiumInit

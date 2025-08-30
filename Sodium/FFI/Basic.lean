@@ -4,7 +4,7 @@ import Alloy.C
 
 open scoped Alloy.C
 
-alloy c include <sodium.h> <lean/lean.h> <string.h> <stdio.h> <stdlib.h>
+alloy c include <sodium.h> <lean/lean.h> <string.h> <stdio.h> <stdlib.h> <unistd.h>
 
 structure Sodium (σ : Type) where private mk ::
 
@@ -290,6 +290,50 @@ def toFile {τ : @& Sodium σ} (buf : @& SecureVector τ n) (fileKey : @& Secure
 
   fclose(file);
   return lean_io_result_mk_ok(lean_box(0));
+
+
+alloy c extern "lean_sodium_read_stdin_secure"
+unsafe def ofStdin {τ : @& Sodium σ} (prompt : @& String) (maxSize : USize) : IO (SecureVector τ maxSize) :=
+  const char* prompt_str = lean_string_cstr(prompt);
+
+  void* secure_ptr = sodium_malloc(maxSize);
+  if (secure_ptr == NULL) {
+    lean_object* error_msg = lean_mk_string("Failed to allocate secure memory");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  sodium_mprotect_readwrite(secure_ptr);
+
+  char* password = getpass(prompt_str);
+  if (password == NULL) {
+    sodium_mprotect_noaccess(secure_ptr);
+    sodium_free(secure_ptr);
+    lean_object* error_msg = lean_mk_string("Failed to read password");
+    lean_object* io_error = lean_mk_io_user_error(error_msg);
+    return lean_io_result_mk_error(io_error);
+  }
+
+  size_t pass_len = strlen(password);
+  if (pass_len > maxSize) {
+    pass_len = maxSize;
+  }
+
+  memcpy(secure_ptr, password, pass_len);
+  memset(password, 0, strlen(password));
+
+  if (pass_len < maxSize) {
+    sodium_memzero(((unsigned char*)secure_ptr) + pass_len, maxSize - pass_len);
+  }
+
+  sodium_mprotect_noaccess(secure_ptr);
+
+  lean_object* secure_pointed = to_lean<SecurePointed>(secure_ptr);
+  lean_object* secure_ref = lean_alloc_ctor(0, 1, sizeof(size_t));
+  lean_ctor_set(secure_ref, 0, secure_pointed);
+  lean_ctor_set_usize(secure_ref, 1, maxSize);
+
+  return lean_io_result_mk_ok(secure_ref);
 
 protected def cast {τ : Sodium σ} (h : n = m := by simp) (a : SecureVector τ n) : SecureVector τ m :=
   ⟨a.ref, a.usize, by simpa only [a.usize_rfl]⟩

@@ -1,6 +1,6 @@
 import «Sodium».FFI.SecretStream
 
-namespace Sodium.Tests.SecretStream
+namespace Sodium.FFI.Tests.SecretStream
 
 open Sodium.FFI.SecretStream
 
@@ -138,4 +138,4 @@ open Sodium.FFI.SecretStream
   | none =>
     IO.println "✗ Post-rekey message authentication failed"
 
-end Sodium.Tests.SecretStream
+end Sodium.FFI.Tests.SecretStream

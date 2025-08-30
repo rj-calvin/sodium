@@ -1,6 +1,6 @@
 import «Sodium».FFI.Basic
 
-namespace Sodium.Tests.SecureVector
+namespace Sodium.FFI.Tests.SecureVector
 
 -- Test basic SecureVector allocation
 #eval show IO Unit from do
@@ -57,4 +57,4 @@ namespace Sodium.Tests.SecureVector
   catch e =>
     IO.println s!"✗ Multiple SecureVector allocations failed: {e}"
 
-end Sodium.Tests.SecureVector
+end Sodium.FFI.Tests.SecureVector

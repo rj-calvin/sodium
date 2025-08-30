@@ -112,7 +112,7 @@ def strVerify {τ : @& Sodium σ} (hashStr : String) (password : @& SecureVector
 -- Key derivation from password to secure array
 alloy c extern "lean_crypto_pwhash"
 def derive {τ : @& Sodium σ} (password : @& SecureVector τ n) (salt : @& ByteVector SALTBYTES)
-    (outLen : USize) (opslimit : USize) (memlimit : USize) (alg : USize) : IO (SecureVector τ outLen) :=
+    (outLen : USize) (opslimit : USize := OPSLIMIT_INTERACTIVE) (memlimit : USize := MEMLIMIT_INTERACTIVE) (alg : USize := ALG_DEFAULT) : IO (SecureVector τ outLen) :=
   size_t password_len = lean_ctor_get_usize(password, 1);
   size_t salt_len = lean_sarray_byte_size(salt);
 

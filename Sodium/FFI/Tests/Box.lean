@@ -2,7 +2,7 @@ import «Sodium».FFI.Basic
 import «Sodium».FFI.Box
 import «Sodium».Data.ByteVector
 
-namespace Sodium.Tests.BoxFFI
+namespace Sodium.FFI.Tests.Box
 
 open Sodium FFI.Box
 
@@ -128,7 +128,8 @@ open Sodium FFI.Box
       | do IO.println "✗ Shared secret generation 2 failed unexpectedly"; return
 
     let message := "Shared secret encryption test".toUTF8.toVector
-    let nonce := ByteVector.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     -- Encrypt with first shared secret
     let ciphertext ← easyAfternm (τ := ctx) message nonce sharedSecret1
@@ -158,7 +159,8 @@ open Sodium FFI.Box
     let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
     let message := "Detached encryption test".toUTF8.toVector
-    let nonce := ByteVector.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     -- Encrypt detached
     let some (ciphertext, mac) ← detached (τ := ctx) message nonce publicKey2 secretKey1
@@ -195,7 +197,8 @@ open Sodium FFI.Box
       | do IO.println "✗ Shared secret generation 2 failed unexpectedly"; return
 
     let message := "Detached shared secret test".toUTF8.toVector
-    let nonce := ByteVector.mk (n := NONCEBYTES) (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     -- Encrypt detached with shared secret
     let (ciphertext, mac) ← detachedAfternm (τ := ctx) message nonce sharedSecret1
@@ -260,7 +263,8 @@ open Sodium FFI.Box
     let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
     let emptyMessage := ByteVector.empty
-    let nonce := ByteVector.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     let some ciphertext ← easy (τ := ctx) emptyMessage nonce publicKey2 secretKey1
       | do IO.println "✗ Empty message encryption failed unexpectedly"; return
@@ -285,7 +289,8 @@ open Sodium FFI.Box
     let (publicKey3, secretKey3) ← keypair (τ := ctx)  -- Wrong keypair
 
     let message := "Authentication test".toUTF8.toVector
-    let nonce := ByteVector.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     let some ciphertext ← easy (τ := ctx) message nonce publicKey2 secretKey1
       | do IO.println "✗ Authentication test encryption failed unexpectedly"; return
@@ -304,13 +309,15 @@ open Sodium FFI.Box
     let (publicKey2, secretKey2) ← keypair (τ := ctx)
 
     let message := "MAC verification test".toUTF8.toVector
-    let nonce := ByteVector.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     let some (ciphertext, _mac) ← detached (τ := ctx) message nonce publicKey2 secretKey1
       | do IO.println "✗ Detached encryption failed unexpectedly"; return
 
     -- Create wrong MAC
-    let wrongMac := ByteVector.mk (List.range MACBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let wrongMac : ByteVector MACBYTES :=
+      (List.range MACBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     let result ← openDetached (τ := ctx) ciphertext wrongMac nonce publicKey1 secretKey2
     match result with
@@ -331,8 +338,10 @@ open Sodium FFI.Box
     let (publicKey2, _secretKey2) ← keypair (τ := ctx)
 
     let message := "Nonce uniqueness test".toUTF8.toVector
-    let nonce1 := ByteVector.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
-    let nonce2 := ByteVector.mk (List.range NONCEBYTES |>.map (fun x => (x + 1) % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce1 : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
+    let nonce2 : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (fun x => (x + 1) % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     let some ciphertext1 ← easy (τ := ctx) message nonce1 publicKey2 secretKey1
       | do IO.println "✗ Semantic security test encryption 1 failed"; return
@@ -362,7 +371,8 @@ open Sodium FFI.Box
 
     -- Encrypt same message with both shared secrets
     let message := "Shared secret uniqueness test".toUTF8.toVector
-    let nonce := ByteVector.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     let ciphertext1 ← easyAfternm (τ := ctx) message nonce sharedSecret1
     let ciphertext2 ← easyAfternm (τ := ctx) message nonce sharedSecret2
@@ -390,7 +400,8 @@ open Sodium FFI.Box
     for i in [0:10] do
       try
         let message := s!"Message {i}".toUTF8.toVector
-        let nonce := ByteVector.mk (List.range NONCEBYTES |>.map (fun x => (x + i) % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+        let nonce : ByteVector NONCEBYTES :=
+          (List.range NONCEBYTES |>.map (fun x => (x + i) % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector
 
         let some ciphertext ← easy (τ := ctx) message nonce publicKey2 secretKey1
           | continue
@@ -418,7 +429,8 @@ open Sodium FFI.Box
     -- Create a 1KB message
     let largeMessageArray := List.range 1024 |>.map (· % 256) |>.map UInt8.ofNat |>.toArray
     let largeMessage := (ByteArray.mk largeMessageArray).toVector
-    let nonce := ByteVector.mk (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk)
+    let nonce : ByteVector NONCEBYTES :=
+      (List.range NONCEBYTES |>.map (· % 256) |>.map UInt8.ofNat |>.toArray |> ByteArray.mk).toVector.cast
 
     let some ciphertext ← easy (τ := ctx) largeMessage nonce publicKey2 secretKey1
       | do IO.println "✗ Large message encryption failed unexpectedly"; return
@@ -434,6 +446,4 @@ open Sodium FFI.Box
   catch e =>
     IO.println s!"✗ Large message encryption/decryption failed: {e}"
 
-#eval IO.println "\n=== Box FFI Tests Complete ==="
-
-end Sodium.Tests.BoxFFI
+end Sodium.FFI.Tests.Box

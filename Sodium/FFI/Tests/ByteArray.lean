@@ -4,7 +4,7 @@ import Lean.Data.Json
 
 open Lean
 
-namespace Sodium.Tests.ByteArrayData
+namespace Sodium.FFI.Tests.ByteArray
 
 open ByteArray
 
@@ -301,4 +301,4 @@ open ByteArray
 
 #eval IO.println "\n=== ByteArray Data Tests Complete ==="
 
-end Sodium.Tests.ByteArrayData
+end Sodium.FFI.Tests.ByteArray

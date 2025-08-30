@@ -1,10 +1,14 @@
 import «Sodium».FFI.Basic
 import «Sodium».FFI.KeyDeriv
-import «Sodium».Data.ByteArray
+import «Sodium».Data.ByteVector
 
-namespace Sodium.Tests.KeyDerivFFI
+namespace Sodium.FFI.Tests.KeyDeriv
 
 open Sodium.FFI.KeyDeriv
+
+-- Helper function to create context from ByteVector
+private def mkContext (data : Array UInt8) (h : data.size = 8 := by rfl) : ByteVector CONTEXTBYTES :=
+  (ByteArray.mk data).toVector.cast h
 
 -- =============================================================================
 -- Test Constants and Size Validations
@@ -25,7 +29,7 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let _masterKey ← keygen ctx
+    let _masterKey ← keygen (τ := ctx)
     IO.println "✓ Master key generation succeeded"
   catch e =>
     IO.println s!"✗ Master key generation failed: {e}"
@@ -38,9 +42,9 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
-    let subkey ← derive ctx 32 1 context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
+    let subkey ← derive (τ := ctx) 32 1 context masterKey
     if subkey.size == 32 then
       IO.println "✓ Key derivation succeeded with correct size (32 bytes)"
     else
@@ -52,10 +56,10 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
-    let minSubkey ← derive ctx BYTES_MIN 1 context masterKey
-    let maxSubkey ← derive ctx BYTES_MAX 2 context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
+    let minSubkey ← derive (τ := ctx) BYTES_MIN 1 context masterKey
+    let maxSubkey ← derive (τ := ctx) BYTES_MAX 2 context masterKey
 
     if minSubkey.size == BYTES_MIN && maxSubkey.size == BYTES_MAX then
       IO.println "✓ Min/max subkey sizes work correctly"
@@ -72,10 +76,10 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
-    let subkey1 ← derive ctx 32 1 context masterKey
-    let subkey2 ← derive ctx 32 2 context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
+    let subkey1 ← derive (τ := ctx) 32 1 context masterKey
+    let subkey2 ← derive (τ := ctx) 32 2 context masterKey
     if subkey1 != subkey2 then
       IO.println "✓ Different subkey IDs produce different keys"
     else
@@ -87,11 +91,11 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context1 : UInt64 := 0x7465737463747831  -- "testctx1" as hex
-    let context2 : UInt64 := 0x7465737463747832  -- "testctx2" as hex
-    let subkey1 ← derive ctx 32 1 context1 masterKey
-    let subkey2 ← derive ctx 32 1 context2 masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context1 := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x31]  -- "testctx1" as bytes
+    let context2 := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x32]  -- "testctx2" as bytes
+    let subkey1 ← derive (τ := ctx) 32 1 context1 masterKey
+    let subkey2 ← derive (τ := ctx) 32 1 context2 masterKey
     if subkey1 != subkey2 then
       IO.println "✓ Different contexts produce different keys"
     else
@@ -103,10 +107,10 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
-    let subkey1 ← derive ctx 32 1 context masterKey
-    let subkey2 ← derive ctx 32 1 context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
+    let subkey1 ← derive (τ := ctx) 32 1 context masterKey
+    let subkey2 ← derive (τ := ctx) 32 1 context masterKey
     if subkey1 == subkey2 then
       IO.println "✓ Identical parameters produce identical keys (deterministic)"
     else
@@ -122,9 +126,9 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0  -- Zero context
-    let subkey ← derive ctx 32 1 context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]  -- Zero context
+    let subkey ← derive (τ := ctx) 32 1 context masterKey
     if subkey.size == 32 then
       IO.println "✓ Zero context works correctly"
     else
@@ -136,9 +140,9 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := UInt64.ofNat (2^64 - 1)  -- Maximum UInt64 value
-    let subkey ← derive ctx 32 1 context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]  -- Maximum value
+    let subkey ← derive (τ := ctx) 32 1 context masterKey
     if subkey.size == 32 then
       IO.println "✓ Maximum UInt64 context works correctly"
     else
@@ -150,9 +154,9 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
-    let _ ← derive ctx (BYTES_MIN - 1) 1 context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
+    let _ ← derive (τ := ctx) (BYTES_MIN - 1) 1 context masterKey
     IO.println "✗ Should have failed with subkey size too small"
   catch e =>
     IO.println s!"✓ Correctly rejected subkey size too small: {e}"
@@ -161,9 +165,9 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
-    let _ ← derive ctx (BYTES_MAX + 1) 1 context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
+    let _ ← derive (τ := ctx) (BYTES_MAX + 1) 1 context masterKey
     IO.println "✗ Should have failed with subkey size too large"
   catch e =>
     IO.println s!"✓ Correctly rejected subkey size too large: {e}"
@@ -176,9 +180,9 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
-    let subkey ← derive ctx 32 0 context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
+    let subkey ← derive (τ := ctx) 32 0 context masterKey
     if subkey.size == 32 then
       IO.println "✓ Zero subkey ID works correctly"
     else
@@ -190,9 +194,9 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
-    let subkey ← derive ctx 32 (UInt64.ofNat (2^64 - 1)) context masterKey
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
+    let subkey ← derive (τ := ctx) 32 (UInt64.ofNat (2^64 - 1)) context masterKey
     if subkey.size == 32 then
       IO.println "✓ Maximum subkey ID works correctly"
     else
@@ -208,13 +212,13 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
 
     let mut success_count := 0
     for i in [0:10] do
       try
-        let subkey ← derive ctx 32 i.toUInt64 context masterKey
+        let subkey ← derive (τ := ctx) 32 i.toUInt64 context masterKey
         if subkey.size == 32 then
           success_count := success_count + 1
       catch _ =>
@@ -228,19 +232,19 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
+    let masterKey ← keygen (τ := ctx)
 
     let contexts := [
-      0x636F6E746578743100,  -- "context1" as hex
-      0x636F6E746578743200,  -- "context2" as hex
-      0x636F6E746578743300,  -- "context3" as hex
-      0x636F6E746578743400,  -- "context4" as hex
-      0x636F6E746578743500   -- "context5" as hex
+      mkContext #[0x63, 0x6F, 0x6E, 0x74, 0x65, 0x78, 0x74, 0x31],  -- "context1" as bytes
+      mkContext #[0x63, 0x6F, 0x6E, 0x74, 0x65, 0x78, 0x74, 0x32],  -- "context2" as bytes
+      mkContext #[0x63, 0x6F, 0x6E, 0x74, 0x65, 0x78, 0x74, 0x33],  -- "context3" as bytes
+      mkContext #[0x63, 0x6F, 0x6E, 0x74, 0x65, 0x78, 0x74, 0x34],  -- "context4" as bytes
+      mkContext #[0x63, 0x6F, 0x6E, 0x74, 0x65, 0x78, 0x74, 0x35]   -- "context5" as bytes
     ]
 
-    let mut keys : Array (SecureArray ctx) := #[]
+    let mut keys : Array (SecureVector ctx 32) := #[]
     for context in contexts do
-      let subkey ← derive ctx 32 1 context masterKey
+      let subkey ← derive (τ := ctx) 32 1 context masterKey
       keys := keys.push subkey
 
     -- Verify all keys are different
@@ -266,12 +270,12 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey1 ← keygen ctx
-    let masterKey2 ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
+    let masterKey1 ← keygen (τ := ctx)
+    let masterKey2 ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
 
-    let subkey1 ← derive ctx 32 1 context masterKey1
-    let subkey2 ← derive ctx 32 1 context masterKey2
+    let subkey1 ← derive (τ := ctx) 32 1 context masterKey1
+    let subkey2 ← derive (τ := ctx) 32 1 context masterKey2
 
     if subkey1 != subkey2 then
       IO.println "✓ Different master keys produce different subkeys"
@@ -288,20 +292,20 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
+    let masterKey ← keygen (τ := ctx)
 
     let common_contexts := [
-      0x5573657241757468,  -- "UserAuth" as hex
-      0x446174614B657900,  -- "DataKey\x00" as hex
-      0x46696C65456E6372,  -- "FileEncr" as hex
-      0x4461746162617365,  -- "Database" as hex
-      0x53657373696F6E00   -- "Session\x00" as hex
+      mkContext #[0x55, 0x73, 0x65, 0x72, 0x41, 0x75, 0x74, 0x68],  -- "UserAuth" as bytes
+      mkContext #[0x44, 0x61, 0x74, 0x61, 0x4B, 0x65, 0x79, 0x00],  -- "DataKey\x00" as bytes
+      mkContext #[0x46, 0x69, 0x6C, 0x65, 0x45, 0x6E, 0x63, 0x72],  -- "FileEncr" as bytes
+      mkContext #[0x44, 0x61, 0x74, 0x61, 0x62, 0x61, 0x73, 0x65],  -- "Database" as bytes
+      mkContext #[0x53, 0x65, 0x73, 0x73, 0x69, 0x6F, 0x6E, 0x00]   -- "Session\x00" as bytes
     ]
 
     let mut success_count := 0
     for context in common_contexts do
       try
-        let _subkey ← derive ctx 32 1 context masterKey
+        let _subkey ← derive (τ := ctx) 32 1 context masterKey
         success_count := success_count + 1
       catch _ =>
         continue
@@ -314,15 +318,15 @@ open Sodium.FFI.KeyDeriv
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let masterKey ← keygen ctx
-    let context : UInt64 := 0x74657374637478  -- "testctx" as hex
+    let masterKey ← keygen (τ := ctx)
+    let context := mkContext #[0x74, 0x65, 0x73, 0x74, 0x63, 0x74, 0x78, 0x00]
 
     let sizes := [16, 24, 32, 48, 64]  -- Common key sizes
     let mut success_count := 0
 
     for size in sizes do
       try
-        let subkey ← derive ctx size.toUSize 1 context masterKey
+        let subkey ← derive (τ := ctx) size.toUSize 1 context masterKey
         if subkey.size == size then
           success_count := success_count + 1
       catch _ =>
@@ -335,4 +339,4 @@ open Sodium.FFI.KeyDeriv
 
 #eval IO.println "\n=== KeyDeriv FFI Tests Complete ==="
 
-end Sodium.Tests.KeyDerivFFI
+end Sodium.FFI.Tests.KeyDeriv

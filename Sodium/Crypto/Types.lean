@@ -71,25 +71,29 @@ theorem toOption_some_iff {a : α} : ∀ r : DecryptResult α, toOption r = some
 
 end DecryptResult
 
-structure Nonce (spec : Spec) [h : spec.HasValidShape `nonce] where
-  data : ByteVector (spec.shapeOf `nonce)
-  deriving ToJson, FromJson
+structure Nonce (spec : Spec) [spec.HasValidShape `nonce] where
+  data : ByteVector spec[`nonce]
+  deriving BEq, ToJson, FromJson
 
 structure Seed (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `seed] where
-  data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `seed) (by simp [h.shape_is_valid])
+  data : SecureVector τ <| USize.ofNatLT spec[`seed] (by simp [h.shape_is_valid])
+  deriving BEq
 
 structure SymmKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `symmkey] where
-  data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `symmkey) (by simp [h.shape_is_valid])
+  data : SecureVector τ <| USize.ofNatLT spec[`symmkey] (by simp [h.shape_is_valid])
+  deriving BEq
 
 structure SecretKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `secretkey] where
-  data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `secretkey) (by simp [h.shape_is_valid])
+  data : SecureVector τ <| USize.ofNatLT spec[`secretkey] (by simp [h.shape_is_valid])
+  deriving BEq
 
-structure PublicKey (spec : Spec) [h : spec.HasValidShape `publickey] where
-  data : ByteVector (spec.shapeOf `publickey)
-  deriving ToJson, FromJson
+structure PublicKey (spec : Spec) [spec.HasValidShape `publickey] where
+  data : ByteVector spec[`publickey]
+  deriving BEq, ToJson, FromJson
 
 structure SharedKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `sharedkey] where
-  data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `sharedkey) (by simp [h.shape_is_valid])
+  data : SecureVector τ <| USize.ofNatLT spec[`sharedkey] (by simp [h.shape_is_valid])
+  deriving BEq
 
 structure KeyPair (τ : Sodium σ) (spec : Spec) [spec.HasValidShape `publickey] [spec.HasValidShape `secretkey] where
   pkey : PublicKey spec
@@ -99,38 +103,62 @@ structure Session (τ : Sodium σ) (spec : Spec) [spec.HasValidShape `symmkey] w
   rx : SymmKey τ spec
   tx : SymmKey τ spec
 
-structure Mac (spec : Spec) [h : spec.HasValidShape `mac] where
-  data : ByteVector (spec.shapeOf `mac)
-  deriving ToJson, FromJson
+structure Mac (spec : Spec) [spec.HasValidShape `mac] where
+  data : ByteVector spec[`mac]
+  deriving BEq, ToJson, FromJson
 
-structure Hash (spec : Spec) where
-  data : ByteVector (spec.shapeOf `hash)
-  deriving ToJson, FromJson
+structure Hash (spec : Spec) [spec.HasValidShape `minhash] [spec.HasValidShape `maxhash] where
+  size : Nat
+  data : ByteVector size
+  shapeOf_minhash_le_size : spec[`minhash] ≤ size
+  shapeOf_maxhash_ge_size : spec[`maxhash] ≥ size
+  deriving BEq
+
+namespace Hash
+
+variable {spec : Spec} [spec.HasValidShape `minhash] [spec.HasValidShape `maxhash]
+
+instance : ToJson (Hash spec) where
+  toJson hash := json% {
+    size : $hash.size,
+    data : $hash.data
+  }
+
+instance : FromJson (Hash spec) where
+  fromJson? json := do
+    let size ← json.getObjValAs? Nat "size"
+    let data ← json.getObjValAs? (ByteVector size) "data"
+    if h1 : spec[`minhash] ≤ size then
+      if h2 : spec[`maxhash] ≥ size then
+        return ⟨size, data, h1, h2⟩
+      else
+        throw "expected data size to be at most maxhash"
+    else
+      throw "expected data size to be at least minhash"
+
+end Hash
 
 structure Salt (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `salt] where
-  data : SecureVector τ <| USize.ofNatLT (spec.shapeOf `salt) (by simp [h.shape_is_valid])
+  data : SecureVector τ <| USize.ofNatLT spec[`salt] (by simp [h.shape_is_valid])
+  deriving BEq
 
-structure Context (spec : Spec) [h : spec.HasValidShape `context] where
-  data : ByteVector (spec.shapeOf `context)
-  deriving ToJson, FromJson
+structure Context (spec : Spec) [spec.HasValidShape `context] where
+  data : ByteVector spec[`context]
+  deriving BEq, ToJson, FromJson
 
-structure Header (spec : Spec) where
-  data : ByteVector (spec.shapeOf `header)
-  deriving ToJson, FromJson
+structure Header (spec : Spec) [spec.HasValidShape `header] where
+  data : ByteVector spec[`header]
+  deriving BEq, ToJson, FromJson
 
-structure Signature (spec : Spec) where
-  data : ByteVector (spec.shapeOf `signature)
-  deriving ToJson, FromJson
-
-structure CipherText (spec : Spec) [spec.HasValidShape `nonce] where
+structure CipherText (spec : Spec) [spec.HasValidShape `nonce] [spec.HasValidShape `mac] where
   size : Nat
   data : ByteVector size
   nonce : Nonce spec
-  shapeOf_mac_le_size : spec.shapeOf `mac ≤ size
+  shapeOf_mac_le_size : spec[`mac] ≤ size
 
 namespace CipherText
 
-variable {spec : Spec} [spec.HasValidShape `nonce]
+variable {spec : Spec} [spec.HasValidShape `nonce] [spec.HasValidShape `mac]
 
 instance : ToJson (CipherText spec) where
   toJson cipher := json% {
@@ -151,14 +179,14 @@ instance : FromJson (CipherText spec) where
 
 end CipherText
 
-structure SealedCipherText (spec : Spec) where
+structure SealedCipherText (spec : Spec) [spec.HasValidShape `seal] where
   size : Nat
   data : ByteVector size
-  shapeOf_seal_le_size : spec.shapeOf `seal ≤ size
+  shapeOf_seal_le_size : spec[`seal] ≤ size
 
 namespace SealedCipherText
 
-variable {spec : Spec}
+variable {spec : Spec} [spec.HasValidShape `seal]
 
 instance : ToJson (SealedCipherText spec) where
   toJson cipher := json% {
@@ -177,14 +205,14 @@ instance : FromJson (SealedCipherText spec) where
 
 end SealedCipherText
 
-structure CipherChunk (spec : Spec) where
+structure CipherChunk (spec : Spec) [spec.HasValidShape `mac] where
   size : Nat
   data : ByteVector size
-  shapeOf_mac_le_size : spec.shapeOf `mac ≤ size
+  shapeOf_mac_le_size : spec[`mac] ≤ size
 
 namespace CipherChunk
 
-variable {spec : Spec}
+variable {spec : Spec} [spec.HasValidShape `mac]
 
 instance : ToJson (CipherChunk spec) where
   toJson cipher := json% {
