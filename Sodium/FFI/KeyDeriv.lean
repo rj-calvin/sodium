@@ -17,6 +17,7 @@ end
 -- Constants for crypto_kdf
 def KEYBYTES : Nat := 32
 def CONTEXTBYTES : Nat := 8
+def BYTES_DEFAULT : Nat := 32
 def BYTES_MIN : Nat := 16
 def BYTES_MAX : Nat := 64
 

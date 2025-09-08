@@ -12,17 +12,20 @@ class ToChunks (α : Type u) where
 
 export ToChunks (toChunks)
 
-instance (priority := low) [ToJson α] : ToChunks (List α) where
+instance [ToJson α] : ToChunks (List α) where
   toChunks xs := xs.map toJson
 
-instance (priority := low) [ToJson α] : ToChunks (Array α) := ⟨toChunks ∘ Array.toList⟩
+instance [ToJson α] : ToChunks (Array α) := ⟨toChunks ∘ Array.toList⟩
 
 class FromChunks (α : Type u) where
   fromChunks? : List Json → Except String α
 
 export FromChunks (fromChunks?)
 
-instance (priority := low) [FromJson α] : FromChunks (List α) where
+class LawfulChunks (α : Type u) [ToChunks α] [FromChunks α] where
+  chunksk : ∀ a, fromChunks? (α := α) (toChunks a) = .ok a
+
+instance [FromJson α] : FromChunks (List α) where
   fromChunks?
     | [] => .ok []
     | chunks => chunks.mapM fromJson?

@@ -11,18 +11,15 @@ variable {α β σ : Type}
 namespace Context
 
 instance : Coe (ByteVector 8) (Context Blake2b) where
-  coe x := ⟨x.cast⟩
+  coe x := x.cast
 
 def ofString (x : String) (h : x.utf8ByteSize = 8 := by rfl) : Context Blake2b :=
   let ctx := x.toUTF8
-  have : Blake2b[`context] = ctx.size := by
+  have : ctx.size = Blake2b[`context] := by
     simp [blake2b_context_eq]
     rw [String.size_toUTF8, h]
     rfl
-  ⟨this ▸ ctx.toVector⟩
-
-instance : Inhabited (Context Blake2b) where
-  default := ofString "standard"
+  ctx.toVector.cast this
 
 inductive Paranoia
   | normal
@@ -30,13 +27,27 @@ inductive Paranoia
   | severe
   deriving TypeName, Inhabited, BEq, DecidableEq, Ord, Repr, ToJson, FromJson
 
+def Paranoia.toString : Paranoia → String
+  | .normal => "standard"
+  | .moderate => "cautious"
+  | .severe => "paranoid"
+
+instance : ToString Paranoia := ⟨Paranoia.toString⟩
+
+@[simp]
+theorem shapeOf_paranoia_eq : ∀ p : Paranoia, p.toString.utf8ByteSize = 8 := by
+  intro _
+  simp [Paranoia.toString]
+  split <;> rfl
+
 @[coe]
-def Paranoia.asContext : Paranoia → Context Blake2b
-  | .normal => default
-  | .moderate => Context.ofString "cautious"
-  | .severe => Context.ofString "paranoid"
+def Paranoia.asContext : Paranoia → Context Blake2b := fun p =>
+  Context.ofString p.toString (by simp only [shapeOf_paranoia_eq])
 
 instance : Coe Paranoia (Context Blake2b) := ⟨Paranoia.asContext⟩
+
+instance : Inhabited (Context Blake2b) where
+  default := Paranoia.normal
 
 end Context
 
@@ -87,27 +98,20 @@ register_option crypto.entropyBytes : Nat := {
   descr := "The number of random bytes to allocate for entropy."
 }
 
+open FFI KeyDeriv in
 def toMetaM (x : {σ : Type} → (τ : Sodium σ) → CryptoM τ α) (ctx : Context Blake2b := default) : MetaM α := do
   let τ ← init Unit
   let entropy ← EntropyVector.new (τ := τ) (crypto.entropyBytes.get (← getOptions)).toUSize
-  let mkey ← FFI.KeyDeriv.keygen (τ := τ)
+  let mkey ← keygen (τ := τ)
   let mtx ← Mutex.new {entropy}
-  x τ {mtx, ctx, mkey := ⟨mkey.cast⟩}
+  x τ {mtx, ctx, mkey := mkey.cast}
 
 def currContext : CryptoM τ (Context Blake2b) := return (← read).ctx
+def withContext (x : CryptoM τ α) (ctx : Context Blake2b := default) : CryptoM τ α := do x {← read with ctx}
 
-def withContext (x : CryptoM τ α) (ctx : Context Blake2b := default) : CryptoM τ α := do
-  let st ← read
-  show MetaM α from Meta.withNewMCtxDepth do
-    x {st with ctx}
-
+open Meta in
 def withMetaKey (mkey : SymmKey τ Blake2b) (x : CryptoM τ α) : CryptoM τ α := do
-  let st ← read
-  show MetaM α from Meta.withNewMCtxDepth do
-    x {st with mkey}
-
-abbrev clearActiveNonces : CryptoM τ Unit := do
-  (← read).mtx.atomically <| modify ({· with nonces := ∅})
+  withNewMCtxDepth (x {← read with mkey})
 
 def mkFreshNonce [h : spec.HasValidShape `nonce] : CryptoM τ (Nonce spec) := do
   let mtx := (← read).mtx
@@ -119,8 +123,8 @@ def mkFreshNonce [h : spec.HasValidShape `nonce] : CryptoM τ (Nonce spec) := do
         haveI : spec'.HasValidShape `nonce := by
           rw [Spec.has_valid_shape_iff, eq_shape]
           exact h.shape_is_valid
-        let shape := stale.get this |>.data.succ
-        let nonce := ⟨eq_shape ▸ shape⟩
+        let shape := (stale.get this).succ
+        let nonce := shape.cast eq_shape
         let nonces := st.nonces.insert spec.name ⟨spec, ⟨h, fun _ => nonce⟩⟩
         ref.modifyGet fun st => (nonce, {st with nonces})
       else
@@ -152,62 +156,79 @@ where
 instance : MonadNameGenerator (CryptoM τ) where
   getNGen := do
     let nonce ← mkFreshNonce (spec := UniqId)
-    let ctx := (← read).ctx.data.toArray
+    let ctx := (← read).ctx.toArray
     let ctx := match String.fromUTF8? ctx with
       | some name => Name.str UniqId.name name
       | _ => Name.str .anonymous ctx.toBase64
-    return {namePrefix := ctx, idx := nonce.data.cast.toUInt64LE.toNat}
+    return {namePrefix := ctx, idx := nonce.cast.toUInt64LE.toNat}
   setNGen _ :=
     return () -- not allowed, so we ignore.
 
 end CryptoM
 
-export CryptoM (mkFreshNonce currContext withContext withMetaKey clearActiveNonces)
+export CryptoM (mkFreshNonce currContext withContext withMetaKey)
 
-def mkFreshKey {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
-    (lift : SecureVector τ spec[kind] → X τ spec) : CryptoM τ (X τ spec) := do
-  let key ← SecureVector.new spec[kind]
+def mkFreshKey {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape `symmkey] → Type} [spec.HasValidShape `symmkey]
+    (lift : SecureVector τ spec[`symmkey] → X τ spec) : CryptoM τ (X τ spec) := do
+  let key ← SecureVector.new spec[`symmkey]
   return lift key
 
 open FFI KeyDeriv in
-def mkStaleKey {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
-    (lift : SecureVector τ spec[kind] → X τ spec) : CryptoM τ (X τ spec) := do
+def mkStaleKey {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape `symmkey] → Type} [spec.HasValidShape `symmkey]
+    (lift : SecureVector τ spec[`symmkey] → X τ spec) : CryptoM τ (X τ spec) := do
   let {mkey, ctx, ..} ← read
   let mctx ← getMCtx
-  let key ← derive spec[kind] mctx.depth ctx.data.cast mkey.data.cast
+  let key ← derive spec[`symmkey] mctx.depth ctx.cast mkey.cast
   return lift key
+
+def withNewMetaKey (x : CryptoM τ α) : CryptoM τ α := do
+  withMetaKey (← mkStaleKey (·.cast)) x
 
 open FFI KeyExch in
 def mkFreshKeys : CryptoM τ (KeyPair τ Curve25519) := do
   let (pkey, skey) ← keypair
-  return ⟨⟨pkey.cast⟩, ⟨skey.cast⟩⟩
+  return ⟨pkey.cast, skey.cast⟩
 
 open FFI KeyExch in
 def mkStaleKeys : CryptoM τ (KeyPair τ Curve25519) := do
-  let key : Seed τ UniqId ← mkStaleKey fun data => ⟨data.cast⟩
-  let (pkey, skey) ← seedKeypair key.data.cast
-  return ⟨⟨pkey.cast⟩, ⟨skey.cast⟩⟩
+  let key : SymmKey _ Blake2b ← mkStaleKey (·.cast)
+  let (pkey, skey) ← seedKeypair (key.cast (by native_decide))
+  return ⟨pkey.cast, skey.cast⟩
 
-open FFI Box in
-def newSharedKey? (yours : SecretKey τ Curve25519) (theirs : PublicKey Curve25519) : CryptoM τ (Option (SharedKey τ Curve25519HSalsa20)) := do
-  let some key ← beforenm theirs.data.cast (yours.data.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
-    | return none
-  return some ⟨key.cast (by native_decide)⟩
+open FFI Sign in
+def mkFreshSignature : CryptoM τ (KeyPair τ Ed25519) := do
+  let (pkey, skey) ← keypair
+  return ⟨pkey.cast, skey.cast⟩
+
+open FFI Sign in
+def mkStaleSignature : CryptoM τ (KeyPair τ Ed25519) := do
+  let key : SymmKey _ Blake2b ← mkStaleKey (·.cast)
+  let (pkey, skey) ← seedKeypair (key.cast (by native_decide))
+  return ⟨pkey.cast, skey.cast⟩
 
 open FFI KeyExch in
-def newClientSession? (yours : KeyPair τ Curve25519) (theirs : PublicKey Curve25519) : CryptoM τ (Option (Session τ Curve25519Blake2b)) := do
-  let some sess ← clientSessionKeys yours.pkey.data.cast yours.skey.data.cast theirs.data.cast
+def newClientSession? (key : PublicKey Curve25519) (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (Option (Session τ Curve25519Blake2b)) := do
+  let {pkey, skey} ← keys.getDM mkStaleKeys
+  let some sess ← clientSessionKeys pkey.cast skey.cast key.cast
     | return none
-  return some ⟨⟨sess.1.cast (by native_decide)⟩, ⟨sess.2.cast (by native_decide)⟩⟩
+  return some ⟨sess.1.cast (by native_decide), sess.2.cast (by native_decide)⟩
 
 open FFI KeyExch in
-def newServerSession? (yours : KeyPair τ Curve25519) (theirs : PublicKey Curve25519) : CryptoM τ (Option (Session τ Curve25519Blake2b)) := do
-  let some sess ← serverSessionKeys yours.pkey.data.cast yours.skey.data.cast theirs.data.cast
+def newServerSession? (key : PublicKey Curve25519) (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (Option (Session τ Curve25519Blake2b)) := do
+  let {pkey, skey} ← keys.getDM mkStaleKeys
+  let some sess ← serverSessionKeys pkey.cast skey.cast key.cast
     | return none
-  return some ⟨⟨sess.1.cast (by native_decide)⟩, ⟨sess.2.cast (by native_decide)⟩⟩
+  return some ⟨sess.1.cast (by native_decide), sess.2.cast (by native_decide)⟩
+
+open FFI KeyExch in
+def newMetaSession (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (Session τ Curve25519Blake2b) := do
+  let keys ← keys.getDM mkStaleKeys
+  let some sess ← newServerSession? keys.pkey keys
+    | throwSpecViolation Curve25519 `publickey
+  return sess
 
 abbrev withSessionKey (key : SymmKey τ Curve25519Blake2b) : CryptoM τ α → CryptoM τ α :=
-  withMetaKey ⟨key.data.cast (by native_decide)⟩
+  withMetaKey (key.cast (by native_decide))
 
 abbrev Session.withReceiver (sess : Session τ Curve25519Blake2b) : CryptoM τ α → CryptoM τ α :=
   withSessionKey sess.rx
@@ -215,14 +236,12 @@ abbrev Session.withReceiver (sess : Session τ Curve25519Blake2b) : CryptoM τ �
 abbrev Session.withTransmitter (sess : Session τ Curve25519Blake2b) : CryptoM τ α → CryptoM τ α :=
   withSessionKey sess.tx
 
-def withNewMetaKey (x : CryptoM τ α) : CryptoM τ α := do
-  withMetaKey (← mkStaleKey fun data => ⟨data.cast⟩) x
-
 open FFI SecretBox in
-def encrypt [ToJson α] (key : SymmKey τ XSalsa20) (msg : α) : CryptoM τ (CipherText XSalsa20Poly1305) := do
+def encrypt [ToJson α] (msg : α) (key : Option (SymmKey τ XSalsa20) := none) : CryptoM τ (CipherText XSalsa20Poly1305) := do
+  let key ← key.getDM (mkStaleKey (·.cast))
   let nonce ← mkFreshNonce (spec := XSalsa20Poly1305)
   let data := toJson msg |>.compress.toUTF8.toVector
-  let cipher ← easy data nonce.data.cast key.data.cast
+  let cipher ← easy data nonce.cast key.cast
   return {
     nonce
     size := cipher.size
@@ -235,14 +254,15 @@ def encrypt [ToJson α] (key : SymmKey τ XSalsa20) (msg : α) : CryptoM τ (Cip
   }
 
 open FFI SecretBox in
-def decrypt? [FromJson α] (key : SymmKey τ XSalsa20) (cipher : CipherText XSalsa20Poly1305) : CryptoM τ (DecryptResult α) := do
+def decrypt? [FromJson α] (cipher : CipherText XSalsa20Poly1305) (key : Option (SymmKey τ XSalsa20) := none) : CryptoM τ (DecryptResult α) := do
   have : cipher.size = MACBYTES + (cipher.size - MACBYTES) := by
     have mac_le : XSalsa20Poly1305.shapeOf `mac ≤ cipher.size := cipher.shapeOf_mac_le_size
     have : XSalsa20Poly1305.shapeOf `mac = MACBYTES := by native_decide
     rw [this] at mac_le
     rw [Nat.add_comm, Nat.sub_add_cancel mac_le]
 
-  let some bytes ← openEasy (cipher.data.cast this) cipher.nonce.data.cast key.data.cast
+  let key ← key.getDM (mkStaleKey (·.cast))
+  let some bytes ← openEasy (cipher.data.cast this) cipher.nonce.cast key.cast
     | return .refused
   let some msg := String.fromUTF8? bytes.toArray
     | return .mangled bytes.toArray
@@ -252,10 +272,17 @@ def decrypt? [FromJson α] (key : SymmKey τ XSalsa20) (cipher : CipherText XSal
   return fromJson? (α := α) json |>.mapError (DecryptError.invalidJson json)
 
 open FFI Box in
+def newSharedKey? (key : PublicKey Curve25519) (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (Option (SharedKey τ Curve25519HSalsa20)) := do
+  let {skey, ..} ← keys.getDM mkStaleKeys
+  let some key ← beforenm key.cast (skey.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
+    | return none
+  return some (key.cast (by native_decide))
+
+open FFI Box in
 def encryptTo [ToJson α] (key : SharedKey τ Curve25519HSalsa20) (msg : α) : CryptoM τ (CipherText XSalsa20Poly1305) := do
   let nonce ← mkFreshNonce (spec := XSalsa20Poly1305)
   let data := toJson msg |>.compress.toUTF8.toVector
-  let cipher ← easyAfternm data nonce.data.cast (key.data.cast (by native_decide))
+  let cipher ← easyAfternm data nonce.cast (key.cast (by native_decide))
   return {
     nonce
     size := cipher.size
@@ -275,7 +302,7 @@ def decryptFrom? [FromJson α] (key : SharedKey τ Curve25519HSalsa20) (cipher :
     rw [this] at mac_le
     rw [Nat.add_comm, Nat.sub_add_cancel mac_le]
 
-  let some bytes ← openEasyAfternm (cipher.data.cast this) cipher.nonce.data.cast (key.data.cast (by native_decide))
+  let some bytes ← openEasyAfternm (cipher.data.cast this) cipher.nonce.cast (key.cast (by native_decide))
     | return .refused
   let some msg := String.fromUTF8? bytes.toArray
     | return .mangled bytes.toArray
@@ -285,29 +312,30 @@ def decryptFrom? [FromJson α] (key : SharedKey τ Curve25519HSalsa20) (cipher :
   return fromJson? (α := α) json |>.mapError (DecryptError.invalidJson json)
 
 open FFI Box in
-def encryptAnon? [ToJson α] (theirs : PublicKey Curve25519) (msg : α) : CryptoM τ (Option (SealedCipherText XSalsa20Poly1305)) := do
+def encryptAnon? [ToJson α] (key : PublicKey Curve25519) (msg : α) : CryptoM τ (Option (SealedCipherText Curve25519XSalsa20Poly1305)) := do
   let nonce ← mkFreshNonce (spec := XSalsa20Poly1305)
   let data := toJson msg |>.compress.toUTF8.toVector
-  let some cipher ← easyAnonymous (τ := τ) data theirs.data.cast | return none
+  let some cipher ← easyAnonymous (τ := τ) data key.cast | return none
   return some {
     size := cipher.size
     data := cipher.cast (by rfl)
     shapeOf_seal_le_size := by
-      have : XSalsa20Poly1305.shapeOf `seal = SEALBYTES := by native_decide
+      have : Curve25519XSalsa20Poly1305.shapeOf `publickey + Curve25519XSalsa20Poly1305.shapeOf `mac = SEALBYTES := by native_decide
       simp [getElem]
       rw [this]
       exact Nat.le_add_right SEALBYTES (toJson msg).compress.toUTF8.size
   }
 
 open FFI Box in
-def decryptAnon? [FromJson α] (keys : KeyPair τ Curve25519) (cipher : SealedCipherText XSalsa20Poly1305) : CryptoM τ (DecryptResult α) := do
+def decryptAnon? [FromJson α] (cipher : SealedCipherText Curve25519XSalsa20Poly1305) (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (DecryptResult α) := do
   have : cipher.size = SEALBYTES + (cipher.size - SEALBYTES) := by
-    have seal_le : XSalsa20Poly1305.shapeOf `seal ≤ cipher.size := cipher.shapeOf_seal_le_size
-    have : XSalsa20Poly1305.shapeOf `seal = SEALBYTES := by native_decide
+    have seal_le : Curve25519XSalsa20Poly1305.shapeOf `publickey + Curve25519XSalsa20Poly1305.shapeOf `mac ≤ cipher.size := cipher.shapeOf_seal_le_size
+    have : Curve25519XSalsa20Poly1305.shapeOf `publickey + Curve25519XSalsa20Poly1305.shapeOf `mac = SEALBYTES := by native_decide
     rw [this] at seal_le
     rw [Nat.add_comm, Nat.sub_add_cancel seal_le]
 
-  let some bytes ← openAnonymous (cipher.data.cast this) keys.pkey.data.cast (keys.skey.data.cast (by native_decide))
+  let {pkey, skey} ← keys.getDM mkStaleKeys
+  let some bytes ← openAnonymous (cipher.data.cast this) pkey.cast (skey.cast (by native_decide))
     | return .refused
   let some msg := String.fromUTF8? bytes.toArray
     | return .mangled bytes.toArray
@@ -317,11 +345,12 @@ def decryptAnon? [FromJson α] (keys : KeyPair τ Curve25519) (cipher : SealedCi
   return fromJson? (α := α) json |>.mapError (DecryptError.invalidJson json)
 
 open FFI Aead in
-def encryptFst [ToJson α] [ToJson β] (key : SymmKey τ XChaCha20) (msg : α × β) : CryptoM τ (CipherText XChaCha20Poly1305 × Json) := do
+def encryptFst [ToJson α] [ToJson β] (msg : α × β) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (CipherText XChaCha20Poly1305 × Json) := do
   let nonce ← mkFreshNonce (spec := XChaCha20Poly1305)
+  let key ← key.getDM (mkStaleKey (·.cast))
   let data := toJson msg.1 |>.compress.toUTF8.toVector
   let ad := toJson msg.2
-  let cipher ← Aead.encrypt data ad.compress.toUTF8.toVector nonce.data.cast key.data.cast
+  let cipher ← Aead.encrypt data ad.compress.toUTF8.toVector nonce.cast key.cast
   let cipher := {
     nonce
     size := cipher.size
@@ -335,17 +364,17 @@ def encryptFst [ToJson α] [ToJson β] (key : SymmKey τ XChaCha20) (msg : α ×
   return (cipher, ad)
 
 open FFI Aead in
-def decryptFst? [FromJson α] [FromJson β] (key : SymmKey τ XChaCha20) (cipher : CipherText XChaCha20Poly1305 × Json) : CryptoM τ (DecryptResult (α × β)) := do
+def decryptFst? [FromJson α] [FromJson β] (cipher : CipherText XChaCha20Poly1305 × Json) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (DecryptResult (α × β)) := do
   have : cipher.1.size = ABYTES + (cipher.1.size - ABYTES) := by
     have mac_le : XChaCha20Poly1305.shapeOf `mac ≤ cipher.1.size := cipher.1.shapeOf_mac_le_size
     have : XChaCha20Poly1305.shapeOf `mac = ABYTES := by native_decide
     rw [this] at mac_le
     rw [Nat.add_comm, Nat.sub_add_cancel mac_le]
 
+  let key ← key.getDM (mkStaleKey (·.cast))
   let .ok b := fromJson? (α := β) cipher.2
     | return .refused
-
-  let some bytes ← decrypt (cipher.1.data.cast this) cipher.2.compress.toUTF8.toVector cipher.1.nonce.data.cast key.data.cast
+  let some bytes ← decrypt (cipher.1.data.cast this) cipher.2.compress.toUTF8.toVector cipher.1.nonce.cast key.cast
     | return .refused
   let some msg := String.fromUTF8? bytes.toArray
     | return .mangled bytes.toArray
@@ -355,11 +384,12 @@ def decryptFst? [FromJson α] [FromJson β] (key : SymmKey τ XChaCha20) (cipher
   return fromJson? (α := α) json |>.map (·, b) |>.mapError (DecryptError.invalidJson json)
 
 open FFI Aead in
-def encryptSnd [ToJson α] [ToJson β] (key : SymmKey τ XChaCha20) (msg : α × β) : CryptoM τ (Json × CipherText XChaCha20Poly1305) := do
+def encryptSnd [ToJson α] [ToJson β] (msg : α × β) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (Json × CipherText XChaCha20Poly1305) := do
   let nonce ← mkFreshNonce (spec := XChaCha20Poly1305)
+  let key ← key.getDM (mkStaleKey (·.cast))
   let data := toJson msg.2 |>.compress.toUTF8.toVector
   let ad := toJson msg.1
-  let cipher ← Aead.encrypt data ad.compress.toUTF8.toVector nonce.data.cast key.data.cast
+  let cipher ← Aead.encrypt data ad.compress.toUTF8.toVector nonce.cast key.cast
   let cipher := {
     nonce
     size := cipher.size
@@ -373,17 +403,17 @@ def encryptSnd [ToJson α] [ToJson β] (key : SymmKey τ XChaCha20) (msg : α ×
   return (ad, cipher)
 
 open FFI Aead in
-def decryptSnd? [FromJson α] [FromJson β] (key : SymmKey τ XChaCha20) (cipher : Json × CipherText XChaCha20Poly1305) : CryptoM τ (DecryptResult (α × β)) := do
+def decryptSnd? [FromJson α] [FromJson β] (cipher : Json × CipherText XChaCha20Poly1305) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (DecryptResult (α × β)) := do
   have : cipher.2.size = ABYTES + (cipher.2.size - ABYTES) := by
     have mac_le : XChaCha20Poly1305.shapeOf `mac ≤ cipher.2.size := cipher.2.shapeOf_mac_le_size
     have : XChaCha20Poly1305.shapeOf `mac = ABYTES := by native_decide
     rw [this] at mac_le
     rw [Nat.add_comm, Nat.sub_add_cancel mac_le]
 
+  let key ← key.getDM (mkStaleKey (·.cast))
   let .ok a := fromJson? (α := α) cipher.1
     | return .refused
-
-  let some bytes ← Aead.decrypt (cipher.2.data.cast this) cipher.1.compress.toUTF8.toVector cipher.2.nonce.data.cast key.data.cast
+  let some bytes ← Aead.decrypt (cipher.2.data.cast this) cipher.1.compress.toUTF8.toVector cipher.2.nonce.cast key.cast
     | return .refused
   let some msg := String.fromUTF8? bytes.toArray
     | return .mangled bytes.toArray
@@ -392,73 +422,74 @@ def decryptSnd? [FromJson α] [FromJson β] (key : SymmKey τ XChaCha20) (cipher
 
   return fromJson? (α := β) json |>.map (a, ·) |>.mapError (DecryptError.invalidJson json)
 
-def loadPublic (file : System.FilePath) (size : Nat) : CryptoM τ (ByteVector size) := do
-  let data ← IO.FS.readBinFile file
-  if h : data.size = size then
-    return ⟨data, h⟩
-  else
-    throw (.error .missing m!"File size mismatch: expected {size} bytes, got {data.size} bytes")
+open FFI Sign in
+def sign [ToJson α] (msg : α) (keys : Option (KeyPair τ Ed25519) := none) : CryptoM τ (Signature Ed25519) := do
+  let keys ← keys.getDM mkStaleSignature
+  let sig ← signDetached (toJson msg).compress.toUTF8.toVector keys.skey.cast
+  return sig.cast
 
-def loadSecret {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
-    (key : SymmKey τ XSalsa20) (file : System.FilePath)
-    (lift : SecureVector τ spec[kind] → X τ spec) : CryptoM τ (X τ spec) := do
-  let data ← SecureVector.ofFile key.data file spec[kind]
-  return lift data
+open FFI Sign in
+def verify [ToJson α] (sig : Signature Ed25519) (msg : α) (key : Option (PublicKey Ed25519) := none) : CryptoM τ Bool := do
+  let key ← key.getDM (mkStaleSignature.bind (pure ·.pkey))
+  verifyDetached sig.cast (toJson msg).compress.toUTF8.toVector key.cast
 
-def loadSeed (key : SymmKey τ XSalsa20) (file : System.FilePath) [spec.HasValidShape `seed] : CryptoM τ (Seed τ spec) :=
-  loadSecret key file fun data => ⟨data.cast (by simp [USize.ofNatLT_eq_ofNat]; congr)⟩
+def loadSecret? {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
+    (key : SymmKey τ XSalsa20) (file : System.FilePath) (lift : SecureVector τ spec[kind] → X τ spec) : CryptoM τ (Option (X τ spec)) := do
+  try
+    let data ← SecureVector.ofFile key file spec[kind]
+    return some (lift data)
+  catch _ => return none
 
-def loadSecretKey (key : SymmKey τ XSalsa20) (file : System.FilePath) : CryptoM τ (SecretKey τ Curve25519) :=
-  loadSecret key file fun data => ⟨data.cast⟩
+def loadSecretKey? (file : System.FilePath) : CryptoM τ (Option (SecretKey τ Curve25519)) := do
+  let key : SymmKey _ XSalsa20 ← mkStaleKey (·.cast)
+  loadSecret? key file (·.cast)
 
-def loadSymmKey (key : SymmKey τ XSalsa20) (file : System.FilePath) : CryptoM τ (SymmKey τ XSalsa20) :=
-  loadSecret key file fun data => ⟨data.cast⟩
+def loadSymmKey? (file : System.FilePath) : CryptoM τ (Option (SymmKey τ XSalsa20)) := do
+  let key : SymmKey _ XSalsa20 ← mkStaleKey (·.cast)
+  loadSecret? key file (·.cast)
 
-def loadSession (key : SymmKey τ XSalsa20) (fileRx : System.FilePath) (fileTx : System.FilePath) : CryptoM τ (Session τ Curve25519Blake2b) := do
-  let rx ← loadSecret key fileTx fun data => ⟨data.cast (by simp [USize.ofNatLT_eq_ofNat]; congr)⟩
-  let tx ← loadSecret key fileRx fun data => ⟨data.cast (by simp [USize.ofNatLT_eq_ofNat]; congr)⟩
-  return ⟨rx, tx⟩
+def loadSession? (fileRx : System.FilePath) (fileTx : System.FilePath) : CryptoM τ (Option (Session τ Curve25519Blake2b)) := do
+  let key : SymmKey _ XSalsa20 ← mkStaleKey (·.cast)
+  let some rx ← loadSecret? key fileTx (·.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
+    | return none
+  let some tx ← loadSecret? key fileRx (·.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
+    | return none
+  return some ⟨rx, tx⟩
 
-def withMetaKeyFromFile (key : SymmKey τ XSalsa20) (file : System.FilePath) (x : CryptoM τ α) : CryptoM τ α := do
-  withMetaKey (← loadSecret key file fun data => ⟨data.cast⟩) x
-
-def storePublic {n : Nat} (data : ByteVector n) (file : System.FilePath) : CryptoM τ Unit := do
-  IO.FS.writeBinFile file data.toArray
+def withMetaKeyFromFile? (file : System.FilePath) (x : CryptoM τ α) (key : Option (SymmKey τ XSalsa20) := none) : CryptoM τ (Option α) := do
+  let key ← key.getDM (mkStaleKey (·.cast))
+  let some mkey ← loadSecret? key file (·.cast)
+    | return none
+  some <$> withMetaKey mkey x
 
 def storeSecret {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
-    (item : X τ spec) (key : SymmKey τ XSalsa20) (file : System.FilePath)
-    (extract : X τ spec → SecureVector τ spec[kind]) : CryptoM τ Unit := do
+    (key : SymmKey τ XSalsa20) (file : System.FilePath) (item : X τ spec) (extract : X τ spec → SecureVector τ spec[kind]) : CryptoM τ Unit := do
   let data := extract item
-  data.toFile key.data file
+  data.toFile key file
 
-def storeSeed [spec.HasValidShape `seed] (item : Seed τ spec) (key : SymmKey τ XSalsa20) (file : System.FilePath) : CryptoM τ Unit :=
-  storeSecret item key file fun seed => seed.data.cast (by simp [USize.ofNatLT_eq_ofNat]; congr)
+def storeSecretKey (item : SecretKey τ Curve25519) (file : System.FilePath) : CryptoM τ Unit := do
+  let key : SymmKey _ XSalsa20 ← mkStaleKey (·.cast)
+  storeSecret key file item (·.cast)
 
-def storeSecretKey (item : SecretKey τ Curve25519) (key : SymmKey τ XSalsa20) (file : System.FilePath) : CryptoM τ Unit :=
-  storeSecret item key file fun skey => skey.data.cast
+def storeSymmKey (item : SymmKey τ XSalsa20) (file : System.FilePath) : CryptoM τ Unit := do
+  let key : SymmKey _ XSalsa20 ← mkStaleKey (·.cast)
+  storeSecret key file item (·.cast)
 
-def storeSymmKey (item : SymmKey τ XSalsa20) (key : SymmKey τ XSalsa20) (file : System.FilePath) : CryptoM τ Unit :=
-  storeSecret item key file fun symkey => symkey.data.cast
+def storeSession (item : Session τ Curve25519Blake2b) (fileRx : System.FilePath) (fileTx : System.FilePath) : CryptoM τ Unit := do
+  let key : SymmKey _ XSalsa20 ← mkStaleKey (·.cast)
+  storeSecret key fileRx item.rx (·.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
+  storeSecret key fileTx item.tx (·.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
 
-def storeSession (item : Session τ Curve25519Blake2b) (key : SymmKey τ XSalsa20) (fileRx : System.FilePath) (fileTx : System.FilePath) : CryptoM τ Unit := do
-  storeSecret item.rx key fileRx fun symkey => symkey.data.cast (by simp [USize.ofNatLT_eq_ofNat]; congr)
-  storeSecret item.tx key fileTx fun symkey => symkey.data.cast (by simp [USize.ofNatLT_eq_ofNat]; congr)
+def saveMetaKeyToFile (file : System.FilePath) (key : Option (SymmKey τ XSalsa20) := none) : CryptoM τ Unit := do
+  let key ← key.getDM (mkStaleKey (·.cast))
+  storeSecret key file (← read).mkey (·.cast)
 
-def storeMetaKey (key : SymmKey τ XSalsa20) (file : System.FilePath) : CryptoM τ Unit := do
-  storeSecret (← read).mkey key file fun mkey => mkey.data.cast
-
-open FFI PwHash in
-unsafe def readSecret {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
-    (lift : SecureVector τ spec[kind] → X τ spec) (prompt := s!"_secret.{spec.name}.{spec[kind]}") (paranoia := Context.Paranoia.normal) : CryptoM τ (X τ spec) := do
-  let data ← SecureVector.ofStdin prompt spec[kind]
-  let (opslimit, memlimit) := match paranoia with
-    | .normal => (OPSLIMIT_INTERACTIVE, MEMLIMIT_INTERACTIVE)
-    | .moderate => (OPSLIMIT_MODERATE, MEMLIMIT_MODERATE)
-    | .severe => (OPSLIMIT_SENSITIVE, MEMLIMIT_SENSITIVE)
-  let key ← derive data default spec[kind] (opslimit := opslimit) (memlimit := memlimit)
+unsafe def readSecret {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape `symmkey] → Type} [spec.HasValidShape `symmkey]
+    (lift : SecureVector τ spec[`symmkey] → X τ spec) (prompt := s!"{spec.name}.{spec[`symmkey] }") : CryptoM τ (X τ spec) := do
+  let key ← SecureVector.ofStdin prompt spec[`symmkey]
   return lift key
 
-unsafe def withMetaKeyFromInput (x : CryptoM τ α) (paranoia := Context.Paranoia.normal) : CryptoM τ α := do
-  withMetaKey (← readSecret (paranoia := paranoia) fun data => ⟨data.cast⟩) x
+unsafe def withMetaKeyFromInput (x : CryptoM τ α) : CryptoM τ α := do
+  withMetaKey (← readSecret (·.cast)) x
 
 end Sodium.Crypto

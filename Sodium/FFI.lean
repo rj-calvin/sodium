@@ -6,3 +6,5 @@ import Sodium.FFI.KeyDeriv
 import Sodium.FFI.PwHash
 import Sodium.FFI.Aead
 import Sodium.FFI.SecretStream
+import Sodium.FFI.GenericHash
+import Sodium.FFI.Sign

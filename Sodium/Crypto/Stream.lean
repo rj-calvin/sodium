@@ -19,10 +19,10 @@ structure SecretEncoder (τ : Sodium σ) where
 namespace SecretEncoder
 
 def new : CryptoM τ (SecretEncoder τ) := do
-  let key : SymmKey τ XChaCha20 ← mkFreshKey fun data => ⟨data.cast⟩
-  let (stream, header) ← streamInitPush (key.data.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
+  let key : SymmKey τ XChaCha20 ← mkFreshKey (·.cast)
+  let (stream, header) ← streamInitPush (key.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
   let closed ← IO.mkRef false
-  return {stream, header := ⟨header.cast⟩, closed}
+  return {stream, header := header.cast, closed}
 
 def isClosed (encoder : SecretEncoder τ) : CryptoM τ Bool :=
   encoder.closed.get
@@ -63,8 +63,8 @@ structure SecretDecoder (τ : Sodium σ) where
 namespace SecretDecoder
 
 def new (header : Header XChaCha20Poly1305) : CryptoM τ (SecretDecoder τ) := do
-  let key : SymmKey τ XChaCha20 ← mkFreshKey fun data => ⟨data.cast⟩
-  let stream ← streamInitPull header.data.cast (key.data.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
+  let key : SymmKey τ XChaCha20 ← mkFreshKey (·.cast)
+  let stream ← streamInitPull header.cast (key.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
   let buffer ← IO.mkRef []
   let closed ← IO.mkRef false
   return {stream, buffer, closed}

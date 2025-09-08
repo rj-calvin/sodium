@@ -128,12 +128,13 @@ def ofBase64? (s : String) : Option (ByteVector n) := do
 abbrev toUInt64LE (bs : ByteVector 8) : UInt64 := bs.toArray.toUInt64LE!
 abbrev toUInt64BE (bs : ByteVector 8) : UInt64 := bs.toArray.toUInt64BE!
 
-instance : ToJson (ByteVector n) := ⟨Json.str ∘ toBase64⟩
-instance : FromJson (ByteVector n) := ⟨fun json => do
-  let str ← Json.getStr? json
-  match ofBase64? str with
-  | some bytes => pure bytes
-  | none => throw "expected Base64 encoding"⟩
+instance : ToJson (ByteVector n) := ⟨toJson ∘ ByteVector.toArray⟩
+
+instance : FromJson (ByteVector n) where
+  fromJson? json := do
+    let bs ← fromJson? (α := ByteArray) json
+    if h : bs.size = n then return ⟨bs, h⟩
+    else throw s!"expected exactly {n} bytes"
 
 instance : BEq (ByteVector n) where
   beq x y := compare x.toArray y.toArray == .eq
@@ -156,4 +157,21 @@ abbrev toVector! (bs : ByteArray) : ByteVector n :=
 @[simp]
 theorem toVector_size : ∀ bs : ByteArray, bs.toVector.size = bs.size := by intro; rfl
 
+@[simp]
+theorem toVector_inj : ∀ bs : ByteArray, bs.toVector.toArray = bs := by intro; rfl
+
 end ByteArray
+
+namespace ByteVector
+
+variable {n : Nat}
+
+@[simp]
+theorem toArray_inj : ∀ bs : ByteVector n, bs.toArray.toVector = bs.cast (by exact Eq.symm bs.size_toArray) := by intro; rfl
+
+instance : DecidableEq (ByteVector n) := fun a b =>
+  match decEq a.toArray b.toArray with
+  | isTrue h => isTrue (by cases a; cases b; simp_all only)
+  | isFalse h => isFalse (fun eq => by cases eq; exact h rfl)
+
+end ByteVector

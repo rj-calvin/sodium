@@ -42,6 +42,8 @@ instance : BEq ByteArray where
 
 instance : Ord ByteArray := ⟨compare⟩
 
+deriving instance DecidableEq for ByteArray
+
 alloy c extern "lean_sodium_bin2base64"
 def toBase64 (buf : @& ByteArray) : String :=
   size_t len = lean_sarray_size(buf);
@@ -84,11 +86,24 @@ def ofBase64? (str : @& String) : Option ByteArray :=
   lean_ctor_set(some, 0, bin);
   return some;
 
-instance : ToJson ByteArray := ⟨Json.str ∘ toBase64⟩
-instance : FromJson ByteArray := ⟨fun json => do
-  let str ← Json.getStr? json
+private def toJsonImpl : ByteArray → Json := Json.str ∘ toBase64
+
+private def fromJson?Impl (json : Json) : Except String ByteArray := do
+  let str ← json.getStr?
   match ofBase64? str with
   | some bytes => pure bytes
-  | none => throw "expected Base64 encoding"⟩
+  | none => throw "expected Base64 encoding"
+
+@[implemented_by toJsonImpl]
+protected def toJson (bs : ByteArray) : Json := Json.arr (bs.data.map (Json.num ∘ JsonNumber.fromNat ∘ UInt8.toNat))
+
+@[implemented_by fromJson?Impl]
+protected def fromJson? (json : Json) : Except String ByteArray := do
+  let arr ← json.getArr?
+  let arr ← arr.mapM (·.getNat?)
+  return ⟨arr.map (·.toUInt8)⟩
+
+instance instToJson : ToJson ByteArray := ⟨ByteArray.toJson⟩
+instance instFromJson : FromJson ByteArray := ⟨ByteArray.fromJson?⟩
 
 end ByteArray

@@ -4,8 +4,6 @@
       "type": "stdio",
       "command": "uvx",
       "args": [
-        "--with-requirements",
-        "requirements.txt",
         "lean-lsp-mcp"
       ],
       "env": {}

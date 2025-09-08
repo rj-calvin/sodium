@@ -125,14 +125,21 @@ def Curve25519 : Spec where
     |>.insert `publickey PUBLICKEYBYTES
     |>.insert `secretkey SECRETKEYBYTES
 
+open FFI Sign in
+def Ed25519 : Spec where
+  name := `ed25519
+  shapes := RBMap.empty
+    |>.insert `publickey PUBLICKEYBYTES
+    |>.insert `secretkey SECRETKEYBYTES
+    |>.insert `signature BYTES
+
 open FFI KeyDeriv in
 def Blake2b : Spec where
   name := `blake2b
   shapes := RBMap.empty
     |>.insert `context CONTEXTBYTES
     |>.insert `symmkey KEYBYTES
-    |>.insert `minhash BYTES_MIN
-    |>.insert `maxhash BYTES_MAX
+    |>.insert `hash BYTES_DEFAULT
 
 open FFI SecretBox in
 def XSalsa20 : Spec where
@@ -152,7 +159,6 @@ def Poly1305 : Spec where
   name := `poly1305
   shapes := RBMap.empty
     |>.insert `mac MACBYTES
-    |>.insert `seal SEALBYTES
 
 open FFI Aead in
 def XChaCha20 : Spec where
@@ -161,9 +167,6 @@ def XChaCha20 : Spec where
     |>.insert `symmkey KEYBYTES
     |>.insert `nonce NONCEBYTES
     |>.insert `header SecretStream.HEADERBYTES
-
-theorem abytes_eq_macbytes : FFI.SecretStream.ABYTES = FFI.Box.MACBYTES := by rfl
-theorem aead_keybytes_eq_stream_keybytes : FFI.Aead.KEYBYTES = FFI.SecretStream.KEYBYTES := by rfl
 
 abbrev XSalsa20Poly1305 := XSalsa20 ++ Poly1305
 abbrev XChaCha20Poly1305 := XChaCha20 ++ Poly1305
@@ -207,6 +210,33 @@ instance : Curve25519.HasValidShape `publickey := by
 instance : Curve25519.HasValidShape `secretkey := by
   simp only [Spec.has_valid_shape_iff, curve25519_secretkey_eq, curve25519_secretkey_support]
 
+@[simp] theorem ed25519_publickey_eq : Ed25519.shapeOf `publickey = FFI.Sign.PUBLICKEYBYTES := by native_decide
+@[simp] theorem ed25519_publickey_valid : Spec.IsValidShape <| Ed25519.shapeOf `publickey := by native_decide
+@[simp] theorem ed25519_publickey_support : Spec.IsValidShape FFI.Sign.PUBLICKEYBYTES := by
+  rw [← ed25519_publickey_eq]
+  exact ed25519_publickey_valid
+
+@[simp] theorem ed25519_secretkey_eq : Ed25519.shapeOf `secretkey = FFI.Sign.SECRETKEYBYTES := by native_decide
+@[simp] theorem ed25519_secretkey_valid : Spec.IsValidShape <| Ed25519.shapeOf `secretkey := by native_decide
+@[simp] theorem ed25519_secretkey_support : Spec.IsValidShape FFI.Sign.SECRETKEYBYTES := by
+  rw [← ed25519_secretkey_eq]
+  exact ed25519_secretkey_valid
+
+@[simp] theorem ed25519_signature_eq : Ed25519.shapeOf `signature = FFI.Sign.BYTES := by native_decide
+@[simp] theorem ed25519_signature_valid : Spec.IsValidShape <| Ed25519.shapeOf `signature := by native_decide
+@[simp] theorem ed25519_signature_support : Spec.IsValidShape FFI.Sign.BYTES := by
+  rw [← ed25519_signature_eq]
+  exact ed25519_signature_valid
+
+instance : Ed25519.HasValidShape `publickey := by
+  simp only [Spec.has_valid_shape_iff, ed25519_publickey_eq, ed25519_publickey_support]
+
+instance : Ed25519.HasValidShape `secretkey := by
+  simp only [Spec.has_valid_shape_iff, ed25519_secretkey_eq, ed25519_secretkey_support]
+
+instance : Ed25519.HasValidShape `signature := by
+  simp only [Spec.has_valid_shape_iff, ed25519_signature_eq, ed25519_signature_support]
+
 @[simp] theorem blake2b_symmkey_eq : Blake2b.shapeOf `symmkey = FFI.KeyDeriv.KEYBYTES := by native_decide
 @[simp] theorem blake2b_symmkey_valid : Spec.IsValidShape <| Blake2b.shapeOf `symmkey := by native_decide
 @[simp] theorem blake2b_symmkey_support : Spec.IsValidShape FFI.KeyDeriv.KEYBYTES := by
@@ -219,11 +249,20 @@ instance : Curve25519.HasValidShape `secretkey := by
   rw [← blake2b_context_eq]
   exact blake2b_context_valid
 
+@[simp] theorem blake2b_hash_eq : Blake2b.shapeOf `hash = FFI.KeyDeriv.BYTES_DEFAULT := by native_decide
+@[simp] theorem blake2b_hash_valid : Spec.IsValidShape <| Blake2b.shapeOf `hash := by native_decide
+@[simp] theorem blake2b_hash_support : Spec.IsValidShape FFI.KeyDeriv.BYTES_DEFAULT := by
+  rw [← blake2b_hash_eq]
+  exact blake2b_hash_valid
+
 instance : Blake2b.HasValidShape `symmkey := by
   simp only [Spec.has_valid_shape_iff, blake2b_symmkey_eq, blake2b_symmkey_support]
 
 instance : Blake2b.HasValidShape `context := by
   simp only [Spec.has_valid_shape_iff, blake2b_context_eq, blake2b_context_support]
+
+instance : Blake2b.HasValidShape `hash := by
+  simp only [Spec.has_valid_shape_iff, blake2b_hash_eq, blake2b_hash_support]
 
 @[simp] theorem xsalsa20_nonce_eq : XSalsa20.shapeOf `nonce = FFI.SecretBox.NONCEBYTES := by native_decide
 @[simp] theorem xsalsa20_nonce_valid : Spec.IsValidShape <| XSalsa20.shapeOf `nonce := by native_decide
@@ -258,24 +297,15 @@ instance : HSalsa20.HasValidShape `sharedkey := by
   rw [← poly1305_mac_eq]
   exact poly1305_mac_valid
 
-@[simp] theorem poly1305_seal_eq : Poly1305.shapeOf `seal = FFI.Box.SEALBYTES := by native_decide
-@[simp] theorem poly1305_seal_valid : Spec.IsValidShape <| Poly1305.shapeOf `seal := by native_decide
-@[simp] theorem poly1305_seal_support : Spec.IsValidShape FFI.Box.SEALBYTES := by
-  rw [← poly1305_seal_eq]
-  exact poly1305_seal_valid
-
 @[simp]
 theorem curve25519xsalsa20poly1305_seal_eq :
-    Curve25519XSalsa20Poly1305.shapeOf `seal =
+    FFI.Box.SEALBYTES =
       Curve25519XSalsa20Poly1305.shapeOf `publickey +
       Curve25519XSalsa20Poly1305.shapeOf `mac := by
   native_decide
 
 instance : Poly1305.HasValidShape `mac := by
   simp only [Spec.has_valid_shape_iff, poly1305_mac_eq, poly1305_mac_support]
-
-instance : Poly1305.HasValidShape `seal := by
-  simp only [Spec.has_valid_shape_iff, poly1305_seal_eq, poly1305_seal_support]
 
 @[simp] theorem xchacha20_symmkey_eq : XChaCha20.shapeOf `symmkey = FFI.Aead.KEYBYTES := by native_decide
 @[simp] theorem xchacha20_symmkey_valid : Spec.IsValidShape <| XChaCha20.shapeOf `symmkey := by native_decide
@@ -307,13 +337,11 @@ instance : XChaCha20.HasValidShape `header := by
 instance : XSalsa20Poly1305.HasValidShape `nonce := by native_decide
 instance : XSalsa20Poly1305.HasValidShape `symmkey := by native_decide
 instance : XSalsa20Poly1305.HasValidShape `mac := by native_decide
-instance : XSalsa20Poly1305.HasValidShape `seal := by native_decide
 
 instance : XChaCha20Poly1305.HasValidShape `symmkey := by native_decide
 instance : XChaCha20Poly1305.HasValidShape `nonce := by native_decide
 instance : XChaCha20Poly1305.HasValidShape `header := by native_decide
 instance : XChaCha20Poly1305.HasValidShape `mac := by native_decide
-instance : XChaCha20Poly1305.HasValidShape `seal := by native_decide
 
 instance : Curve25519HSalsa20.HasValidShape `publickey := by native_decide
 instance : Curve25519HSalsa20.HasValidShape `secretkey := by native_decide
@@ -321,7 +349,6 @@ instance : Curve25519HSalsa20.HasValidShape `sharedkey := by native_decide
 
 instance : Curve25519XSalsa20Poly1305.HasValidShape `nonce := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `mac := by native_decide
-instance : Curve25519XSalsa20Poly1305.HasValidShape `seal := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `symmkey := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `publickey := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `secretkey := by native_decide

@@ -1,24 +1,16 @@
 # Sodium - LibSodium FFI Bindings for Lean4
 
-Type-safe Lean4 bindings for the LibSodium cryptographic library, providing compile-time size guarantees and memory-safe cryptographic operations.
+Lean4 bindings for the LibSodium cryptographic library.
 
-## Features
+## Project Structure
 
-- **LibSodium coverage**: 14/14 major categories, 100+ FFI function bindings
-- **[Alloy](https://github.com/tydeu/lean4-alloy) integration**: C code embedded directly in Lean files
-
-## Quick Start
-
-```bash
-# Build the project
-lake build
-
-# Run tests
-lake build Tests
-
-# Clean build
-lake clean && lake build
-```
+- **`Sodium/FFI/`**: Low-level FFI bindings to LibSodium functions
+  - AEAD, Box, GenericHash, KeyDeriv, KeyExch, PwHash, SecretBox, SecretStream, Sign
+- **`Sodium/Crypto/`**: High-level cryptographic API (work in progress)
+  - Monad, Types, Specs, Stream operations, Hash operations
+- **`Sodium/Data/`**: Supporting data structures
+  - ByteVector, ByteArray, Chunk, AsyncList
+- **`Sodium/FFI/Tests/`**: Test suite for all FFI modules
 
 ## LibSodium Resources
 
@@ -27,6 +19,9 @@ lake clean && lake build
 
 ## Status
 
-⚠️ **This project is still in development.** APIs may change and some features are not yet stabilized.
+⚠️ **This project is still in development.**
 
-Current implementation provides FFI bindings for all major LibSodium categories including symmetric/asymmetric encryption, digital signatures, hashing, key exchange, and more.
+- **FFI Layer**: Bindings available for 8 major LibSodium categories
+- **High-Level API**: Work in progress (`Sodium/Crypto/` modules)
+
+The FFI bindings are functional and tested, while the high-level cryptographic API is still being developed.
