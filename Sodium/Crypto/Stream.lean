@@ -110,13 +110,13 @@ def pull [FromChunks α] (decoder : SecretDecoder τ) (src : List (CipherChunk X
       let acc := (← decoder.buffer.swap []) ++ [json]
       match fromChunks? acc with
       | .ok item => results := results ++ [item]
-      | .error msg => error := some (.invalidJson (Json.arr acc.toArray) msg)
+      | .error msg => error := some (.invalidJson (Json.arr acc.toArray))
     | .final =>
       decoder.closed.set true
       let acc := (← decoder.buffer.swap []) ++ [json]
       match fromChunks? acc with
       | .ok item => results := results ++ [item]
-      | .error msg => error := some (.invalidJson (Json.arr acc.toArray) msg)
+      | .error msg => error := some (.invalidJson (Json.arr acc.toArray))
 
   return (results, error)
 

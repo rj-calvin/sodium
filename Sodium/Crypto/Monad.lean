@@ -220,13 +220,6 @@ def newServerSession? (key : PublicKey Curve25519) (keys : Option (KeyPair τ Cu
     | return none
   return some ⟨sess.1.cast (by native_decide), sess.2.cast (by native_decide)⟩
 
-open FFI KeyExch in
-def newMetaSession (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (Session τ Curve25519Blake2b) := do
-  let keys ← keys.getDM mkStaleKeys
-  let some sess ← newServerSession? keys.pkey keys
-    | throwSpecViolation Curve25519 `publickey
-  return sess
-
 abbrev withSessionKey (key : SymmKey τ Curve25519Blake2b) : CryptoM τ α → CryptoM τ α :=
   withMetaKey (key.cast (by native_decide))
 
@@ -237,10 +230,10 @@ abbrev Session.withTransmitter (sess : Session τ Curve25519Blake2b) : CryptoM �
   withSessionKey sess.tx
 
 open FFI SecretBox in
-def encrypt [ToJson α] (msg : α) (key : Option (SymmKey τ XSalsa20) := none) : CryptoM τ (CipherText XSalsa20Poly1305) := do
+def encrypt [Encodable α] (msg : α) (key : Option (SymmKey τ XSalsa20) := none) : CryptoM τ (CipherText XSalsa20Poly1305) := do
   let key ← key.getDM (mkStaleKey (·.cast))
   let nonce ← mkFreshNonce (spec := XSalsa20Poly1305)
-  let data := toJson msg |>.compress.toUTF8.toVector
+  let data := encode msg |>.compress.toUTF8.toVector
   let cipher ← easy data nonce.cast key.cast
   return {
     nonce
@@ -250,11 +243,11 @@ def encrypt [ToJson α] (msg : α) (key : Option (SymmKey τ XSalsa20) := none) 
       have : XSalsa20Poly1305.shapeOf `mac = MACBYTES := by native_decide
       simp [getElem]
       rw [this]
-      exact Nat.le_add_right MACBYTES (toJson msg).compress.toUTF8.size
+      exact Nat.le_add_right MACBYTES _
   }
 
 open FFI SecretBox in
-def decrypt? [FromJson α] (cipher : CipherText XSalsa20Poly1305) (key : Option (SymmKey τ XSalsa20) := none) : CryptoM τ (DecryptResult α) := do
+def decrypt? [Encodable α] (cipher : CipherText XSalsa20Poly1305) (key : Option (SymmKey τ XSalsa20) := none) : CryptoM τ (DecryptResult α) := do
   have : cipher.size = MACBYTES + (cipher.size - MACBYTES) := by
     have mac_le : XSalsa20Poly1305.shapeOf `mac ≤ cipher.size := cipher.shapeOf_mac_le_size
     have : XSalsa20Poly1305.shapeOf `mac = MACBYTES := by native_decide
@@ -268,8 +261,9 @@ def decrypt? [FromJson α] (cipher : CipherText XSalsa20Poly1305) (key : Option 
     | return .mangled bytes.toArray
   let .ok json := Json.parse msg
     | return .unknown msg
-
-  return fromJson? (α := α) json |>.mapError (DecryptError.invalidJson json)
+  let some a := decode? (α := α) json
+    | return .almost json
+  return .accepted a
 
 open FFI Box in
 def newSharedKey? (key : PublicKey Curve25519) (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (Option (SharedKey τ Curve25519HSalsa20)) := do
@@ -279,9 +273,9 @@ def newSharedKey? (key : PublicKey Curve25519) (keys : Option (KeyPair τ Curve2
   return some (key.cast (by native_decide))
 
 open FFI Box in
-def encryptTo [ToJson α] (key : SharedKey τ Curve25519HSalsa20) (msg : α) : CryptoM τ (CipherText XSalsa20Poly1305) := do
+def encryptTo [Encodable α] (key : SharedKey τ Curve25519HSalsa20) (msg : α) : CryptoM τ (CipherText XSalsa20Poly1305) := do
   let nonce ← mkFreshNonce (spec := XSalsa20Poly1305)
-  let data := toJson msg |>.compress.toUTF8.toVector
+  let data := encode msg |>.compress.toUTF8.toVector
   let cipher ← easyAfternm data nonce.cast (key.cast (by native_decide))
   return {
     nonce
@@ -291,11 +285,11 @@ def encryptTo [ToJson α] (key : SharedKey τ Curve25519HSalsa20) (msg : α) : C
       have : XSalsa20Poly1305.shapeOf `mac = MACBYTES := by native_decide
       simp [getElem]
       rw [this]
-      exact Nat.le_add_right MACBYTES (toJson msg).compress.toUTF8.size
+      exact Nat.le_add_right MACBYTES _
   }
 
 open FFI Box in
-def decryptFrom? [FromJson α] (key : SharedKey τ Curve25519HSalsa20) (cipher : CipherText XSalsa20Poly1305) : CryptoM τ (DecryptResult α) := do
+def decryptFrom? [Encodable α] (key : SharedKey τ Curve25519HSalsa20) (cipher : CipherText XSalsa20Poly1305) : CryptoM τ (DecryptResult α) := do
   have : cipher.size = MACBYTES + (cipher.size - MACBYTES) := by
     have mac_le : XSalsa20Poly1305.shapeOf `mac ≤ cipher.size := cipher.shapeOf_mac_le_size
     have : XSalsa20Poly1305.shapeOf `mac = MACBYTES := by native_decide
@@ -308,13 +302,14 @@ def decryptFrom? [FromJson α] (key : SharedKey τ Curve25519HSalsa20) (cipher :
     | return .mangled bytes.toArray
   let .ok json := Json.parse msg
     | return .unknown msg
-
-  return fromJson? (α := α) json |>.mapError (DecryptError.invalidJson json)
+  let some a := decode? (α := α) json
+    | return .almost json
+  return .accepted a
 
 open FFI Box in
-def encryptAnon? [ToJson α] (key : PublicKey Curve25519) (msg : α) : CryptoM τ (Option (SealedCipherText Curve25519XSalsa20Poly1305)) := do
+def encryptAnon? [Encodable α] (key : PublicKey Curve25519) (msg : α) : CryptoM τ (Option (SealedCipherText Curve25519XSalsa20Poly1305)) := do
   let nonce ← mkFreshNonce (spec := XSalsa20Poly1305)
-  let data := toJson msg |>.compress.toUTF8.toVector
+  let data := encode msg |>.compress.toUTF8.toVector
   let some cipher ← easyAnonymous (τ := τ) data key.cast | return none
   return some {
     size := cipher.size
@@ -323,11 +318,11 @@ def encryptAnon? [ToJson α] (key : PublicKey Curve25519) (msg : α) : CryptoM �
       have : Curve25519XSalsa20Poly1305.shapeOf `publickey + Curve25519XSalsa20Poly1305.shapeOf `mac = SEALBYTES := by native_decide
       simp [getElem]
       rw [this]
-      exact Nat.le_add_right SEALBYTES (toJson msg).compress.toUTF8.size
+      exact Nat.le_add_right SEALBYTES _
   }
 
 open FFI Box in
-def decryptAnon? [FromJson α] (cipher : SealedCipherText Curve25519XSalsa20Poly1305) (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (DecryptResult α) := do
+def decryptAnon? [Encodable α] (cipher : SealedCipherText Curve25519XSalsa20Poly1305) (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (DecryptResult α) := do
   have : cipher.size = SEALBYTES + (cipher.size - SEALBYTES) := by
     have seal_le : Curve25519XSalsa20Poly1305.shapeOf `publickey + Curve25519XSalsa20Poly1305.shapeOf `mac ≤ cipher.size := cipher.shapeOf_seal_le_size
     have : Curve25519XSalsa20Poly1305.shapeOf `publickey + Curve25519XSalsa20Poly1305.shapeOf `mac = SEALBYTES := by native_decide
@@ -341,14 +336,15 @@ def decryptAnon? [FromJson α] (cipher : SealedCipherText Curve25519XSalsa20Poly
     | return .mangled bytes.toArray
   let .ok json := Json.parse msg
     | return .unknown msg
-
-  return fromJson? (α := α) json |>.mapError (DecryptError.invalidJson json)
+  let some a := decode? (α := α) json
+    | return .almost json
+  return .accepted a
 
 open FFI Aead in
-def encryptFst [ToJson α] [ToJson β] (msg : α × β) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (CipherText XChaCha20Poly1305 × Json) := do
+def encryptFst [Encodable α] [ToJson β] (msg : α × β) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (CipherText XChaCha20Poly1305 × Json) := do
   let nonce ← mkFreshNonce (spec := XChaCha20Poly1305)
   let key ← key.getDM (mkStaleKey (·.cast))
-  let data := toJson msg.1 |>.compress.toUTF8.toVector
+  let data := encode msg.1 |>.compress.toUTF8.toVector
   let ad := toJson msg.2
   let cipher ← Aead.encrypt data ad.compress.toUTF8.toVector nonce.cast key.cast
   let cipher := {
@@ -359,35 +355,37 @@ def encryptFst [ToJson α] [ToJson β] (msg : α × β) (key : Option (SymmKey �
       have : XChaCha20Poly1305.shapeOf `mac = ABYTES := by native_decide
       simp [getElem]
       rw [this]
-      exact Nat.le_add_right ABYTES (toJson msg.1).compress.toUTF8.size
+      exact Nat.le_add_right ABYTES _
   }
   return (cipher, ad)
 
 open FFI Aead in
-def decryptFst? [FromJson α] [FromJson β] (cipher : CipherText XChaCha20Poly1305 × Json) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (DecryptResult (α × β)) := do
+def decryptFst? [Encodable α] [FromJson β] (cipher : CipherText XChaCha20Poly1305 × Json) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (DecryptResult (α × β)) := do
   have : cipher.1.size = ABYTES + (cipher.1.size - ABYTES) := by
     have mac_le : XChaCha20Poly1305.shapeOf `mac ≤ cipher.1.size := cipher.1.shapeOf_mac_le_size
     have : XChaCha20Poly1305.shapeOf `mac = ABYTES := by native_decide
     rw [this] at mac_le
     rw [Nat.add_comm, Nat.sub_add_cancel mac_le]
 
-  let key ← key.getDM (mkStaleKey (·.cast))
   let .ok b := fromJson? (α := β) cipher.2
     | return .refused
+
+  let key ← key.getDM (mkStaleKey (·.cast))
   let some bytes ← decrypt (cipher.1.data.cast this) cipher.2.compress.toUTF8.toVector cipher.1.nonce.cast key.cast
     | return .refused
   let some msg := String.fromUTF8? bytes.toArray
     | return .mangled bytes.toArray
   let .ok json := Json.parse msg
     | return .unknown msg
-
-  return fromJson? (α := α) json |>.map (·, b) |>.mapError (DecryptError.invalidJson json)
+  let some a := decode? (α := α) json
+    | return .almost json
+  return .accepted (a, b)
 
 open FFI Aead in
-def encryptSnd [ToJson α] [ToJson β] (msg : α × β) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (Json × CipherText XChaCha20Poly1305) := do
+def encryptSnd [ToJson α] [Encodable β] (msg : α × β) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (Json × CipherText XChaCha20Poly1305) := do
   let nonce ← mkFreshNonce (spec := XChaCha20Poly1305)
   let key ← key.getDM (mkStaleKey (·.cast))
-  let data := toJson msg.2 |>.compress.toUTF8.toVector
+  let data := encode msg.2 |>.compress.toUTF8.toVector
   let ad := toJson msg.1
   let cipher ← Aead.encrypt data ad.compress.toUTF8.toVector nonce.cast key.cast
   let cipher := {
@@ -398,40 +396,48 @@ def encryptSnd [ToJson α] [ToJson β] (msg : α × β) (key : Option (SymmKey �
       have : XChaCha20Poly1305.shapeOf `mac = ABYTES := by native_decide
       simp [getElem]
       rw [this]
-      exact Nat.le_add_right ABYTES (toJson msg.2).compress.toUTF8.size
+      exact Nat.le_add_right ABYTES _
   }
   return (ad, cipher)
 
 open FFI Aead in
-def decryptSnd? [FromJson α] [FromJson β] (cipher : Json × CipherText XChaCha20Poly1305) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (DecryptResult (α × β)) := do
+def decryptSnd? [FromJson α] [Encodable β] (cipher : Json × CipherText XChaCha20Poly1305) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (DecryptResult (α × β)) := do
   have : cipher.2.size = ABYTES + (cipher.2.size - ABYTES) := by
     have mac_le : XChaCha20Poly1305.shapeOf `mac ≤ cipher.2.size := cipher.2.shapeOf_mac_le_size
     have : XChaCha20Poly1305.shapeOf `mac = ABYTES := by native_decide
     rw [this] at mac_le
     rw [Nat.add_comm, Nat.sub_add_cancel mac_le]
 
-  let key ← key.getDM (mkStaleKey (·.cast))
   let .ok a := fromJson? (α := α) cipher.1
     | return .refused
+
+  let key ← key.getDM (mkStaleKey (·.cast))
   let some bytes ← Aead.decrypt (cipher.2.data.cast this) cipher.1.compress.toUTF8.toVector cipher.2.nonce.cast key.cast
     | return .refused
   let some msg := String.fromUTF8? bytes.toArray
     | return .mangled bytes.toArray
   let .ok json := Json.parse msg
     | return .unknown msg
-
-  return fromJson? (α := β) json |>.map (a, ·) |>.mapError (DecryptError.invalidJson json)
+  let some b := decode? (α := β) json
+    | return .almost json
+  return .accepted (a, b)
 
 open FFI Sign in
-def sign [ToJson α] (msg : α) (keys : Option (KeyPair τ Ed25519) := none) : CryptoM τ (Signature Ed25519) := do
+def sign [Encodable α] (msg : α) (keys : Option (KeyPair τ Ed25519) := none) : CryptoM τ (SignedJson Ed25519) := do
   let keys ← keys.getDM mkStaleSignature
-  let sig ← signDetached (toJson msg).compress.toUTF8.toVector keys.skey.cast
-  return sig.cast
+  let json := encode msg
+  let sig ← signDetached json.compress.toUTF8.toVector keys.skey.cast
+  return ⟨json, sig.cast, keys.pkey⟩
 
 open FFI Sign in
-def verify [ToJson α] (sig : Signature Ed25519) (msg : α) (key : Option (PublicKey Ed25519) := none) : CryptoM τ Bool := do
-  let key ← key.getDM (mkStaleSignature.bind (pure ·.pkey))
-  verifyDetached sig.cast (toJson msg).compress.toUTF8.toVector key.cast
+def verify [Encodable α] (msg : SignedJson Ed25519) : CryptoM τ (DecryptResult α) := do
+  let json := msg.toJson
+  let bytes := json.compress.toUTF8
+  unless ← verifyDetached msg.sig.cast bytes.toVector msg.pkey.cast do
+    return .refused
+  let some a := decode? (α := α) json
+    | return .almost json
+  return .accepted a
 
 def loadSecret? {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
     (key : SymmKey τ XSalsa20) (file : System.FilePath) (lift : SecureVector τ spec[kind] → X τ spec) : CryptoM τ (Option (X τ spec)) := do

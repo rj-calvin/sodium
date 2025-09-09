@@ -21,8 +21,8 @@ def toName (dig : Digest) : Name := Name.str Blake2b.name dig.toBase64
 instance : Inhabited Digest where
   default := GenericHash.hash default |>.cast
 
-instance [ToJson α] : ToDigest α where
-  digest x := GenericHash.hash (toJson x).compress.toUTF8 |>.cast (by native_decide)
+instance [Encodable α] : ToDigest α where
+  digest x := GenericHash.hash (encode x).compress.toUTF8 |>.cast (by native_decide)
 
 instance [ToChunks α] : ToDigest α where
   digest x := Id.run do
@@ -58,8 +58,8 @@ instance [ToDigest α] [ToDigest β] : ToDigest (α ⊕ β) where
 
 end Digest
 
-class EqShape {α : Type u} {β : Type v} [ToDigest α] [ToDigest β] (a : α) (b : β) : Prop where
-  eq_shape : digest a = digest b
+class EqDigest {α : Type u} {β : Type v} [ToDigest α] [ToDigest β] (a : α) (b : β) : Prop where
+  eq_digest : digest a = digest b
 
 namespace Lean.Name
 

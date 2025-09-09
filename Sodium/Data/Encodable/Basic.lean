@@ -1,4 +1,3 @@
-import Aesop
 import Sodium.Data.ByteArray
 
 open Lean
@@ -63,12 +62,12 @@ theorem mkObj_getObjVal?_eq_ok : ∀ s, (Json.mkObj [(s, α)]).getObjVal? s = .o
   rfl
 
 @[simp]
-theorem arr_getArrVal?_0_eq_ok : (Json.arr #[α, β]).getArrVal? 0 = .ok α := by
+theorem arr_getArrVal?_zero_eq_ok : (Json.arr #[α, β]).getArrVal? 0 = .ok α := by
   unfold Json.getArrVal?
   rfl
 
 @[simp]
-theorem arr_getArrVal?_1_eq_ok : (Json.arr #[α, β]).getArrVal? 1 = .ok β := by
+theorem arr_getArrVal?_one_eq_ok : (Json.arr #[α, β]).getArrVal? 1 = .ok β := by
   unfold Json.getArrVal?
   rfl
 
@@ -86,6 +85,8 @@ attribute [simp] Encodable.encodek
 class LawfulJson (α : Type u) [ToJson α] [FromJson α] where
   jsonk : ∀ a, fromJson? (α := α) (toJson a) = .ok a
 
+attribute [simp] LawfulJson.jsonk
+
 instance {α : Type u} [ToJson α] [FromJson α] [h : LawfulJson α] : Encodable α where
   encode := toJson
   decode? x := fromJson? x |>.toOption
@@ -96,31 +97,21 @@ instance {α : Type u} [ToJson α] [FromJson α] [h : LawfulJson α] : Encodable
     simp_all only
     rfl
 
-instance {α : Type u} [Encodable α] : ToJson α := ⟨encode⟩
-
-instance {α : Type u} [TypeName α] [Encodable α] : FromJson α where
-  fromJson? json := decode? (α := α) json |>.getDM (throw (TypeName.typeName α).toString)
-
-private instance {α : Type u} [Encodable α] : FromJson α :=
-  ⟨fun json => decode? (α := α) json |>.getDM (throw default)⟩
-
-instance {α : Type u} [Encodable α] : LawfulJson α where
-  jsonk _ := by
-    simp [fromJson?, toJson]
-    rfl
-
 namespace Encodable
 
 open Encodable (encodek)
 
 variable {α : Type u} {β : Type v} [Encodable α]
 
+def withJson (inst : Encodable β) : ToJson β where
+  toJson := encode
+
 def withErrorMsg (msg : String) (inst : Encodable β) : FromJson β where
   fromJson? json := decode? (α := β) json |>.getDM (throw msg)
 
 @[simp]
 theorem decode?_encode_eq : decode? ∘ encode (α := α) = some := by
-  funext x
+  funext
   simp only [Function.comp_apply, encodek]
 
 theorem encode_inj : ∀ ⦃a b : α⦄, encode a = encode b → a = b
@@ -174,6 +165,9 @@ instance _root_.Array.instEncodable : Encodable (Array α) where
     have : some (α := α) = fun x => pure (id x) := by rfl
     rw [this, Array.mapM_pure]
     simp only [Array.map_id_fun, id_eq, Option.pure_def]
+
+instance _root_.List.instEncodable : Encodable (List α) :=
+  ofEquiv (·.toArray) (·.toList) fun _ => rfl
 
 instance _root_.Fin.instEncodable {n : Nat} : Encodable (Fin n) where
   encode x := json% $x.toNat
@@ -249,8 +243,8 @@ instance _root_.Option.instEncodable : Encodable (Option α) where
 
 instance _root_.Sum.instEncodable [Encodable β] : Encodable (α ⊕ β) where
   encode
-    | .inl a => json% { inl: $a }
-    | .inr b => json% { inr: $b }
+    | .inl a => json% { inl: $(encode a) }
+    | .inr b => json% { inr: $(encode b) }
   decode? json :=
     match json.getObjVal? "inl" with
     | .ok json => decode? (α := α) json |>.map .inl
@@ -262,17 +256,17 @@ instance _root_.Sum.instEncodable [Encodable β] : Encodable (α ⊕ β) where
     cases a with
     | inl _ =>
       simp_all only [Json.mkObj_getObjVal?_eq_ok, Option.map_eq_some_iff, Sum.inl.injEq, exists_eq_right]
-      simp only [toJson, encodek]
+      simp only [toJson, id_eq, encodek]
     | inr _ =>
       simp_all only [Json.mkObj_getObjVal?_eq_ok]
       split
       . simp_all only [Option.map_eq_some_iff, reduceCtorEq, and_false, exists_false]
         contradiction
       . simp_all only [Option.map_eq_some_iff, Sum.inr.injEq, exists_eq_right]
-        simp only [toJson, encodek]
+        simp only [toJson, id_eq, encodek]
 
 instance _root_.Prod.instEncodable [Encodable β] : Encodable (α × β) where
-  encode x := json% [$(x.1), $(x.2)]
+  encode x := json% [$(encode x.1), $(encode x.2)]
   decode? json :=
     match json.getArrVal? 0, json.getArrVal? 1 with
     | .ok fst, .ok snd =>
@@ -280,8 +274,8 @@ instance _root_.Prod.instEncodable [Encodable β] : Encodable (α × β) where
     | _, _ => none
   encodek a := by
     obtain ⟨fst, snd⟩ := a
-    simp only [toJson, Json.arr_getArrVal?_0_eq_ok, Json.arr_getArrVal?_1_eq_ok, encodek,
-      Option.bind_some]
+    simp only [toJson, Json.arr_getArrVal?_zero_eq_ok, Json.arr_getArrVal?_one_eq_ok, encodek,
+      Option.bind_some, id_eq]
 
 instance _root_.String.Pos.instEncodable : Encodable String.Pos :=
   ofEquiv (α := Nat) String.Pos.byteIdx String.Pos.mk (by exact fun _ => rfl)
@@ -297,7 +291,7 @@ section Sigma
 variable {γ : α → Type v} [∀ a, Encodable (γ a)]
 
 instance _root_.Sigma.instEncodable : Encodable (Sigma γ) where
-  encode x := json% [$(x.1), $(x.2)]
+  encode x := json% [$(encode x.1), $(encode x.2)]
   decode? json :=
     match json.getArrVal? 0, json.getArrVal? 1 with
     | .ok fst, .ok snd =>
@@ -305,8 +299,8 @@ instance _root_.Sigma.instEncodable : Encodable (Sigma γ) where
     | _, _ => none
   encodek a := by
     obtain ⟨fst, snd⟩ := a
-    simp only [toJson, Json.arr_getArrVal?_0_eq_ok, Json.arr_getArrVal?_1_eq_ok, encodek,
-      Option.bind_some]
+    simp only [toJson, Json.arr_getArrVal?_zero_eq_ok, Json.arr_getArrVal?_one_eq_ok, encodek,
+      Option.bind_some, id_eq]
 
 end Sigma
 

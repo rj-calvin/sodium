@@ -18,19 +18,19 @@ open ByteArray
 -- Test succ (increment) function
 #eval show IO Unit from do
   let original := ByteArray.mk #[0, 0, 0]
-  let _incremented := succ original
+  let _incremented := original.succ
   IO.println "✓ succ function executed successfully"
 
 -- Test succ with rollover (255 -> 0)
 #eval show IO Unit from do
   let maxByte := ByteArray.mk #[255]
-  let _rolled := succ maxByte
+  let _rolled := maxByte.succ
   IO.println "✓ succ with rollover executed successfully"
 
 -- Test succ with multi-byte increment
 #eval show IO Unit from do
   let multiByte := ByteArray.mk #[254, 255, 255]
-  let _incremented := succ multiByte
+  let _incremented := multiByte.succ
   IO.println "✓ Multi-byte increment executed successfully"
 
 -- Test isZero function
@@ -39,7 +39,7 @@ open ByteArray
   let nonZeros := ByteArray.mk #[0, 1, 0, 0]
   let empty := ByteArray.empty
 
-  if isZero zeros && !isZero nonZeros && isZero empty then
+  if zeros.isZero && !nonZeros.isZero && empty.isZero then
     IO.println "✓ isZero function works correctly"
   else
     IO.println "✗ isZero function failed"
@@ -111,8 +111,8 @@ open ByteArray
 -- Test Base64 encoding/decoding roundtrip
 #eval show IO Unit from do
   let original := ByteArray.mk #[72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100] -- "Hello World"
-  let encoded := toBase64 original
-  match ofBase64? encoded with
+  let encoded := original.toBase64
+  match ByteArray.ofBase64? encoded with
   | some decoded =>
     if decoded == original then
       IO.println s!"✓ Base64 roundtrip successful: '{encoded}'"
@@ -124,8 +124,8 @@ open ByteArray
 -- Test Base64 with empty array
 #eval show IO Unit from do
   let empty := ByteArray.empty
-  let encoded := toBase64 empty
-  match ofBase64? encoded with
+  let encoded := empty.toBase64
+  match ByteArray.ofBase64? encoded with
   | some decoded =>
     if decoded == empty then
       IO.println "✓ Base64 empty array roundtrip successful"
@@ -137,8 +137,8 @@ open ByteArray
 -- Test Base64 with single byte
 #eval show IO Unit from do
   let single := ByteArray.mk #[42]
-  let encoded := toBase64 single
-  match ofBase64? encoded with
+  let encoded := single.toBase64
+  match ByteArray.ofBase64? encoded with
   | some decoded =>
     if decoded == single then
       IO.println "✓ Base64 single byte roundtrip successful"
@@ -150,8 +150,8 @@ open ByteArray
 -- Test Base64 with binary data (all byte values)
 #eval show IO Unit from do
   let binary := ByteArray.mk (List.range 256 |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
-  let encoded := toBase64 binary
-  match ofBase64? encoded with
+  let encoded := binary.toBase64
+  match ByteArray.ofBase64? encoded with
   | some decoded =>
     if decoded == binary then
       IO.println "✓ Base64 binary data roundtrip successful"
@@ -192,7 +192,7 @@ open ByteArray
   let mut success_count := 0
 
   for _ in [0:5] do
-    let next := succ current
+    let next := current.succ
     current := next
     success_count := success_count + 1
 
@@ -213,8 +213,8 @@ open ByteArray
 #eval show IO Unit from do
   -- Test with bytes that might cause Base64 issues
   let challenging := ByteArray.mk #[0, 255, 127, 128, 1, 254]
-  let encoded := toBase64 challenging
-  match ofBase64? encoded with
+  let encoded := challenging.toBase64
+  match ByteArray.ofBase64? encoded with
   | some decoded =>
     if decoded == challenging then
       IO.println "✓ Base64 challenging bytes roundtrip successful"
@@ -230,7 +230,7 @@ open ByteArray
   let mut error_count := 0
 
   for invalid in invalid_inputs do
-    match ofBase64? invalid with
+    match ByteArray.ofBase64? invalid with
     | some _ =>
       IO.println s!"✗ Expected error for invalid Base64: '{invalid}'"
     | none =>
@@ -244,7 +244,7 @@ open ByteArray
 -- Test succ with all 255s (should wrap to all 0s + 1 extra byte conceptually)
 #eval show IO Unit from do
   let allOnes := ByteArray.mk #[255, 255, 255]
-  let _incremented := succ allOnes
+  let _incremented := allOnes.succ
   -- Note: The exact behavior depends on sodium_increment implementation
   IO.println "✓ All 255s increment completed"
 
@@ -256,10 +256,10 @@ open ByteArray
   let mixedEnd := ByteArray.mk #[1, 2, 0]
 
   let results := [
-    ("single zero", isZero singleZero, true),
-    ("single non-zero", isZero singleNonZero, false),
-    ("mixed start with zero", isZero mixedStart, false),
-    ("mixed end with zero", isZero mixedEnd, false)
+    ("single zero", singleZero.isZero, true),
+    ("single non-zero", singleNonZero.isZero, false),
+    ("mixed start with zero", mixedStart.isZero, false),
+    ("mixed end with zero", mixedEnd.isZero, false)
   ]
 
   let mut all_passed := true
@@ -287,11 +287,11 @@ open ByteArray
 -- Performance test: Large array operations
 #eval show IO Unit from do
   let large := ByteArray.mk (List.range 1000 |>.map (· % 256) |>.map UInt8.ofNat |>.toArray)
-  let encoded := toBase64 large
-  match ofBase64? encoded with
+  let encoded := large.toBase64
+  match ByteArray.ofBase64? encoded with
   | some decoded =>
-    let _incremented := succ large
-    let _zero_check := isZero large
+    let _incremented := large.succ
+    let _zero_check := large.isZero
     if decoded == large then
       IO.println "✓ Large array (1000 bytes) operations completed successfully"
     else

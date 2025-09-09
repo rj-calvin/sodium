@@ -115,7 +115,7 @@ alloy c extern "lean_crypto_sign"
 def sign {τ : @& Sodium σ} {n : Nat}
     (message : @& ByteVector n)
     (secretKey : @& SecureVector τ SECRETKEYBYTES)
-    : IO (ByteVector (n + BYTES)) :=
+    : IO (ByteVector (BYTES + n)) :=
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
   size_t msg_len = lean_sarray_size(message);
 
@@ -157,7 +157,7 @@ def sign {τ : @& Sodium σ} {n : Nat}
 
 alloy c extern "lean_crypto_sign_open"
 def signOpen {n : Nat}
-    (signedMessage : @& ByteVector (n + BYTES))
+    (signedMessage : @& ByteVector (BYTES + n))
     (publicKey : @& ByteVector PUBLICKEYBYTES)
     : IO (Option (ByteVector n)) :=
   size_t signed_msg_len = lean_sarray_size(signedMessage);

@@ -30,7 +30,7 @@ instance [FromJson α] : FromChunks (List α) where
     | [] => .ok []
     | chunks => chunks.mapM fromJson?
 
-instance (priority := low) [FromJson α] : FromChunks (Array α) := ⟨fun xs => fromChunks? xs |>.map List.toArray⟩
+instance [FromJson α] : FromChunks (Array α) := ⟨fun xs => fromChunks? xs |>.map List.toArray⟩
 
 namespace ByteArray
 

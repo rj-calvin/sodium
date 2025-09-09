@@ -20,21 +20,15 @@ abbrev fromJson? (json : Json) : Except String Spec := instFromJsonSpec.fromJson
 @[inline, always_inline]
 def shapeOf (spec : Spec) (name : Name) : Nat := spec.shapes.findD name 0
 
--- Membership instance for checking if a shape name exists in the spec
 instance : Membership Name Spec where
   mem spec name := spec.shapes.contains name
 
--- Decidable instance for computational membership testing
 instance {spec : Spec} {name : Name} : Decidable (name ∈ spec) :=
   inferInstanceAs <| Decidable (spec.shapes.contains name)
 
--- Utility functions for working with shapes
-
-/-- Add or update a shape with the given size -/
 def addShape (spec : Spec) (name : Name) (size : Nat) : Spec :=
   { spec with shapes := spec.shapes.insert name size }
 
-/-- Remove a shape from the specification -/
 def removeShape (spec : Spec) (name : Name) : Spec :=
   { spec with shapes := spec.shapes.erase name }
 
@@ -45,13 +39,10 @@ def merge (fn : Name → Nat → Nat → Nat) (inl : Spec) (inr : Spec) : Spec w
 instance : Append Spec where
   append inl inr := merge (fun _ n m => max n m) inl inr
 
-/-- Check if the specification has no shapes defined -/
 def isEmpty (spec : Spec) : Bool := spec.shapes.isEmpty
 
-/-- Get the total number of shapes in the specification -/
 def size (spec : Spec) : Nat := spec.shapes.size
 
-/-- Check if a size value is valid (non-zero and within LibSodium bounds) -/
 def IsValidShape (size : Nat) : Prop := 0 < size ∧ size < USize.size
 
 @[simp]

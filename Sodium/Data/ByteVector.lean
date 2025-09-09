@@ -1,4 +1,5 @@
 import Sodium.Data.ByteArray
+import Sodium.Data.Encodable.Basic
 
 open Lean Alloy.C
 
@@ -114,6 +115,12 @@ def toList (bs : ByteVector n) : List UInt8 := bs.toArray.toList
 @[inline] protected def cast (h : n = m := by native_decide) (x : ByteVector n) : ByteVector m :=
   ⟨x.toArray, by rw [← h]; exact x.size_toArray⟩
 
+@[inline] def cast? (x : ByteVector n) : Option (ByteVector m) :=
+  if h : n = m then
+    some ⟨x.toArray, by rw [← h]; exact x.size_toArray⟩
+  else
+    none
+
 @[inline] def findFinIdx? (a : ByteVector n) (p : UInt8 → Bool) (start := 0) : Option (Fin n) :=
   let b := a.toArray.findFinIdx? p start
   a.size_toArray ▸ b
@@ -173,5 +180,13 @@ instance : DecidableEq (ByteVector n) := fun a b =>
   match decEq a.toArray b.toArray with
   | isTrue h => isTrue (by cases a; cases b; simp_all only)
   | isFalse h => isFalse (fun eq => by cases eq; exact h rfl)
+
+instance : Encodable (ByteVector n) :=
+  Encodable.ofLeftInj (·.toArray) (·.toVector.cast?) (fun x => by
+    simp only [toArray_inj]
+    unfold cast?
+    simp only [size_toArray, ↓reduceDIte, Option.some.injEq]
+    rfl
+  )
 
 end ByteVector
