@@ -76,7 +76,7 @@ open Sodium FFI.Sign
       IO.println s!"✗ Signed message size mismatch: expected {message.size + BYTES}, got {signedMessage.size}"
 
     -- Verify and recover the message
-    match ← signOpen signedMessage publicKey with
+    match signOpen signedMessage publicKey with
     | some recoveredMessage =>
       if recoveredMessage == message then
         IO.println "✓ Combined signature verification and message recovery succeeded"
@@ -98,7 +98,7 @@ open Sodium FFI.Sign
     let signedMessage ← sign message secretKey1
 
     -- Try to verify with wrong public key
-    match ← signOpen signedMessage publicKey2 with
+    match signOpen signedMessage publicKey2 with
     | some _ =>
       IO.println "✗ Signature verification should have failed with wrong public key"
     | none =>
@@ -127,7 +127,7 @@ open Sodium FFI.Sign
       IO.println s!"✗ Signature size mismatch: expected {BYTES}, got {signature.size}"
 
     -- Verify detached signature
-    let isValid ← verifyDetached signature message publicKey
+    let isValid := verifyDetached signature message publicKey
     if isValid then
       IO.println "✓ Detached signature verification succeeded"
     else
@@ -147,7 +147,7 @@ open Sodium FFI.Sign
     let signature ← signDetached originalMessage secretKey
 
     -- Try to verify signature against tampered message
-    let isValid ← verifyDetached signature tamperedMessage publicKey
+    let isValid := verifyDetached signature tamperedMessage publicKey
     if isValid then
       IO.println "✗ Signature verification should have failed with tampered message"
     else
@@ -199,7 +199,7 @@ open Sodium FFI.Sign
 
     let emptyMessage : ByteVector 0 := default
     let signature ← signDetached emptyMessage secretKey
-    let isValid ← verifyDetached signature emptyMessage publicKey
+    let isValid := verifyDetached signature emptyMessage publicKey
 
     if isValid then
       IO.println "✓ Empty message signing and verification succeeded"
@@ -217,7 +217,7 @@ open Sodium FFI.Sign
     -- Create a large message (1KB)
     let largeMessage := ByteArray.mk (Array.range 1024 |>.map (· % 256 |>.toUInt8)) |>.toVector
     let signature ← signDetached largeMessage secretKey
-    let isValid ← verifyDetached signature largeMessage publicKey
+    let isValid := verifyDetached signature largeMessage publicKey
 
     if isValid then
       IO.println "✓ Large message signing and verification succeeded"

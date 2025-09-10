@@ -30,12 +30,11 @@ private def finv : WType (fun i : Shape => Fin i.arity) → Name
 
 instance instEncodable : Encodable Name :=
   haveI : Encodable Shape := by unfold Shape; infer_instance
-  Encodable.ofEquiv f finv (by
-    intro n
+  Encodable.ofEquiv f finv fun n => by
     induction n with
     | anonymous => simp only [f, finv]
     | str k s ih => simp only [f, finv, ih]
-    | num k n ih => simp only [f, finv, ih])
+    | num k n ih => simp only [f, finv, ih]
 
 end Name
 
@@ -116,36 +115,32 @@ private def finv : WType (fun i : Shape => Fin i.arity) → Syntax
   | ⟨ident% info, s, n, pre, _⟩ => .ident info s n pre
   | ⟨node% info, kind, k, fn⟩ => .node info kind <| (Array.ofFn (n := k) id).map fun i => finv (fn i)
 
-private theorem finv_f_eq : ∀ stx, finv (f stx) = stx := by
-  intro stx
-  have : ∀ n (s : Syntax), sizeOf s < n → finv (f s) = s := by
-    intro n
-    induction n with
-    | zero => intros; omega
-    | succ n ih =>
-      intro s hs
-      cases s <;> try simp only [f, finv]
-      rename_i args
-      if h : args.size = 0 then
-        simp only [h, Array.eq_empty_of_size_eq_zero, List.size_toArray, List.length_nil, f,
-          ↓reduceDIte, finv, Array.ofFn_zero, List.map_toArray, List.map_nil]
-      else
-        rw [dif_neg h, finv]
-        congr
-        ext i
-        . simp only [Array.size_map, Array.size_ofFn]
-        . rename_i h₁ h₂
-          simp only [Array.getElem_map, Array.getElem_ofFn, id_eq]
-          have h_lt : sizeOf args[i] < n := by
-            simp only [Syntax.node.sizeOf_spec] at hs
-            have : sizeOf args[i] < sizeOf args := Array.sizeOf_getElem _ i h₂
-            omega
-          exact ih args[i] h_lt
-  exact this (sizeOf stx + 1) stx (Nat.lt_succ_self _)
-
 instance instEncodable : Encodable Syntax :=
   haveI : Encodable Shape := by unfold Shape; infer_instance
-  Encodable.ofEquiv f finv finv_f_eq
+  Encodable.ofEquiv f finv fun stx => by
+    have : ∀ n (s : Syntax), sizeOf s < n → finv (f s) = s := fun n => by
+      induction n with
+      | zero => intros; omega
+      | succ n ih =>
+        intro s hs
+        cases s <;> try simp only [f, finv]
+        rename_i args
+        if h : args.size = 0 then
+          simp only [h, Array.eq_empty_of_size_eq_zero, List.size_toArray, List.length_nil, f,
+            ↓reduceDIte, finv, Array.ofFn_zero, List.map_toArray, List.map_nil]
+        else
+          rw [dif_neg h, finv]
+          congr
+          ext i
+          . simp only [Array.size_map, Array.size_ofFn]
+          . rename_i h₁ h₂
+            simp only [Array.getElem_map, Array.getElem_ofFn, id_eq]
+            have h_lt : sizeOf args[i] < n := by
+              simp only [Syntax.node.sizeOf_spec] at hs
+              have : sizeOf args[i] < sizeOf args := Array.sizeOf_getElem _ i h₂
+              omega
+            exact ih args[i] h_lt
+    exact this (sizeOf stx + 1) stx (Nat.lt_succ_self _)
 
 end Syntax
 
@@ -160,7 +155,8 @@ instance instEncodable {kind : SyntaxNodeKind} : Encodable (TSyntax kind) :=
       match decode? (α := Syntax) json with
       | none => none
       | some a => some ⟨a⟩
-  Encodable.ofLeftInj f finv (fun x => by cases x; simp only [Json.mkObj_getObjVal?_eq_ok, Encodable.encodek, f, finv])
+  Encodable.ofLeftInj f finv fun _ => by
+    simp only [Json.mkObj_getObjVal?_eq_ok, Encodable.encodek, f, finv]
 
 end TSyntax
 

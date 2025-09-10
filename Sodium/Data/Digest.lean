@@ -7,6 +7,8 @@ open Lean Sodium FFI GenericHash Crypto
 
 abbrev Digest := Hash Blake2b
 
+instance : ToString Digest := ⟨(·.toBase64)⟩
+
 class ToDigest (α : Type u) where
   digest : α → Digest
 

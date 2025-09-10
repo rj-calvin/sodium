@@ -210,11 +210,11 @@ variable [Encodable α]
 def encodable_succ (n : Nat) (_ : Encodable (WFin ι n)) : Encodable (WFin ι (n + 1)) :=
   Encodable.ofEquiv (down n) (up n) (by intro ⟨⟨_, _⟩, _⟩; rfl)
 
-instance _root_.WType.instEncodable : Encodable (WType fun i => Fin (ι i)) := by
+instance _root_.WType.instEncodable : Encodable (WType fun i => Fin (ι i)) :=
   haveI h : ∀ n, Encodable (WFin ι n) := fun n => Nat.rec encodable_zero encodable_succ n
   let f : WType (fun i => Fin (ι i)) → Σ n, WFin ι n := fun w => ⟨w.depth, ⟨w, by exact Nat.le_refl _⟩⟩
   let finv : (Σ n, WFin ι n) → WType fun i => Fin (ι i) := fun p => p.2.1
   have : ∀ w, finv (f w) = w := fun _ => rfl
-  exact Encodable.ofEquiv f finv this
+  Encodable.ofEquiv f finv this
 
 end WFin

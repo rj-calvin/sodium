@@ -161,11 +161,8 @@ abbrev toVector? (bs : ByteArray) : Option (ByteVector n) :=
 abbrev toVector! (bs : ByteArray) : ByteVector n :=
   bs.toVector?.get!
 
-@[simp]
-theorem toVector_size : ∀ bs : ByteArray, bs.toVector.size = bs.size := by intro; rfl
-
-@[simp]
-theorem toVector_inj : ∀ bs : ByteArray, bs.toVector.toArray = bs := by intro; rfl
+@[simp] theorem toVector_size : ∀ bs : ByteArray, bs.toVector.size = bs.size := by intro; rfl
+@[simp] theorem toVector_inj : ∀ bs : ByteArray, bs.toVector.toArray = bs := by intro; rfl
 
 end ByteArray
 
@@ -173,20 +170,18 @@ namespace ByteVector
 
 variable {n : Nat}
 
-@[simp]
-theorem toArray_inj : ∀ bs : ByteVector n, bs.toArray.toVector = bs.cast (by exact Eq.symm bs.size_toArray) := by intro; rfl
+@[simp] theorem toArray_inj : ∀ bs : ByteVector n, bs.toArray.toVector = bs.cast (by exact Eq.symm bs.size_toArray) := by intro; rfl
 
 instance : DecidableEq (ByteVector n) := fun a b =>
   match decEq a.toArray b.toArray with
   | isTrue h => isTrue (by cases a; cases b; simp_all only)
-  | isFalse h => isFalse (fun eq => by cases eq; exact h rfl)
+  | isFalse h => isFalse fun eq => by cases eq; exact h rfl
 
 instance : Encodable (ByteVector n) :=
-  Encodable.ofLeftInj (·.toArray) (·.toVector.cast?) (fun x => by
+  Encodable.ofLeftInj (·.toArray) (·.toVector.cast?) fun x => by
     simp only [toArray_inj]
     unfold cast?
     simp only [size_toArray, ↓reduceDIte, Option.some.injEq]
     rfl
-  )
 
 end ByteVector

@@ -121,7 +121,7 @@ def mkFreshNonce [h : spec.HasValidShape `nonce] : CryptoM τ (Nonce spec) := do
           exact h.shape_is_valid
         let shape := (stale.get this).succ
         let nonce := shape.cast eq_shape
-        let nonces := st.nonces.insert spec.name ⟨spec, ⟨h, fun _ => nonce⟩⟩
+        let nonces := st.nonces.insert spec.name ⟨spec, ⟨fun _ => nonce⟩⟩
         ref.modifyGet fun st => (nonce, {st with nonces})
       else
         let (nonce, st) ← next st
@@ -145,7 +145,7 @@ where
 
     if size_eq : nonce.size = shape then
       let nonce : Nonce spec := ⟨nonce, size_eq⟩
-      let nonces := nonces.insert spec.name ⟨spec, ⟨h, fun _ => nonce⟩⟩
+      let nonces := nonces.insert spec.name ⟨spec, ⟨fun _ => nonce⟩⟩
       return (nonce, {st with nonces, entropy})
     else throwInsufficientEntropy shape
 
@@ -203,16 +203,9 @@ def mkStaleSignature : CryptoM τ (KeyPair τ Ed25519) := do
   return ⟨pkey.cast, skey.cast⟩
 
 open FFI KeyExch in
-def newClientSession? (key : PublicKey Curve25519) (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (Option (Session τ Curve25519Blake2b)) := do
+def newSession? (key : PublicKey Curve25519) (keys : Option (KeyPair τ Curve25519) := none) (client := false) : CryptoM τ (Option (Session τ Curve25519Blake2b)) := do
   let {pkey, skey} ← keys.getDM mkStaleKeys
-  let some sess ← clientSessionKeys pkey.cast skey.cast key.cast
-    | return none
-  return some ⟨sess.1.cast (by native_decide), sess.2.cast (by native_decide)⟩
-
-open FFI KeyExch in
-def newServerSession? (key : PublicKey Curve25519) (keys : Option (KeyPair τ Curve25519) := none) : CryptoM τ (Option (Session τ Curve25519Blake2b)) := do
-  let {pkey, skey} ← keys.getDM mkStaleKeys
-  let some sess ← serverSessionKeys pkey.cast skey.cast key.cast
+  let some sess ← (if client then clientSessionKeys else serverSessionKeys) pkey.cast skey.cast key.cast
     | return none
   return some ⟨sess.1.cast (by native_decide), sess.2.cast (by native_decide)⟩
 
@@ -419,21 +412,61 @@ def decryptSnd? [FromJson α] [Encodable β] (cipher : Json × CipherText XChaCh
   return .accepted (a, b)
 
 open FFI Sign in
-def sign [Encodable α] (msg : α) (keys : Option (KeyPair τ Ed25519) := none) : CryptoM τ (SignedJson Ed25519) := do
-  let keys ← keys.getDM mkStaleSignature
-  let json := encode msg
-  let sig ← signDetached json.compress.toUTF8.toVector keys.skey.cast
-  return ⟨json, sig.cast, keys.pkey⟩
-
-open FFI Sign in
-def verify [Encodable α] (msg : SignedJson Ed25519) : CryptoM τ (DecryptResult α) := do
+def verify [Encodable α] (msg : SignedJson Ed25519) : DecryptResult α := Id.run do
   let json := msg.toJson
   let bytes := json.compress.toUTF8
-  unless ← verifyDetached msg.sig.cast bytes.toVector msg.pkey.cast do
+  unless verifyDetached msg.sig.cast bytes.toVector msg.pkey.cast do
     return .refused
   let some a := decode? (α := α) json
     | return .almost json
   return .accepted a
+
+structure Verified (α : Type) [Encodable α] extends SignedJson Ed25519 where
+  val : α
+  verified : verify toSignedJson = .accepted val
+
+attribute [simp] Verified.verified
+
+namespace Verified
+
+variable [Encodable α]
+
+instance : Coe (Verified α) α := ⟨Verified.val⟩
+
+instance encodable : Encodable (Verified α) :=
+  Encodable.ofLeftInj
+    (·.toSignedJson)
+    (fun json =>
+      match h : verify (α := α) json with
+      | .accepted a => some ⟨json, a, h⟩
+      | _ => none)
+    fun x => by
+      obtain ⟨_, _, _⟩ := x
+      simp only
+      split
+      . simp only [Option.some.injEq, mk.injEq, true_and]
+        simp_all only [DecryptResult.accepted.injEq]
+      . rename_i x
+        nomatch x _
+
+end Verified
+
+abbrev VerifiedId (α : Type) := Σ h, @Verified α h
+
+@[coe] protected abbrev Verified.id {h : Encodable α} (x : @Verified α h) : VerifiedId α := ⟨h, x⟩
+@[coe] protected abbrev VerifiedId.out : (h : VerifiedId α) → @Verified α h.fst := Sigma.snd
+
+@[simp] theorem Verified.id_inj {h : Encodable α} : ∀ x : @Verified α h, x.id.out = x := fun _ => rfl
+
+open FFI Sign in
+def sign [Encodable α] (msg : α) (keys : Option (KeyPair τ Ed25519) := none) : CryptoM τ (Verified α) := do
+  let keys ← keys.getDM mkStaleSignature
+  let json := encode msg
+  let sig ← signDetached json.compress.toUTF8.toVector keys.skey.cast
+  let sig := ⟨json, sig.cast, keys.pkey⟩
+  match h : verify sig with
+  | .accepted a => return ⟨sig, a, h⟩
+  | _ => throwSpecViolation Ed25519 `publickey
 
 def loadSecret? {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
     (key : SymmKey τ XSalsa20) (file : System.FilePath) (lift : SecretVector τ spec[kind] → X τ spec) : CryptoM τ (Option (X τ spec)) := do
@@ -452,9 +485,9 @@ def loadSymmKey? (file : System.FilePath) : CryptoM τ (Option (SymmKey τ XSals
 
 def loadSession? (fileRx : System.FilePath) (fileTx : System.FilePath) : CryptoM τ (Option (Session τ Curve25519Blake2b)) := do
   let key : SymmKey _ XSalsa20 ← mkStaleKey (·.cast)
-  let some rx ← loadSecret? key fileTx (·.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
+  let some rx ← loadSecret? key fileTx (·.cast (by simp only [getElem, USize.ofNatLT_eq_ofNat]; congr))
     | return none
-  let some tx ← loadSecret? key fileRx (·.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
+  let some tx ← loadSecret? key fileRx (·.cast (by simp only [getElem, USize.ofNatLT_eq_ofNat]; congr))
     | return none
   return some ⟨rx, tx⟩
 
@@ -479,8 +512,8 @@ def storeSymmKey (item : SymmKey τ XSalsa20) (file : System.FilePath) : CryptoM
 
 def storeSession (item : Session τ Curve25519Blake2b) (fileRx : System.FilePath) (fileTx : System.FilePath) : CryptoM τ Unit := do
   let key : SymmKey _ XSalsa20 ← mkStaleKey (·.cast)
-  storeSecret key fileRx item.rx (·.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
-  storeSecret key fileTx item.tx (·.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
+  storeSecret key fileRx item.rx (·.cast (by simp only [getElem, USize.ofNatLT_eq_ofNat]; congr))
+  storeSecret key fileTx item.tx (·.cast (by simp only [getElem, USize.ofNatLT_eq_ofNat]; congr))
 
 def saveMetaKeyToFile (file : System.FilePath) (key : Option (SymmKey τ XSalsa20) := none) : CryptoM τ Unit := do
   let key ← key.getDM (mkStaleKey (·.cast))

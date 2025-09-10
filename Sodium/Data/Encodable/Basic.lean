@@ -290,7 +290,7 @@ section Sigma
 
 variable {γ : α → Type v} [∀ a, Encodable (γ a)]
 
-instance _root_.Sigma.instEncodable : Encodable (Sigma γ) where
+instance _root_.Sigma.instEncodable : Encodable (Σ a, γ a) where
   encode x := json% [$(encode x.1), $(encode x.2)]
   decode? json :=
     match json.getArrVal? 0, json.getArrVal? 1 with

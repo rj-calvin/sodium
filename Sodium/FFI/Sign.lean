@@ -159,7 +159,7 @@ alloy c extern "lean_crypto_sign_open"
 def signOpen {n : Nat}
     (signedMessage : @& ByteVector (BYTES + n))
     (publicKey : @& ByteVector PUBLICKEYBYTES)
-    : IO (Option (ByteVector n)) :=
+    : Option (ByteVector n) :=
   size_t signed_msg_len = lean_sarray_size(signedMessage);
   size_t pk_len = lean_sarray_size(publicKey);
 
@@ -167,10 +167,8 @@ def signOpen {n : Nat}
     pk_len != crypto_sign_PUBLICKEYBYTES ||
     signed_msg_len < crypto_sign_BYTES
   ) {
-    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_sign_open");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    lean_object* none = lean_alloc_ctor(0, 0, 0);
+    return none;
   }
 
   size_t message_len = signed_msg_len - crypto_sign_BYTES;
@@ -190,12 +188,12 @@ def signOpen {n : Nat}
   if (err != 0) {
     lean_dec(message);
     lean_object* none = lean_alloc_ctor(0, 0, 0);
-    return lean_io_result_mk_ok(none);
+    return none;
   }
 
   lean_object* some = lean_alloc_ctor(1, 1, 0);
   lean_ctor_set(some, 0, message);
-  return lean_io_result_mk_ok(some);
+  return some;
 
 alloy c extern "lean_crypto_sign_detached"
 def signDetached {τ : @& Sodium σ} {n : Nat}
@@ -246,7 +244,7 @@ def verifyDetached {n : Nat}
     (signature : @& ByteVector BYTES)
     (message : @& ByteVector n)
     (publicKey : @& ByteVector PUBLICKEYBYTES)
-    : IO Bool :=
+    : Bool :=
   size_t sig_len = lean_sarray_size(signature);
   size_t msg_len = lean_sarray_size(message);
   size_t pk_len = lean_sarray_size(publicKey);
@@ -255,10 +253,7 @@ def verifyDetached {n : Nat}
     sig_len != crypto_sign_BYTES ||
     pk_len != crypto_sign_PUBLICKEYBYTES
   ) {
-    lean_object* error_msg = lean_mk_string("spec violation in lean_crypto_sign_verify_detached");
-    lean_object* io_error = lean_alloc_ctor(7, 1, 0);
-    lean_ctor_set(io_error, 0, error_msg);
-    return lean_io_result_mk_error(io_error);
+    return 0;
   }
 
   int err = crypto_sign_verify_detached(
@@ -268,9 +263,9 @@ def verifyDetached {n : Nat}
     lean_sarray_cptr(publicKey));
 
   if (err == 0) {
-    return lean_io_result_mk_ok(lean_box(1));
+    return 1;
   } else {
-    return lean_io_result_mk_ok(lean_box(0));
+    return 0;
   }
 
 -- Conversion functions from Ed25519 to Curve25519
