@@ -35,7 +35,7 @@ open Sodium FFI KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let seed ← SecureVector.new (τ := ctx) SEEDBYTES
+    let seed ← SecretVector.new (τ := ctx) SEEDBYTES
     let (publicKey1, _secretKey1) ← seedKeypair (τ := ctx) seed
     let (publicKey2, _secretKey2) ← seedKeypair (τ := ctx) seed
 
@@ -96,8 +96,8 @@ open Sodium FFI KeyExch
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let seed1 ← SecureVector.new (τ := ctx) SEEDBYTES
-    let seed2 ← SecureVector.new (τ := ctx) SEEDBYTES
+    let seed1 ← SecretVector.new (τ := ctx) SEEDBYTES
+    let seed2 ← SecretVector.new (τ := ctx) SEEDBYTES
 
     -- Generate deterministic keypairs
     let (clientPk, clientSk) ← seedKeypair (τ := ctx) seed1
@@ -269,7 +269,7 @@ open Sodium FFI KeyExch
     let mut unique_sessions := 0
 
     -- Generate session keys with 5 different servers
-    let mut session_keys : Array (SecureVector ctx _) := #[]
+    let mut session_keys : Array (SecretVector ctx _) := #[]
     for _ in [0:5] do
       try
         let (serverPk, _) ← keypair (τ := ctx)

@@ -21,7 +21,7 @@ def SEEDBYTES : Nat := 32
 def SESSIONKEYBYTES : Nat := 32
 
 alloy c extern "lean_crypto_kx_keypair"
-def keypair {τ : @& Sodium σ} : IO (ByteVector PUBLICKEYBYTES × SecureVector τ SECRETKEYBYTES) :=
+def keypair {τ : @& Sodium σ} : IO (ByteVector PUBLICKEYBYTES × SecretVector τ SECRETKEYBYTES) :=
   lean_object* public_key = lean_alloc_sarray(
     sizeof(uint8_t),
     crypto_kx_PUBLICKEYBYTES,
@@ -59,7 +59,7 @@ def keypair {τ : @& Sodium σ} : IO (ByteVector PUBLICKEYBYTES × SecureVector 
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_kx_seed_keypair"
-def seedKeypair {τ : @& Sodium σ} (seed : @& SecureVector τ SEEDBYTES) : IO (ByteVector PUBLICKEYBYTES × SecureVector τ SECRETKEYBYTES) :=
+def seedKeypair {τ : @& Sodium σ} (seed : @& SecretVector τ SEEDBYTES) : IO (ByteVector PUBLICKEYBYTES × SecretVector τ SECRETKEYBYTES) :=
   size_t seed_len = lean_ctor_get_usize(seed, 1);
 
   if (seed_len != crypto_kx_SEEDBYTES) {
@@ -114,9 +114,9 @@ def seedKeypair {τ : @& Sodium σ} (seed : @& SecureVector τ SEEDBYTES) : IO (
 alloy c extern "lean_crypto_kx_client_session_keys"
 def clientSessionKeys {τ : @& Sodium σ}
     (clientPublicKey : @& ByteVector PUBLICKEYBYTES)
-    (clientSecretKey : @& SecureVector τ SECRETKEYBYTES)
+    (clientSecretKey : @& SecretVector τ SECRETKEYBYTES)
     (serverPublicKey : @& ByteVector PUBLICKEYBYTES)
-    : IO (Option (SecureVector τ SESSIONKEYBYTES × SecureVector τ SESSIONKEYBYTES)) :=
+    : IO (Option (SecretVector τ SESSIONKEYBYTES × SecretVector τ SESSIONKEYBYTES)) :=
   size_t client_sk_len = lean_ctor_get_usize(clientSecretKey, 1);
 
   if (
@@ -182,9 +182,9 @@ def clientSessionKeys {τ : @& Sodium σ}
 alloy c extern "lean_crypto_kx_server_session_keys"
 def serverSessionKeys {τ : @& Sodium σ}
     (serverPublicKey : @& ByteVector PUBLICKEYBYTES)
-    (serverSecretKey : @& SecureVector τ SECRETKEYBYTES)
+    (serverSecretKey : @& SecretVector τ SECRETKEYBYTES)
     (clientPublicKey : @& ByteVector PUBLICKEYBYTES)
-    : IO (Option (SecureVector τ SESSIONKEYBYTES × SecureVector τ SESSIONKEYBYTES)) :=
+    : IO (Option (SecretVector τ SESSIONKEYBYTES × SecretVector τ SESSIONKEYBYTES)) :=
   size_t server_sk_len = lean_ctor_get_usize(serverSecretKey, 1);
 
   if (

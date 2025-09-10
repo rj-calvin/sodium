@@ -37,7 +37,7 @@ open Sodium FFI.Sign
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let seed ← SecureVector.new (τ := ctx) SEEDBYTES
+    let seed ← SecretVector.new (τ := ctx) SEEDBYTES
     let (publicKey1, _secretKey1) ← seedKeypair (τ := ctx) seed
     let (publicKey2, _secretKey2) ← seedKeypair (τ := ctx) seed
 
@@ -182,7 +182,7 @@ open Sodium FFI.Sign
 
     let _curve25519Sk ← ed25519SkToCurve25519 ed25519Sk
 
-    -- SecureVector doesn't expose size directly, but we can test that conversion succeeded
+    -- SecretVector doesn't expose size directly, but we can test that conversion succeeded
     IO.println "✓ Ed25519 to Curve25519 secret key conversion succeeded"
   catch e =>
     IO.println s!"✗ Ed25519 to Curve25519 secret key conversion failed: {e}"

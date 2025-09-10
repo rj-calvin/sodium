@@ -242,7 +242,7 @@ private def mkContext (data : Array UInt8) (h : data.size = 8 := by rfl) : ByteV
       mkContext #[0x63, 0x6F, 0x6E, 0x74, 0x65, 0x78, 0x74, 0x35]   -- "context5" as bytes
     ]
 
-    let mut keys : Array (SecureVector ctx 32) := #[]
+    let mut keys : Array (SecretVector ctx 32) := #[]
     for context in contexts do
       let subkey ← derive (τ := ctx) 32 1 context masterKey
       keys := keys.push subkey

@@ -18,8 +18,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureVector.new (τ := τ) keySize
-  let fileKey ← SecureVector.new 32  -- 32 bytes for secretstream encryption key
+  let testKey ← SecretVector.new (τ := τ) keySize
+  let fileKey ← SecretVector.new 32  -- 32 bytes for secretstream encryption key
   let filename := "test_encrypted_load.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -28,7 +28,7 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
     testKey.toFile fileKey testPath
 
     -- Load key from encrypted file
-    let loadedKey ← SecureVector.ofFile fileKey testPath 32
+    let loadedKey ← SecretVector.ofFile fileKey testPath 32
 
     -- Verify size
     if loadedKey.size == 32 then
@@ -52,8 +52,8 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let smallKeySize : USize := 8
-  let testKey ← SecureVector.new (τ := τ) smallKeySize
-  let fileKey ← SecureVector.new 32
+  let testKey ← SecretVector.new (τ := τ) smallKeySize
+  let fileKey ← SecretVector.new 32
   let filename := "test_key_wrong_size.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
@@ -63,7 +63,7 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 
     -- Try to load as 32-byte key (should fail)
     try
-      let _ ← SecureVector.ofFile fileKey testPath 32
+      let _ ← SecretVector.ofFile fileKey testPath 32
       IO.println "✗ Should have failed with size mismatch"
     catch _ =>
       IO.println "✓ Correctly rejected file with wrong size"
@@ -77,10 +77,10 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 -- Test non-existent file error
 #eval show IO Unit from do
   let τ ← init Unit
-  let fileKey ← SecureVector.new (τ := τ) 32
+  let fileKey ← SecretVector.new (τ := τ) 32
 
   try
-    let _ ← SecureVector.ofFile fileKey "nonexistent_file.key" 32
+    let _ ← SecretVector.ofFile fileKey "nonexistent_file.key" 32
     IO.println "✗ Should have failed with file not found"
   catch _ =>
     IO.println "✓ Correctly handled non-existent file"

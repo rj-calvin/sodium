@@ -75,20 +75,28 @@ end DecryptResult
 abbrev Nonce (spec : Spec) [spec.HasValidShape `nonce] :=
   ByteVector spec[`nonce]
 
+structure NonceId (spec : Spec) where
+  Δh : spec.HasValidShape `nonce
+  get : (h : spec.HasValidShape `nonce) → Nonce spec
+
 abbrev Salt (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `salt] :=
-  SecureVector τ <| USize.ofNatLT spec[`salt] (by simp [h.shape_is_valid])
+  SecretVector τ <| USize.ofNatLT spec[`salt] (by simp [h.shape_is_valid])
 
 abbrev SymmKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `symmkey] :=
-  SecureVector τ <| USize.ofNatLT spec[`symmkey] (by simp [h.shape_is_valid])
+  SecretVector τ <| USize.ofNatLT spec[`symmkey] (by simp [h.shape_is_valid])
 
 abbrev SecretKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `secretkey] :=
-  SecureVector τ <| USize.ofNatLT spec[`secretkey] (by simp [h.shape_is_valid])
+  SecretVector τ <| USize.ofNatLT spec[`secretkey] (by simp [h.shape_is_valid])
 
 abbrev PublicKey (spec : Spec) [spec.HasValidShape `publickey] :=
   ByteVector spec[`publickey]
 
+structure PublicKeyId (spec : Spec) where
+  Δh : spec.HasValidShape `publickey
+  get : (h : spec.HasValidShape `publickey) → PublicKey spec
+
 abbrev SharedKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `sharedkey] :=
-  SecureVector τ <| USize.ofNatLT spec[`sharedkey] (by simp [h.shape_is_valid])
+  SecretVector τ <| USize.ofNatLT spec[`sharedkey] (by simp [h.shape_is_valid])
 
 structure KeyPair (τ : Sodium σ) (spec : Spec) [spec.HasValidShape `publickey] [spec.HasValidShape `secretkey] where
   pkey : PublicKey spec
@@ -101,20 +109,40 @@ structure Session (τ : Sodium σ) (spec : Spec) [spec.HasValidShape `symmkey] w
 abbrev Hash (spec : Spec) [spec.HasValidShape `hash] :=
   ByteVector spec[`hash]
 
+structure HashId (spec : Spec) where
+  Δh : spec.HasValidShape `hash
+  get : (h : spec.HasValidShape `hash) → Hash spec
+
 abbrev Context (spec : Spec) [spec.HasValidShape `context] :=
   ByteVector spec[`context]
+
+structure ContextId (spec : Spec) where
+  Δh : spec.HasValidShape `context
+  get : (h : spec.HasValidShape `context) → Context spec
 
 abbrev Header (spec : Spec) [spec.HasValidShape `header] :=
   ByteVector spec[`header]
 
+structure HeaderId (spec : Spec) where
+  Δh : spec.HasValidShape `header
+  get : (h : spec.HasValidShape `header) → Header spec
+
 abbrev Signature (spec : Spec) [spec.HasValidShape `signature] :=
   ByteVector spec[`signature]
+
+structure SignatureId (spec : Spec) where
+  Δh : spec.HasValidShape `signature
+  get : (h : spec.HasValidShape `signature) → Signature spec
 
 structure SignedJson (spec : Spec) [spec.HasValidShape `signature] [spec.HasValidShape `publickey] where
   protected toJson : Json
   sig : Signature spec
   pkey : PublicKey spec
   deriving ToJson, FromJson
+
+structure SignedJsonId (spec : Spec) where
+  Δh : spec.HasValidShape `signature ∧ spec.HasValidShape `publickey
+  get : (h_sig : spec.HasValidShape `signature) → (h_key : spec.HasValidShape `publickey) → SignedJson spec
 
 namespace SignedJson
 

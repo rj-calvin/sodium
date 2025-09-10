@@ -15,20 +15,20 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureVector.new (τ := τ) keySize
-  let fileKey ← SecureVector.new (τ := τ) 32  -- 32 bytes for secretstream encryption key
+  let testKey ← SecretVector.new (τ := τ) keySize
+  let fileKey ← SecretVector.new (τ := τ) 32  -- 32 bytes for secretstream encryption key
   let filename := "test_store_roundtrip.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
   try
     -- Store the key to encrypted file
-    SecureVector.toFile (τ := τ) testKey fileKey testPath
+    SecretVector.toFile (τ := τ) testKey fileKey testPath
 
     -- Load the key from encrypted file
-    let loadedKey ← SecureVector.ofFile (τ := τ) fileKey testPath keySize
+    let loadedKey ← SecretVector.ofFile (τ := τ) fileKey testPath keySize
 
     -- Verify keys match
-    if SecureVector.compare (τ := τ) testKey loadedKey == .eq then
+    if SecretVector.compare (τ := τ) testKey loadedKey == .eq then
       IO.println "✓ Round-trip test passed: stored and loaded keys match"
     else
       IO.println "✗ Round-trip test failed: keys don't match"
@@ -43,13 +43,13 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureVector.new (τ := τ) keySize
-  let fileKey ← SecureVector.new (τ := τ) 32
+  let testKey ← SecretVector.new (τ := τ) keySize
+  let fileKey ← SecretVector.new (τ := τ) 32
 
   -- Test with directory that doesn't exist
   let invalidPath : FilePath := "/nonexistent/directory/key.bin"
   try
-    SecureVector.toFile (τ := τ) testKey fileKey invalidPath
+    SecretVector.toFile (τ := τ) testKey fileKey invalidPath
     IO.println "✗ Should have failed with invalid path"
   catch _ =>
     IO.println "✓ Correctly failed with invalid path"
@@ -58,14 +58,14 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureVector.new (τ := τ) keySize
-  let fileKey ← SecureVector.new (τ := τ) 32
+  let testKey ← SecretVector.new (τ := τ) keySize
+  let fileKey ← SecretVector.new (τ := τ) 32
   let filename := "test_store_size.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
   try
     -- Store the key
-    SecureVector.toFile (τ := τ) testKey fileKey testPath
+    SecretVector.toFile (τ := τ) testKey fileKey testPath
 
     -- Check file exists and has correct size (including encryption overhead)
     let metadata ← testPath.metadata
@@ -85,14 +85,14 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 #eval show IO Unit from do
   let τ ← init Unit
   let keySize : USize := 32
-  let testKey ← SecureVector.new (τ := τ) keySize
-  let fileKey ← SecureVector.new (τ := τ) 32
+  let testKey ← SecretVector.new (τ := τ) keySize
+  let fileKey ← SecretVector.new (τ := τ) 32
   let filename := "test_store_atomic.tmp"
   let testPath := System.FilePath.mk ".lake" / filename
 
   try
     -- Store the key
-    SecureVector.toFile (τ := τ) testKey fileKey testPath
+    SecretVector.toFile (τ := τ) testKey fileKey testPath
 
     -- Verify file exists
     let exists? ← testPath.pathExists
@@ -114,17 +114,17 @@ def cleanupTestFile (filename : FilePath) : IO Unit := do
 
   for size in sizes do
     let keySize : USize := size.toUSize
-    let testKey ← SecureVector.new (τ := τ) keySize
-    let fileKey ← SecureVector.new (τ := τ) 32
+    let testKey ← SecretVector.new (τ := τ) keySize
+    let fileKey ← SecretVector.new (τ := τ) 32
     let filename := s!"test_store_size_{keySize}.tmp"
     let testPath := System.FilePath.mk ".lake" / filename
 
     try
       -- Store and verify round-trip
-      SecureVector.toFile (τ := τ) testKey fileKey testPath
-      let loadedKey ← SecureVector.ofFile (τ := τ) fileKey testPath keySize
+      SecretVector.toFile (τ := τ) testKey fileKey testPath
+      let loadedKey ← SecretVector.ofFile (τ := τ) fileKey testPath keySize
 
-      if SecureVector.compare (τ := τ) testKey loadedKey == .eq then
+      if SecretVector.compare (τ := τ) testKey loadedKey == .eq then
         IO.println s!"✓ {keySize}-byte key storage/load successful"
       else
         IO.println s!"✗ {keySize}-byte key round-trip failed"

@@ -40,7 +40,7 @@ open Sodium FFI.Box
 #eval show IO Unit from do
   try
     let ctx ← Sodium.init Unit
-    let seed ← SecureVector.new (τ := ctx) SEEDBYTES
+    let seed ← SecretVector.new (τ := ctx) SEEDBYTES
     let (publicKey1, _secretKey1) ← seedKeypair (τ := ctx) seed
     let (publicKey2, _secretKey2) ← seedKeypair (τ := ctx) seed
 

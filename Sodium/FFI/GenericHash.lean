@@ -55,7 +55,7 @@ def hash (input : @& ByteArray) (key : @& Option (ByteVector KEYBYTES) := none) 
   return output;
 
 alloy c extern "lean_crypto_generichash_keygen"
-def hashKeygen {τ : @& Sodium σ} : IO (SecureVector τ KEYBYTES) :=
+def hashKeygen {τ : @& Sodium σ} : IO (SecretVector τ KEYBYTES) :=
   lean_object* key_io = lean_sodium_malloc(τ, crypto_generichash_KEYBYTES, _1);
 
   if (lean_io_result_is_error(key_io)) {

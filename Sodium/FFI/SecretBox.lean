@@ -20,7 +20,7 @@ def NONCEBYTES : Nat := 24
 def MACBYTES : Nat := 16
 
 alloy c extern "lean_crypto_secretbox_keygen"
-def keygen {τ : @& Sodium σ} : IO (SecureVector τ KEYBYTES) :=
+def keygen {τ : @& Sodium σ} : IO (SecretVector τ KEYBYTES) :=
   lean_object* secret_key_io = lean_sodium_malloc(τ, crypto_secretbox_KEYBYTES, _1);
 
   if (lean_io_result_is_error(secret_key_io)) {
@@ -38,7 +38,7 @@ def keygen {τ : @& Sodium σ} : IO (SecureVector τ KEYBYTES) :=
 
 alloy c extern "lean_crypto_secretbox_easy"
 def easy {τ : @& Sodium σ} (message : @& ByteVector n) (nonce : @& ByteVector NONCEBYTES)
-    (secretKey : @& SecureVector τ KEYBYTES) : IO (ByteVector (MACBYTES + n)) :=
+    (secretKey : @& SecretVector τ KEYBYTES) : IO (ByteVector (MACBYTES + n)) :=
   size_t message_len = lean_sarray_size(message);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -81,7 +81,7 @@ def easy {τ : @& Sodium σ} (message : @& ByteVector n) (nonce : @& ByteVector 
 
 alloy c extern "lean_crypto_secretbox_open_easy"
 def openEasy {τ : @& Sodium σ} (ciphertext : @& ByteVector (MACBYTES + n)) (nonce : @& ByteVector NONCEBYTES)
-    (secretKey : @& SecureVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
+    (secretKey : @& SecretVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -124,7 +124,7 @@ def openEasy {τ : @& Sodium σ} (ciphertext : @& ByteVector (MACBYTES + n)) (no
 
 alloy c extern "lean_crypto_secretbox_detached"
 def detached {τ : @& Sodium σ} (message : @& ByteVector n) (nonce : @& ByteVector NONCEBYTES)
-    (secretKey : @& SecureVector τ KEYBYTES) : IO (ByteVector n × ByteVector MACBYTES) :=
+    (secretKey : @& SecretVector τ KEYBYTES) : IO (ByteVector n × ByteVector MACBYTES) :=
   size_t message_len = lean_sarray_size(message);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -176,7 +176,7 @@ def detached {τ : @& Sodium σ} (message : @& ByteVector n) (nonce : @& ByteVec
 
 alloy c extern "lean_crypto_secretbox_open_detached"
 def openDetached {τ : @& Sodium σ} (ciphertext : @& ByteVector n) (mac : @& ByteVector MACBYTES) (nonce : @& ByteVector NONCEBYTES)
-    (secretKey : @& SecureVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
+    (secretKey : @& SecretVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 

@@ -90,7 +90,7 @@ This project **builds LibSodium from source** automatically during the build pro
 ### Memory Safety and Security
 
 **Secure Memory Management**:
-- All sensitive data uses `SecureVector` with `sodium_malloc()` allocation
+- All sensitive data uses `SecretVector` with `sodium_malloc()` allocation
 - Memory protection with `sodium_mprotect_noaccess()` when not in use
 - Automatic secure deallocation with `sodium_free()` in finalizers
 - Random initialization of all allocated secure memory
@@ -229,7 +229,7 @@ inductive DecryptResult (α : Type)
 - **Build System**: Always run `lake build` after changes to verify compilation
 - **Testing**: Use separate test modules and check `#eval` outputs in `lean-lsp`
 - **Type Safety**: Leverage the `Spec` system to prevent cryptographic errors at compile time
-- **Memory Management**: Use `SecureVector` for all sensitive data, never raw pointers
+- **Memory Management**: Use `SecretVector` for all sensitive data, never raw pointers
 - **Documentation**: Follow existing patterns for mathematical proofs in `Encodable` instances
 
 The project maintains mathematical rigor through comprehensive correctness proofs while providing practical cryptographic functionality for real-world applications.

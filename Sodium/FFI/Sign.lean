@@ -21,7 +21,7 @@ def SEEDBYTES : Nat := 32
 def BYTES : Nat := 64
 
 alloy c extern "lean_crypto_sign_keypair"
-def keypair {τ : @& Sodium σ} : IO (ByteVector PUBLICKEYBYTES × SecureVector τ SECRETKEYBYTES) :=
+def keypair {τ : @& Sodium σ} : IO (ByteVector PUBLICKEYBYTES × SecretVector τ SECRETKEYBYTES) :=
   lean_object* public_key = lean_alloc_sarray(
     sizeof(uint8_t),
     crypto_sign_PUBLICKEYBYTES,
@@ -59,7 +59,7 @@ def keypair {τ : @& Sodium σ} : IO (ByteVector PUBLICKEYBYTES × SecureVector 
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_sign_seed_keypair"
-def seedKeypair {τ : @& Sodium σ} (seed : @& SecureVector τ SEEDBYTES) : IO (ByteVector PUBLICKEYBYTES × SecureVector τ SECRETKEYBYTES) :=
+def seedKeypair {τ : @& Sodium σ} (seed : @& SecretVector τ SEEDBYTES) : IO (ByteVector PUBLICKEYBYTES × SecretVector τ SECRETKEYBYTES) :=
   size_t seed_len = lean_ctor_get_usize(seed, 1);
 
   if (seed_len != crypto_sign_SEEDBYTES) {
@@ -114,7 +114,7 @@ def seedKeypair {τ : @& Sodium σ} (seed : @& SecureVector τ SEEDBYTES) : IO (
 alloy c extern "lean_crypto_sign"
 def sign {τ : @& Sodium σ} {n : Nat}
     (message : @& ByteVector n)
-    (secretKey : @& SecureVector τ SECRETKEYBYTES)
+    (secretKey : @& SecretVector τ SECRETKEYBYTES)
     : IO (ByteVector (BYTES + n)) :=
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
   size_t msg_len = lean_sarray_size(message);
@@ -200,7 +200,7 @@ def signOpen {n : Nat}
 alloy c extern "lean_crypto_sign_detached"
 def signDetached {τ : @& Sodium σ} {n : Nat}
     (message : @& ByteVector n)
-    (secretKey : @& SecureVector τ SECRETKEYBYTES)
+    (secretKey : @& SecretVector τ SECRETKEYBYTES)
     : IO (ByteVector BYTES) :=
   size_t sk_len = lean_ctor_get_usize(secretKey, 1);
 
@@ -306,8 +306,8 @@ def ed25519PkToCurve25519
 
 alloy c extern "lean_crypto_sign_ed25519_sk_to_curve25519"
 def ed25519SkToCurve25519 {τ : @& Sodium σ}
-    (ed25519Sk : @& SecureVector τ SECRETKEYBYTES)
-    : IO (SecureVector τ 32) :=
+    (ed25519Sk : @& SecretVector τ SECRETKEYBYTES)
+    : IO (SecretVector τ 32) :=
   size_t sk_len = lean_ctor_get_usize(ed25519Sk, 1);
 
   if (sk_len != crypto_sign_SECRETKEYBYTES) {

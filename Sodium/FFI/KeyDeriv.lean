@@ -22,7 +22,7 @@ def BYTES_MIN : Nat := 16
 def BYTES_MAX : Nat := 64
 
 alloy c extern "lean_crypto_kdf_keygen"
-def keygen {τ : @& Sodium σ} : IO (SecureVector τ KEYBYTES) :=
+def keygen {τ : @& Sodium σ} : IO (SecretVector τ KEYBYTES) :=
   lean_object* master_key_io = lean_sodium_malloc(τ, crypto_kdf_KEYBYTES, _1);
 
   if (lean_io_result_is_error(master_key_io)) {
@@ -43,8 +43,8 @@ def derive {τ : @& Sodium σ}
     (subkeyLen : USize)
     (subkeyId : UInt64)
     (context : @& ByteVector CONTEXTBYTES)
-    (masterKey : @& SecureVector τ KEYBYTES)
-    : IO (SecureVector τ subkeyLen) :=
+    (masterKey : @& SecretVector τ KEYBYTES)
+    : IO (SecretVector τ subkeyLen) :=
   size_t master_key_len = lean_ctor_get_usize(masterKey, 1);
 
   if (

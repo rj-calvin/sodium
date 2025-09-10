@@ -51,10 +51,6 @@ instance : Inhabited (Context Blake2b) where
 
 end Context
 
-structure NonceId (spec : Spec) where
-  Dom : spec.HasValidShape `nonce
-  get : (h : spec.HasValidShape `nonce) → Nonce spec
-
 private structure EntropyState (τ : Sodium σ) where
   entropy : EntropyVector τ
   nonces : NameMap (Σ s, NonceId s) := ∅
@@ -169,13 +165,13 @@ end CryptoM
 export CryptoM (mkFreshNonce currContext withContext withMetaKey)
 
 def mkFreshKey {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape `symmkey] → Type} [spec.HasValidShape `symmkey]
-    (lift : SecureVector τ spec[`symmkey] → X τ spec) : CryptoM τ (X τ spec) := do
-  let key ← SecureVector.new spec[`symmkey]
+    (lift : SecretVector τ spec[`symmkey] → X τ spec) : CryptoM τ (X τ spec) := do
+  let key ← SecretVector.new spec[`symmkey]
   return lift key
 
 open FFI KeyDeriv in
 def mkStaleKey {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape `symmkey] → Type} [spec.HasValidShape `symmkey]
-    (lift : SecureVector τ spec[`symmkey] → X τ spec) : CryptoM τ (X τ spec) := do
+    (lift : SecretVector τ spec[`symmkey] → X τ spec) : CryptoM τ (X τ spec) := do
   let {mkey, ctx, ..} ← read
   let mctx ← getMCtx
   let key ← derive spec[`symmkey] mctx.depth ctx.cast mkey.cast
@@ -440,9 +436,9 @@ def verify [Encodable α] (msg : SignedJson Ed25519) : CryptoM τ (DecryptResult
   return .accepted a
 
 def loadSecret? {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
-    (key : SymmKey τ XSalsa20) (file : System.FilePath) (lift : SecureVector τ spec[kind] → X τ spec) : CryptoM τ (Option (X τ spec)) := do
+    (key : SymmKey τ XSalsa20) (file : System.FilePath) (lift : SecretVector τ spec[kind] → X τ spec) : CryptoM τ (Option (X τ spec)) := do
   try
-    let data ← SecureVector.ofFile key file spec[kind]
+    let data ← SecretVector.ofFile key file spec[kind]
     return some (lift data)
   catch _ => return none
 
@@ -469,7 +465,7 @@ def withMetaKeyFromFile? (file : System.FilePath) (x : CryptoM τ α) (key : Opt
   some <$> withMetaKey mkey x
 
 def storeSecret {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
-    (key : SymmKey τ XSalsa20) (file : System.FilePath) (item : X τ spec) (extract : X τ spec → SecureVector τ spec[kind]) : CryptoM τ Unit := do
+    (key : SymmKey τ XSalsa20) (file : System.FilePath) (item : X τ spec) (extract : X τ spec → SecretVector τ spec[kind]) : CryptoM τ Unit := do
   let data := extract item
   data.toFile key file
 
@@ -491,8 +487,8 @@ def saveMetaKeyToFile (file : System.FilePath) (key : Option (SymmKey τ XSalsa2
   storeSecret key file (← read).mkey (·.cast)
 
 unsafe def readSecret {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape `symmkey] → Type} [spec.HasValidShape `symmkey]
-    (lift : SecureVector τ spec[`symmkey] → X τ spec) (prompt := s!"{spec.name}.{spec[`symmkey] }") : CryptoM τ (X τ spec) := do
-  let key ← SecureVector.ofStdin prompt spec[`symmkey]
+    (lift : SecretVector τ spec[`symmkey] → X τ spec) (prompt := s!"{spec.name}.{spec[`symmkey] }") : CryptoM τ (X τ spec) := do
+  let key ← SecretVector.ofStdin prompt spec[`symmkey]
   return lift key
 
 unsafe def withMetaKeyFromInput (x : CryptoM τ α) : CryptoM τ α := do

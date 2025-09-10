@@ -41,7 +41,7 @@ def BYTES_MAX : Nat := 4294967295
 
 -- Password hashing for storage/verification (Argon2id default)
 alloy c extern "lean_crypto_pwhash_str"
-def str {τ : @& Sodium σ} (password : @& SecureVector τ n) (opslimit : USize) (memlimit : USize) : IO String :=
+def str {τ : @& Sodium σ} (password : @& SecretVector τ n) (opslimit : USize) (memlimit : USize) : IO String :=
   size_t password_len = lean_ctor_get_usize(password, 1);
 
   if (password_len > crypto_pwhash_PASSWD_MAX) {
@@ -86,7 +86,7 @@ def str {τ : @& Sodium σ} (password : @& SecureVector τ n) (opslimit : USize)
 
 -- Password verification against stored hash
 alloy c extern "lean_crypto_pwhash_str_verify"
-def strVerify {τ : @& Sodium σ} (hashStr : String) (password : @& SecureVector τ n) : IO Bool :=
+def strVerify {τ : @& Sodium σ} (hashStr : String) (password : @& SecretVector τ n) : IO Bool :=
   size_t password_len = lean_ctor_get_usize(password, 1);
 
   if (password_len > crypto_pwhash_PASSWD_MAX) {
@@ -111,8 +111,8 @@ def strVerify {τ : @& Sodium σ} (hashStr : String) (password : @& SecureVector
 
 -- Key derivation from password to secure array
 alloy c extern "lean_crypto_pwhash"
-def derive {τ : @& Sodium σ} (password : @& SecureVector τ n) (salt : @& ByteVector SALTBYTES)
-    (outLen : USize) (opslimit : USize := OPSLIMIT_INTERACTIVE) (memlimit : USize := MEMLIMIT_INTERACTIVE) (alg : USize := ALG_DEFAULT) : IO (SecureVector τ outLen) :=
+def derive {τ : @& Sodium σ} (password : @& SecretVector τ n) (salt : @& ByteVector SALTBYTES)
+    (outLen : USize) (opslimit : USize := OPSLIMIT_INTERACTIVE) (memlimit : USize := MEMLIMIT_INTERACTIVE) (alg : USize := ALG_DEFAULT) : IO (SecretVector τ outLen) :=
   size_t password_len = lean_ctor_get_usize(password, 1);
   size_t salt_len = lean_sarray_byte_size(salt);
 

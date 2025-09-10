@@ -20,7 +20,7 @@ def NONCEBYTES : Nat := 24
 def ABYTES : Nat := 16
 
 alloy c extern "lean_crypto_aead_xchacha20poly1305_ietf_keygen"
-def keygen {τ : @& Sodium σ} : IO (SecureVector τ KEYBYTES) :=
+def keygen {τ : @& Sodium σ} : IO (SecretVector τ KEYBYTES) :=
   lean_object* secret_key_io = lean_sodium_malloc(τ, crypto_aead_xchacha20poly1305_ietf_KEYBYTES, _1);
 
   if (lean_io_result_is_error(secret_key_io)) {
@@ -38,7 +38,7 @@ def keygen {τ : @& Sodium σ} : IO (SecureVector τ KEYBYTES) :=
 
 alloy c extern "lean_crypto_aead_xchacha20poly1305_ietf_encrypt"
 def encrypt {τ : @& Sodium σ} (message : @& ByteVector n) (additionalData : @& ByteVector m)
-    (nonce : @& ByteVector NONCEBYTES) (key : @& SecureVector τ KEYBYTES)
+    (nonce : @& ByteVector NONCEBYTES) (key : @& SecretVector τ KEYBYTES)
     : IO (ByteVector (ABYTES + n)) :=
   size_t message_len = lean_sarray_size(message);
   size_t ad_len = lean_sarray_size(additionalData);
@@ -86,7 +86,7 @@ def encrypt {τ : @& Sodium σ} (message : @& ByteVector n) (additionalData : @&
 alloy c extern "lean_crypto_aead_xchacha20poly1305_ietf_decrypt"
 def decrypt {τ : @& Sodium σ} (ciphertext : @& ByteVector (ABYTES + n))
     (additionalData : @& ByteVector m) (nonce : @& ByteVector NONCEBYTES)
-    (key : @& SecureVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
+    (key : @& SecretVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t ad_len = lean_sarray_size(additionalData);
   size_t key_len = lean_ctor_get_usize(key, 1);
@@ -133,7 +133,7 @@ def decrypt {τ : @& Sodium σ} (ciphertext : @& ByteVector (ABYTES + n))
 
 alloy c extern "lean_crypto_aead_xchacha20poly1305_ietf_encrypt_detached"
 def encryptDetached {τ : @& Sodium σ} (message : @& ByteVector n) (additionalData : @& ByteVector m)
-    (nonce : @& ByteVector NONCEBYTES) (key : @& SecureVector τ KEYBYTES)
+    (nonce : @& ByteVector NONCEBYTES) (key : @& SecretVector τ KEYBYTES)
     : IO (ByteVector n × ByteVector ABYTES) :=
   size_t message_len = lean_sarray_size(message);
   size_t ad_len = lean_sarray_size(additionalData);
@@ -190,7 +190,7 @@ def encryptDetached {τ : @& Sodium σ} (message : @& ByteVector n) (additionalD
 alloy c extern "lean_crypto_aead_xchacha20poly1305_ietf_decrypt_detached"
 def decryptDetached {τ : @& Sodium σ} (ciphertext : @& ByteVector n) (mac : @& ByteVector ABYTES)
     (additionalData : @& ByteVector m) (nonce : @& ByteVector NONCEBYTES)
-    (key : @& SecureVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
+    (key : @& SecretVector τ KEYBYTES) : IO (Option (ByteVector n)) :=
   size_t ciphertext_len = lean_sarray_size(ciphertext);
   size_t ad_len = lean_sarray_size(additionalData);
   size_t key_len = lean_ctor_get_usize(key, 1);

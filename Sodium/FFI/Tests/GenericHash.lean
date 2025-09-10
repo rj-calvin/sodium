@@ -59,7 +59,7 @@ open Sodium.FFI.GenericHash
 --     let key ← hashKeygen (τ := ctx)
 --     let input := "Message to authenticate".toUTF8
 
---     -- Convert SecureVector to ByteVector for the key
+--     -- Convert SecretVector to ByteVector for the key
 --     -- Note: In production, keys should remain in secure memory
 --     let hash := GenericHash.hash input (some key.cast)
 

@@ -1,6 +1,6 @@
 import «Sodium».FFI.Basic
 
-namespace Sodium.FFI.Tests.SecureVectorComparison
+namespace Sodium.FFI.Tests.SecretVectorComparison
 
 -- Test SecureArray comparison function
 #eval show IO Unit from do
@@ -86,4 +86,4 @@ namespace Sodium.FFI.Tests.SecureVectorComparison
   catch e =>
     IO.println s!"✗ SecureArray Ord instance failed: {e}"
 
-end Sodium.FFI.Tests.SecureVectorComparison
+end Sodium.FFI.Tests.SecretVectorComparison

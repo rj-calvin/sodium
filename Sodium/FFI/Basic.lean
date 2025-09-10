@@ -37,24 +37,24 @@ LEAN_EXPORT void* sodium_secure_of_lean(b_lean_obj_arg obj) {
 }
 end
 
-structure SecureVector (_ : Sodium σ) (n : USize) where
+structure SecretVector (_ : Sodium σ) (n : USize) where
   private mk ::
   private ref : SecurePointed.nonemptyType.type
   usize : USize
   usize_rfl : usize = n
 
-noncomputable instance {τ : Sodium σ} : Nonempty (SecureVector τ n) :=
+noncomputable instance {τ : Sodium σ} : Nonempty (SecretVector τ n) :=
   ⟨{ ref := Classical.choice SecurePointed.nonemptyType.property, usize := n, usize_rfl := rfl }⟩
 
-noncomputable instance {τ : Sodium σ} : Inhabited (SecureVector τ n) :=
+noncomputable instance {τ : Sodium σ} : Inhabited (SecretVector τ n) :=
   ⟨{ ref := Classical.choice SecurePointed.nonemptyType.property, usize := n, usize_rfl := rfl }⟩
 
-namespace SecureVector
+namespace SecretVector
 
-abbrev size {τ : Sodium σ} (x : SecureVector τ n) : Nat := x.usize.toNat
+abbrev size {τ : Sodium σ} (x : SecretVector τ n) : Nat := x.usize.toNat
 
 alloy c extern "lean_sodium_malloc"
-def new {τ : @& Sodium σ} (size : USize) : IO (SecureVector τ size) :=
+def new {τ : @& Sodium σ} (size : USize) : IO (SecretVector τ size) :=
   void* ptr = sodium_malloc(size);
 
   if (ptr == NULL) {
@@ -74,7 +74,7 @@ def new {τ : @& Sodium σ} (size : USize) : IO (SecureVector τ size) :=
   return lean_io_result_mk_ok(secure_ref);
 
 alloy c extern "lean_sodium_is_zero"
-def isZero {τ : @& Sodium σ} (buf : @& SecureVector τ n) : Bool :=
+def isZero {τ : @& Sodium σ} (buf : @& SecretVector τ n) : Bool :=
   size_t len = lean_ctor_get_usize(buf, 1);
   void* ptr = of_lean<SecurePointed>(lean_ctor_get(buf, 0));
   sodium_mprotect_readonly(ptr);
@@ -83,7 +83,7 @@ def isZero {τ : @& Sodium σ} (buf : @& SecureVector τ n) : Bool :=
   return result == 1;
 
 alloy c extern "lean_sodium_memcmp"
-def compare {τ : @& Sodium σ} (b1 : @& SecureVector τ n) (b2 : @& SecureVector τ m) : Ordering :=
+def compare {τ : @& Sodium σ} (b1 : @& SecretVector τ n) (b2 : @& SecretVector τ m) : Ordering :=
   size_t len1 = lean_ctor_get_usize(b1, 1);
   size_t len2 = lean_ctor_get_usize(b2, 1);
 
@@ -100,14 +100,14 @@ def compare {τ : @& Sodium σ} (b1 : @& SecureVector τ n) (b2 : @& SecureVecto
   sodium_mprotect_noaccess(ptr1);
   return result + 1;
 
-instance {τ : Sodium σ} : Ord (SecureVector τ n) := ⟨compare⟩
+instance {τ : Sodium σ} : Ord (SecretVector τ n) := ⟨compare⟩
 
-instance {τ : Sodium σ} : BEq (SecureVector τ n) where
+instance {τ : Sodium σ} : BEq (SecretVector τ n) where
   beq x y := compare x y == .eq
 
 alloy c extern "lean_sodium_load_secret_key"
-def ofFile {τ : @& Sodium σ} (fileKey : @& SecureVector τ m) (filePath : @& System.FilePath)
-    (expectedSize : USize) : IO (SecureVector τ expectedSize) :=
+def ofFile {τ : @& Sodium σ} (fileKey : @& SecretVector τ m) (filePath : @& System.FilePath)
+    (expectedSize : USize) : IO (SecretVector τ expectedSize) :=
   const char* path = lean_string_cstr(filePath);
   void* file_key_ptr = of_lean<SecurePointed>(lean_ctor_get(fileKey, 0));
 
@@ -207,7 +207,7 @@ def ofFile {τ : @& Sodium σ} (fileKey : @& SecureVector τ m) (filePath : @& S
   return lean_io_result_mk_ok(secure_ref);
 
 alloy c extern "lean_sodium_store_secret_key"
-def toFile {τ : @& Sodium σ} (buf : @& SecureVector τ n) (fileKey : @& SecureVector τ m) (filePath : @& System.FilePath) : IO Unit :=
+def toFile {τ : @& Sodium σ} (buf : @& SecretVector τ n) (fileKey : @& SecretVector τ m) (filePath : @& System.FilePath) : IO Unit :=
   const char* path = lean_string_cstr(filePath);
   size_t key_size = lean_ctor_get_usize(buf, 1);
   void* secure_ptr = of_lean<SecurePointed>(lean_ctor_get(buf, 0));
@@ -293,7 +293,7 @@ def toFile {τ : @& Sodium σ} (buf : @& SecureVector τ n) (fileKey : @& Secure
 
 
 alloy c extern "lean_sodium_read_stdin_secure"
-unsafe def ofStdin {τ : @& Sodium σ} (prompt : @& String) (maxSize : USize) : IO (SecureVector τ maxSize) :=
+unsafe def ofStdin {τ : @& Sodium σ} (prompt : @& String) (maxSize : USize) : IO (SecretVector τ maxSize) :=
   const char* prompt_str = lean_string_cstr(prompt);
 
   void* secure_ptr = sodium_malloc(maxSize);
@@ -335,14 +335,14 @@ unsafe def ofStdin {τ : @& Sodium σ} (prompt : @& String) (maxSize : USize) : 
 
   return lean_io_result_mk_ok(secure_ref);
 
-protected def cast {τ : Sodium σ} (h : n = m := by simp) (a : SecureVector τ n) : SecureVector τ m :=
+protected def cast {τ : Sodium σ} (h : n = m := by simp) (a : SecretVector τ n) : SecretVector τ m :=
   ⟨a.ref, a.usize, by simpa only [a.usize_rfl]⟩
 
-def cast? {τ : Sodium σ} (a : SecureVector τ n) : Option (SecureVector τ m) :=
+def cast? {τ : Sodium σ} (a : SecretVector τ n) : Option (SecretVector τ m) :=
   if h : a.usize = m then some ⟨a.ref, a.usize, h⟩
   else none
 
-end SecureVector
+end SecretVector
 
 structure EntropyVector (_ : Sodium σ) where
   private mk ::

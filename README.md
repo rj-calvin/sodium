@@ -61,7 +61,7 @@ Comprehensive testing for all FFI components with validation of:
 - **Size Tracking**: Type-level size guarantees preventing buffer overflows
 
 ### Security
-- **Secure Memory**: All sensitive data uses `SecureVector` with `sodium_malloc()`
+- **Secure Memory**: All sensitive data uses `SecretVector` with `sodium_malloc()`
 - **Memory Protection**: Automatic `sodium_mprotect_noaccess()` when not in use
 - **Nonce Management**: Thread-safe unique nonce generation with freshness tracking
 - **Forward Secrecy**: Automatic rekeying in streaming protocols
@@ -88,7 +88,7 @@ lake build
 
 ### Completed Components
 ✅ **FFI Layer**: Bindings for all major LibSodium function categories  
-✅ **Secure Memory**: `SecureVector` implementation with memory protection  
+✅ **Secure Memory**: `SecretVector` implementation with memory protection  
 ✅ **CryptoM Monad**: Entropy management and key derivation  
 ✅ **Streaming**: Forward-secure streaming with rekeying  
 ✅ **Serialization**: Lean syntax tree encoding for syntax sharing and syntax signatures

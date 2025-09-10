@@ -59,7 +59,7 @@ noncomputable instance {τ : Sodium σ} : Inhabited (SecureStream τ) :=
   ⟨{ state := Classical.choice StreamState.nonemptyType.property }⟩
 
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_keygen"
-def keygen {τ : @& Sodium σ} : IO (SecureVector τ KEYBYTES) :=
+def keygen {τ : @& Sodium σ} : IO (SecretVector τ KEYBYTES) :=
   lean_object* secret_key_io = lean_sodium_malloc(τ, crypto_secretstream_xchacha20poly1305_KEYBYTES, _1);
 
   if (lean_io_result_is_error(secret_key_io)) {
@@ -76,7 +76,7 @@ def keygen {τ : @& Sodium σ} : IO (SecureVector τ KEYBYTES) :=
   return lean_io_result_mk_ok(secret_key);
 
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_init_push"
-def streamInitPush {τ : @& Sodium σ} (key : @& SecureVector τ KEYBYTES)
+def streamInitPush {τ : @& Sodium σ} (key : @& SecretVector τ KEYBYTES)
     : IO (SecureStream τ × ByteVector HEADERBYTES) :=
   size_t key_len = lean_ctor_get_usize(key, 1);
 
@@ -175,7 +175,7 @@ def streamPush {τ : @& Sodium σ} (stream : @& SecureStream τ)
 
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_init_pull"
 def streamInitPull {τ : @& Sodium σ}
-    (header : @& ByteVector HEADERBYTES) (key : @& SecureVector τ KEYBYTES)
+    (header : @& ByteVector HEADERBYTES) (key : @& SecretVector τ KEYBYTES)
     : IO (SecureStream τ) :=
   size_t key_len = lean_ctor_get_usize(key, 1);
   size_t header_len = lean_sarray_size(header);
