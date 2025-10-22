@@ -171,11 +171,13 @@ namespace WFin
 variable {n : Nat} {α : Type u} {ι : α → Nat}
 
 def encodable_zero : Encodable (WFin ι 0) :=
-  haveI : Encodable Empty := Empty.encodable
-  let f : WFin ι 0 → Empty := fun ⟨_, h⟩ => False.elim <| Nat.not_lt_of_ge h (WType.depth_pos _)
-  let finv : Empty → WFin ι 0 := by intro x; cases x
-  have : ∀ x, finv (f x) = x := fun ⟨_, h⟩ => False.elim <| Nat.not_lt_of_ge h (WType.depth_pos _)
-  Encodable.ofEquiv f finv this
+  have : Encodable Empty := Empty.encodable
+  have : Encodable.Equiv (WFin ι 0) Empty := {
+    push := fun ⟨_, h⟩ => False.elim <| Nat.not_lt_of_ge h (WType.depth_pos _)
+    pull := by intro x; cases x
+    push_pull_eq := fun ⟨_, h⟩ => False.elim <| Nat.not_lt_of_ge h (WType.depth_pos _)
+  }
+  Encodable.ofEquiv _ this
 
 def down (n : Nat) : WFin ι (n + 1) → Σ a, Fin (ι a) → WFin ι n
   | ⟨w, h⟩ => by
@@ -208,13 +210,18 @@ def up (n : Nat) : (Σ a, Fin (ι a) → WFin ι n) → WFin ι (n + 1)
 variable [Encodable α]
 
 def encodable_succ (n : Nat) (_ : Encodable (WFin ι n)) : Encodable (WFin ι (n + 1)) :=
-  Encodable.ofEquiv (down n) (up n) (by intro ⟨⟨_, _⟩, _⟩; rfl)
+  Encodable.ofEquiv _ {
+    push := down n
+    pull := up n
+    push_pull_eq := by intro ⟨⟨_, _⟩, _⟩; rfl
+  }
 
-instance _root_.WType.instEncodable : Encodable (WType fun i => Fin (ι i)) :=
-  haveI h : ∀ n, Encodable (WFin ι n) := fun n => Nat.rec encodable_zero encodable_succ n
-  let f : WType (fun i => Fin (ι i)) → Σ n, WFin ι n := fun w => ⟨w.depth, ⟨w, by exact Nat.le_refl _⟩⟩
-  let finv : (Σ n, WFin ι n) → WType fun i => Fin (ι i) := fun p => p.2.1
-  have : ∀ w, finv (f w) = w := fun _ => rfl
-  Encodable.ofEquiv f finv this
+instance _root_.WType.encodable : Encodable (WType fun i => Fin (ι i)) :=
+  have : ∀ n, Encodable (WFin ι n) := fun n => Nat.rec encodable_zero encodable_succ n
+  have : Encodable.Equiv (WType fun i => Fin (ι i)) (Σ n, WFin ι n) := {
+    push w := ⟨w.depth, ⟨w, by exact Nat.le_refl _⟩⟩
+    pull p := p.2.1
+  }
+  Encodable.ofEquiv _ this
 
 end WFin

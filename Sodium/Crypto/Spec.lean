@@ -143,7 +143,7 @@ open FFI Box in
 def HSalsa20 : Spec where
   name := `hsalsa20
   shapes := RBMap.empty
-    |>.insert `sharedkey SHAREDBYTES
+    |>.insert `symmkey SHAREDBYTES
 
 open FFI Box in
 def Poly1305 : Spec where
@@ -273,14 +273,14 @@ instance : XSalsa20.HasValidShape `nonce := by
 instance : XSalsa20.HasValidShape `symmkey := by
   simp only [Spec.has_valid_shape_iff, xsalsa20_symmkey_eq, xsalsa20_symmkey_support]
 
-@[simp] theorem hsalsa20_sharedkey_eq : HSalsa20.shapeOf `sharedkey = FFI.Box.SHAREDBYTES := by native_decide
-@[simp] theorem hsalsa20_sharedkey_valid : Spec.IsValidShape <| HSalsa20.shapeOf `sharedkey := by native_decide
-@[simp] theorem hsalsa20_sharedkey_support : Spec.IsValidShape FFI.Box.SHAREDBYTES := by
-  rw [← hsalsa20_sharedkey_eq]
-  exact hsalsa20_sharedkey_valid
+@[simp] theorem hsalsa20_symmkey_eq : HSalsa20.shapeOf `symmkey = FFI.Box.SHAREDBYTES := by native_decide
+@[simp] theorem hsalsa20_symmkey_valid : Spec.IsValidShape <| HSalsa20.shapeOf `symmkey := by native_decide
+@[simp] theorem hsalsa20_symmkey_support : Spec.IsValidShape FFI.Box.SHAREDBYTES := by
+  rw [← hsalsa20_symmkey_eq]
+  exact hsalsa20_symmkey_valid
 
-instance : HSalsa20.HasValidShape `sharedkey := by
-  simp only [Spec.has_valid_shape_iff, hsalsa20_sharedkey_eq, hsalsa20_sharedkey_support]
+instance : HSalsa20.HasValidShape `symmkey := by
+  simp only [Spec.has_valid_shape_iff, hsalsa20_symmkey_eq, hsalsa20_symmkey_support]
 
 @[simp] theorem poly1305_mac_eq : Poly1305.shapeOf `mac = FFI.Box.MACBYTES := by native_decide
 @[simp] theorem poly1305_mac_valid : Spec.IsValidShape <| Poly1305.shapeOf `mac := by native_decide
@@ -336,7 +336,7 @@ instance : XChaCha20Poly1305.HasValidShape `mac := by native_decide
 
 instance : Curve25519HSalsa20.HasValidShape `publickey := by native_decide
 instance : Curve25519HSalsa20.HasValidShape `secretkey := by native_decide
-instance : Curve25519HSalsa20.HasValidShape `sharedkey := by native_decide
+instance : Curve25519HSalsa20.HasValidShape `symmkey := by native_decide
 
 instance : Curve25519XSalsa20Poly1305.HasValidShape `nonce := by native_decide
 instance : Curve25519XSalsa20Poly1305.HasValidShape `mac := by native_decide

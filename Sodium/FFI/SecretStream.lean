@@ -48,14 +48,14 @@ LEAN_EXPORT crypto_secretstream_xchacha20poly1305_state* stream_state_of_lean(b_
 }
 end
 
-structure SecureStream (_ : Sodium σ) where
+structure SecretStream (_ : Sodium σ) where
   private mk ::
   private state : StreamState.nonemptyType.type
 
-noncomputable instance {τ : Sodium σ} : Nonempty (SecureStream τ) :=
+noncomputable instance {τ : Sodium σ} : Nonempty (SecretStream τ) :=
   ⟨{ state := Classical.choice StreamState.nonemptyType.property }⟩
 
-noncomputable instance {τ : Sodium σ} : Inhabited (SecureStream τ) :=
+noncomputable instance {τ : Sodium σ} : Inhabited (SecretStream τ) :=
   ⟨{ state := Classical.choice StreamState.nonemptyType.property }⟩
 
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_keygen"
@@ -77,7 +77,7 @@ def keygen {τ : @& Sodium σ} : IO (SecretVector τ KEYBYTES) :=
 
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_init_push"
 def streamInitPush {τ : @& Sodium σ} (key : @& SecretVector τ KEYBYTES)
-    : IO (SecureStream τ × ByteVector HEADERBYTES) :=
+    : IO (SecretStream τ × ByteVector HEADERBYTES) :=
   size_t key_len = lean_ctor_get_usize(key, 1);
 
   if (key_len != crypto_secretstream_xchacha20poly1305_KEYBYTES) {
@@ -137,7 +137,7 @@ def streamInitPush {τ : @& Sodium σ} (key : @& SecretVector τ KEYBYTES)
   return lean_io_result_mk_ok(ret);
 
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_push"
-def streamPush {τ : @& Sodium σ} (stream : @& SecureStream τ)
+def streamPush {τ : @& Sodium σ} (stream : @& SecretStream τ)
     (message : @& ByteVector n) (additionalData : @& ByteVector m) (tag : Tag)
     : IO (ByteVector (ABYTES + n)) :=
   crypto_secretstream_xchacha20poly1305_state* state =
@@ -176,7 +176,7 @@ def streamPush {τ : @& Sodium σ} (stream : @& SecureStream τ)
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_init_pull"
 def streamInitPull {τ : @& Sodium σ}
     (header : @& ByteVector HEADERBYTES) (key : @& SecretVector τ KEYBYTES)
-    : IO (SecureStream τ) :=
+    : IO (SecretStream τ) :=
   size_t key_len = lean_ctor_get_usize(key, 1);
   size_t header_len = lean_sarray_size(header);
 
@@ -229,7 +229,7 @@ def streamInitPull {τ : @& Sodium σ}
   return lean_io_result_mk_ok(stream);
 
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_pull"
-def streamPull {τ : @& Sodium σ} (stream : @& SecureStream τ)
+def streamPull {τ : @& Sodium σ} (stream : @& SecretStream τ)
     (ciphertext : @& ByteVector (ABYTES + n)) (additionalData : @& ByteVector m)
     : IO (Option (ByteVector n × Tag)) :=
   crypto_secretstream_xchacha20poly1305_state* state =
@@ -275,7 +275,7 @@ def streamPull {τ : @& Sodium σ} (stream : @& SecureStream τ)
   return lean_io_result_mk_ok(some);
 
 alloy c extern "lean_crypto_secretstream_xchacha20poly1305_rekey"
-def streamRekey {τ : @& Sodium σ} (stream : @& SecureStream τ) : BaseIO Unit :=
+def streamRekey {τ : @& Sodium σ} (stream : @& SecretStream τ) : BaseIO Unit :=
   crypto_secretstream_xchacha20poly1305_state* state =
     of_lean<StreamState>(lean_ctor_get(stream, 0));
 

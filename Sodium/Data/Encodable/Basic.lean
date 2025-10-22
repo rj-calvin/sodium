@@ -121,41 +121,48 @@ theorem encode_inj : ∀ ⦃a b : α⦄, encode a = encode b → a = b
 theorem encode_eq_iff {a b : α} : encode a = encode b ↔ a = b :=
   ⟨by exact @encode_inj _ _ _ _, congrArg encode⟩
 
+@[simp]
 def ofLeftInj (f : β → α) (g : α → Option β) (h : ∀ x, g (f x) = some x) : Encodable β :=
   ⟨fun b => encode (f b), fun json => (decode? json).bind g, by simp [encodek, h]⟩
 
-def ofEquiv (f : β → α) (g : α → β) (h : ∀ x, g (f x) = x) : Encodable β :=
-  ⟨fun b => encode (f b), fun json => (decode? json).map g, by simp [encodek, h]⟩
+class Equiv (α : Type u) (β : Type v) where
+  push : α → β
+  pull : β → α
+  push_pull_eq : ∀ a, pull (push a) = a := by intro; first | rfl | ext <;> rfl
+
+@[simp]
+def ofEquiv (α) [Encodable α] (h : Equiv β α) : Encodable β :=
+  ⟨fun b => encode (h.push b), fun json => (decode? json).map h.pull, by simp; exact h.push_pull_eq⟩
 
 def _root_.Empty.encodable : Encodable Empty :=
   ⟨Empty.elim, fun _ => none, fun x => Empty.elim x⟩
 
-instance _root_.Json.instEncodable : Encodable Json where
+instance _root_.Json.encodable : Encodable Json where
   encode := id
   decode? := pure
   encodek _ := by rfl
 
-instance _root_.Nat.instEncodable : Encodable Nat where
+instance _root_.Nat.encodable : Encodable Nat where
   encode n := json% $n
   decode? json := json.getNat?.toOption
   encodek _ := by rfl
 
-instance _root_.String.instEncodable : Encodable String where
+instance _root_.String.encodable : Encodable String where
   encode s := json% $s
   decode? json := json.getStr?.toOption
   encodek _ := by rfl
 
-instance _root_.Bool.instEncodable : Encodable Bool where
+instance _root_.Bool.encodable : Encodable Bool where
   encode | true => json% true | false => json% false
   decode? json := fromJson? (α := Bool) json |>.toOption
   encodek _ := by split <;> rfl
 
-instance _root_.Unit.instEncodable : Encodable Unit where
+instance _root_.Unit.encodable : Encodable Unit where
   encode _ := json% null
   decode? | json% null => some () | _ => none
   encodek _ := by rfl
 
-instance _root_.Array.instEncodable : Encodable (Array α) where
+instance _root_.Array.encodable : Encodable (Array α) where
   encode xs := Json.arr (xs.map encode)
   decode?
     | .arr xs => xs.mapM decode?
@@ -166,10 +173,11 @@ instance _root_.Array.instEncodable : Encodable (Array α) where
     rw [this, Array.mapM_pure]
     simp only [Array.map_id_fun, id_eq, Option.pure_def]
 
-instance _root_.List.instEncodable : Encodable (List α) :=
-  ofEquiv (·.toArray) (·.toList) fun _ => rfl
+instance _root_.List.encodable : Encodable (List α) :=
+  have : Equiv (List α) (Array α) := {push := (·.toArray), pull := (·.toList)}
+  ofEquiv _ this
 
-instance _root_.Fin.instEncodable {n : Nat} : Encodable (Fin n) where
+instance _root_.Fin.encodable {n : Nat} : Encodable (Fin n) where
   encode x := json% $x.toNat
   decode? json := do
     let m ← json.getNat?.toOption
@@ -181,19 +189,24 @@ instance _root_.Fin.instEncodable {n : Nat} : Encodable (Fin n) where
 
 def _root_.Fin.encodable0 : Encodable (Fin 0) :=
   have : Encodable Empty := by exact Empty.encodable
-  ofEquiv (α := Empty) Fin.elim0 Empty.elim (by exact fun x => Fin.elim0 x)
+  have : Equiv (Fin 0) Empty := {
+    push := Fin.elim0
+    pull := Empty.elim
+    push_pull_eq x := by exact Fin.elim0 x
+  }
+  ofEquiv _ this
 
-instance _root_.UInt8.instEncodable : Encodable UInt8 :=
-  ofEquiv UInt8.toFin UInt8.ofFin (by exact fun _ => rfl)
+instance _root_.UInt8.encodable : Encodable UInt8 :=
+  ofEquiv _ {push := UInt8.toFin, pull := UInt8.ofFin}
 
-instance _root_.UInt16.instEncodable : Encodable UInt16 :=
-  ofEquiv UInt16.toFin UInt16.ofFin (by exact fun _ => rfl)
+instance _root_.UInt16.encodable : Encodable UInt16 :=
+  ofEquiv _ {push := UInt16.toFin, pull := UInt16.ofFin}
 
-instance _root_.UInt32.instEncodable : Encodable UInt32 :=
-  ofEquiv UInt32.toFin UInt32.ofFin (by exact fun _ => rfl)
+instance _root_.UInt32.encodable : Encodable UInt32 :=
+  ofEquiv _ {push := UInt32.toFin, pull := UInt32.ofFin}
 
-instance _root_.UInt64.instEncodable : Encodable UInt64 :=
-  ofEquiv UInt64.toFin UInt64.ofFin (by exact fun _ => rfl)
+instance _root_.UInt64.encodable : Encodable UInt64 :=
+  ofEquiv _ {push := UInt64.toFin, pull := UInt64.ofFin}
 
 private def _root_.ByteArray.encodeImpl : ByteArray → Json := ByteArray.toJson
 private def _root_.ByteArray.decode?Impl : Json → Option ByteArray := Except.toOption ∘ ByteArray.fromJson?
@@ -206,14 +219,14 @@ def _root_.ByteArray.decode? (json : Json) : Option ByteArray := do
   let bs ← Encodable.decode? (α := Array UInt8) json
   return ⟨bs⟩
 
-instance _root_.ByteArray.instEncodable : Encodable ByteArray where
+instance _root_.ByteArray.encodable : Encodable ByteArray where
   encode := ByteArray.encode
   decode? := ByteArray.decode?
   encodek _ := by
     unfold ByteArray.decode? ByteArray.encode
     simp only [encodek, Option.pure_def, Option.bind_eq_bind, Option.bind_some]
 
-instance _root_.Option.instEncodable : Encodable (Option α) where
+instance _root_.Option.encodable : Encodable (Option α) where
   encode
     | none => json% null
     | some x => json% { some: $(encode x) }
@@ -241,7 +254,7 @@ instance _root_.Option.instEncodable : Encodable (Option α) where
           simp only [encodek]
     | none => rfl
 
-instance _root_.Sum.instEncodable [Encodable β] : Encodable (α ⊕ β) where
+instance _root_.Sum.encodable [Encodable β] : Encodable (α ⊕ β) where
   encode
     | .inl a => json% { inl: $(encode a) }
     | .inr b => json% { inr: $(encode b) }
@@ -265,7 +278,7 @@ instance _root_.Sum.instEncodable [Encodable β] : Encodable (α ⊕ β) where
       . simp_all only [Option.map_eq_some_iff, Sum.inr.injEq, exists_eq_right]
         simp only [toJson, id_eq, encodek]
 
-instance _root_.Prod.instEncodable [Encodable β] : Encodable (α × β) where
+instance _root_.Prod.encodable [Encodable β] : Encodable (α × β) where
   encode x := json% [$(encode x.1), $(encode x.2)]
   decode? json :=
     match json.getArrVal? 0, json.getArrVal? 1 with
@@ -277,20 +290,20 @@ instance _root_.Prod.instEncodable [Encodable β] : Encodable (α × β) where
     simp only [toJson, Json.arr_getArrVal?_zero_eq_ok, Json.arr_getArrVal?_one_eq_ok, encodek,
       Option.bind_some, id_eq]
 
-instance _root_.String.Pos.instEncodable : Encodable String.Pos :=
-  ofEquiv (α := Nat) String.Pos.byteIdx String.Pos.mk (by exact fun _ => rfl)
+instance _root_.String.Pos.encodable : Encodable String.Pos :=
+  ofEquiv Nat {push := String.Pos.byteIdx, pull := String.Pos.mk}
 
-instance _root_.Substring.instEncodable : Encodable Substring :=
-  ofEquiv (α := String × String.Pos × String.Pos)
-    (fun x => ⟨x.str, x.startPos, x.stopPos⟩)
-    (fun x => ⟨x.1, x.2.1, x.2.2⟩)
-    (by exact fun _ => rfl)
+instance _root_.Substring.encodable : Encodable Substring :=
+  ofEquiv (String × String.Pos × String.Pos) {
+    push x := ⟨x.str, x.startPos, x.stopPos⟩
+    pull x := ⟨x.1, x.2.1, x.2.2⟩
+  }
 
 section Sigma
 
 variable {γ : α → Type v} [∀ a, Encodable (γ a)]
 
-instance _root_.Sigma.instEncodable : Encodable (Σ a, γ a) where
+instance _root_.Sigma.encodable : Encodable (Σ a, γ a) where
   encode x := json% [$(encode x.1), $(encode x.2)]
   decode? json :=
     match json.getArrVal? 0, json.getArrVal? 1 with
@@ -308,7 +321,7 @@ section Subtype
 
 variable {P : α → Prop} [DecidablePred P]
 
-instance _root_.Subtype.instEncodable : Encodable {a : α // P a} where
+instance _root_.Subtype.encodable : Encodable {a : α // P a} where
   encode x := encode x.1
   decode? json := (decode? (α := α) json).bind fun a => if h : P a then some ⟨a, h⟩ else none
   encodek x := by

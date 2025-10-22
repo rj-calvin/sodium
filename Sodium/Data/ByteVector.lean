@@ -107,6 +107,8 @@ protected def append {n m : Nat} (a : ByteVector n) (b : ByteVector m) : ByteVec
 instance {n m : Nat} : HAppend (ByteVector n) (ByteVector m) (ByteVector (n + m)) :=
   ⟨ByteVector.append⟩
 
+instance {n m : Nat} {h : n = m} : HEq (ByteVector n) (ByteVector m) := by subst h; rfl
+
 def toList (bs : ByteVector n) : List UInt8 := bs.toArray.toList
 
 @[inline] def findIdx? (x : ByteVector n) (p : UInt8 → Bool) (start := 0) : Option Nat :=
@@ -120,6 +122,8 @@ def toList (bs : ByteVector n) : List UInt8 := bs.toArray.toList
     some ⟨x.toArray, by rw [← h]; exact x.size_toArray⟩
   else
     none
+
+instance {n m : Nat} {h : n = m} : ∀ x : ByteVector n, HEq (x.cast h) x := fun _ => by subst h; rfl
 
 @[inline] def findFinIdx? (a : ByteVector n) (p : UInt8 → Bool) (start := 0) : Option (Fin n) :=
   let b := a.toArray.findFinIdx? p start

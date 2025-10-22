@@ -6,7 +6,7 @@ namespace Vector
 
 variable {n : Nat} {α : Type u}
 
-instance instEncodable [Encodable α] : Encodable (Vector α n) where
+instance encodable [Encodable α] : Encodable (Vector α n) where
   encode x := encode x.toArray
   decode? json := do
     let x ← decode? (α := Array α) json
@@ -40,15 +40,17 @@ namespace Encodable
 variable {α : Type u}
 
 instance finArrow {n : Nat} [Encodable α] : Encodable (Fin n → α) :=
-  ofEquiv Vector.ofFn Vector.get fun x => by
-    funext y
-    exact Vector.get_ofFn x y
+  ofEquiv _ {
+    push := Vector.ofFn
+    pull := Vector.get
+    push_pull_eq i := by funext j; exact Vector.get_ofFn i j
+  }
 
 instance finPi (n : Nat) (π : Fin n → Type u) [∀ i, Encodable (π i)] : Encodable (∀ i, π i) :=
-  ofEquiv
-    (α := {f : Fin n → Σ i, π i // ∀ i, (f i).1 = i})
-    (fun f => ⟨fun i => ⟨i, f i⟩, fun _ => rfl⟩)
-    (fun f i => by rw [← f.2 i]; exact (f.1 i).2)
-    (by simp only [eq_mpr_eq_cast, cast_eq, implies_true])
+  ofEquiv {f : Fin n → Σ i, π i // ∀ i, (f i).1 = i} {
+    push f := ⟨fun i => ⟨i, f i⟩, fun _ => rfl⟩
+    pull f i := by rw [← f.2 i]; exact (f.1 i).2
+    push_pull_eq _ := by simp only [eq_mpr_eq_cast, cast_eq]
+  }
 
 end Encodable

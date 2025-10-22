@@ -1,16 +1,18 @@
+import Sodium.Data.Digest
+import Sodium.Data.Chunk
 import Sodium.Data.Encodable.WType
 
 namespace Lean
 
 namespace Name
 
-private def Shape := Unit ⊕ String ⊕ Nat
+def Shape := Unit ⊕ String ⊕ Nat
 
 local notation "anonymous%" => Sum.inl ()
 local notation "str% " s => Sum.inr (Sum.inl s)
 local notation "num% " n => Sum.inr (Sum.inr n)
 
-private def Shape.arity : Shape → Nat
+def Shape.arity : Shape → Nat
   | anonymous% => 0
   | str% _ => 1
   | num% _ => 1
@@ -28,59 +30,68 @@ private def finv : WType (fun i : Shape => Fin i.arity) → Name
   | ⟨str% s, fn⟩ => .str (finv (fn 0)) s
   | ⟨num% n, fn⟩ => .num (finv (fn 0)) n
 
-instance instEncodable : Encodable Name :=
-  haveI : Encodable Shape := by unfold Shape; infer_instance
-  Encodable.ofEquiv f finv fun n => by
+instance encodable.equiv : Encodable.Equiv Name (WType (fun i : Shape => Fin i.arity)) where
+  push := f
+  pull := finv
+  push_pull_eq n := by
     induction n with
     | anonymous => simp only [f, finv]
     | str k s ih => simp only [f, finv, ih]
     | num k n ih => simp only [f, finv, ih]
 
+instance encodable : Encodable Name :=
+  have : Encodable Shape := by unfold Shape; infer_instance
+  Encodable.ofEquiv _ encodable.equiv
+
 end Name
 
-instance SyntaxNodeKind.instEncodable : Encodable SyntaxNodeKind :=
+instance SyntaxNodeKind.encodable : Encodable SyntaxNodeKind :=
   inferInstanceAs (Encodable Name)
 
 namespace SourceInfo
 
-private def Shape :=
-  Unit
-  ⊕ Substring × String.Pos × Substring × String.Pos
-  ⊕ String.Pos × String.Pos × Bool
-
-instance instEncodable : Encodable SourceInfo :=
-  haveI : Encodable Shape := by unfold Shape; infer_instance
-  let f : SourceInfo → Shape
-    | .none => .inl ()
-    | .original leading pos trailing endPos => .inr (.inl (leading, pos, trailing, endPos))
-    | .synthetic pos endPos canonical => .inr (.inr (pos, endPos, canonical))
-  let finv : Shape → SourceInfo
-    | .inl _ => .none
-    | .inr (.inl (leading, pos, trailing, endPos)) => .original leading pos trailing endPos
-    | .inr (.inr (pos, endPos, canonical)) => .synthetic pos endPos canonical
-  Encodable.ofEquiv f finv fun n => by induction n <;> rfl
+instance encodable : Encodable SourceInfo :=
+  let Shape :=
+    Unit
+    ⊕ Substring × String.Pos × Substring × String.Pos
+    ⊕ String.Pos × String.Pos × Bool
+  have : Encodable Shape := by unfold Shape; infer_instance
+  have : Encodable.Equiv SourceInfo Shape := {
+    push
+      | .none => .inl ()
+      | .original leading pos trailing endPos => .inr (.inl (leading, pos, trailing, endPos))
+      | .synthetic pos endPos canonical => .inr (.inr (pos, endPos, canonical))
+    pull
+      | .inl _ => .none
+      | .inr (.inl (leading, pos, trailing, endPos)) => .original leading pos trailing endPos
+      | .inr (.inr (pos, endPos, canonical)) => .synthetic pos endPos canonical
+    push_pull_eq n := by induction n <;> rfl
+  }
+  Encodable.ofEquiv _ this
 
 end SourceInfo
 
 namespace Syntax.Preresolved
 
-private def Shape := Name ⊕ Name × List String
-
-instance instEncodable : Encodable Syntax.Preresolved :=
-  haveI : Encodable Shape := by unfold Shape; infer_instance
-  let f : Syntax.Preresolved → Shape
-    | .namespace n => .inl n
-    | .decl n fs => .inr (n, fs)
-  let finv : Shape → Syntax.Preresolved
-    | .inl n => .namespace n
-    | .inr (n, fs) => .decl n fs
-  Encodable.ofEquiv f finv fun n => by induction n <;> rfl
+instance encodable : Encodable Syntax.Preresolved :=
+  let Shape := Name ⊕ Name × List String
+  have : Encodable Shape := by unfold Shape; infer_instance
+  have : Encodable.Equiv Syntax.Preresolved Shape := {
+    push
+      | .namespace n => .inl n
+      | .decl n fs => .inr (n, fs)
+    pull
+      | .inl n => .namespace n
+      | .inr (n, fs) => .decl n fs
+    push_pull_eq n := by induction n <;> rfl
+  }
+  Encodable.ofEquiv _ this
 
 end Syntax.Preresolved
 
 namespace Syntax
 
-private def Shape :=
+def Shape :=
   Unit
   ⊕ SourceInfo × String
   ⊕ SourceInfo × Substring × Name × List Syntax.Preresolved
@@ -91,7 +102,7 @@ local notation "atom% " info ", " s => Sum.inr (Sum.inl ⟨info, s⟩)
 local notation "ident% " info ", " s ", " n ", " pre => Sum.inr (Sum.inr (Sum.inl (info, s, n, pre)))
 local notation "node% " info ", " kind ", " k => Sum.inr (Sum.inr (Sum.inr (info, kind, k)))
 
-private def Shape.arity : Shape → Nat
+def Shape.arity : Shape → Nat
   | missing% | atom% _, _ | ident% _, _, _, _ => 0
   | node% _, _, k => k
 
@@ -115,9 +126,10 @@ private def finv : WType (fun i : Shape => Fin i.arity) → Syntax
   | ⟨ident% info, s, n, pre, _⟩ => .ident info s n pre
   | ⟨node% info, kind, k, fn⟩ => .node info kind <| (Array.ofFn (n := k) id).map fun i => finv (fn i)
 
-instance instEncodable : Encodable Syntax :=
-  haveI : Encodable Shape := by unfold Shape; infer_instance
-  Encodable.ofEquiv f finv fun stx => by
+instance encodable_equiv : Encodable.Equiv Syntax (WType fun i : Shape => Fin i.arity) where
+  push := f
+  pull := finv
+  push_pull_eq stx := by
     have : ∀ n (s : Syntax), sizeOf s < n → finv (f s) = s := fun n => by
       induction n with
       | zero => intros; omega
@@ -142,27 +154,58 @@ instance instEncodable : Encodable Syntax :=
             exact ih args[i] h_lt
     exact this (sizeOf stx + 1) stx (Nat.lt_succ_self _)
 
+instance encodable : Encodable Syntax :=
+  have : Encodable Shape := by unfold Shape; infer_instance
+  Encodable.ofEquiv _ encodable_equiv
+
 end Syntax
 
 namespace TSyntax
 
-instance instEncodable {kind : SyntaxNodeKind} : Encodable (TSyntax kind) :=
+instance encodable {kind : SyntaxNodeKind} : Encodable (TSyntax kind) :=
   let f (stx : TSyntax kind) : Json := Json.mkObj [(kind.toString, encode stx.raw)]
   let finv (json : Json) : Option (TSyntax kind) :=
     match json.getObjVal? kind.toString with
     | .error _ => none
     | .ok json =>
-      match decode? (α := Syntax) json with
+      match decode? json with
       | none => none
       | some a => some ⟨a⟩
-  Encodable.ofLeftInj f finv fun _ => by
-    simp only [Json.mkObj_getObjVal?_eq_ok, Encodable.encodek, f, finv]
+  Encodable.ofLeftInj f finv fun _ => by simp only [Json.mkObj_getObjVal?_eq_ok, Encodable.encodek, f, finv]
+
+def encodable_syntax (kind : SyntaxNodeKind) : TSyntax ``Lean.Parser.Tactic.tacticSeq :=
+  Unhygienic.run `(tacticSeq|
+    let f (stx : TSyntax $(Syntax.mkNameLit kind.toString)) : Json := Json.mkObj [($(Syntax.mkStrLit kind.toString), encode stx.raw)];
+    let finv (json : Json) : Option (TSyntax $(Syntax.mkNameLit kind.toString)) :=
+      match json.getObjVal? $(Syntax.mkStrLit kind.toString) with
+      | .error _ => none
+      | .ok json =>
+        match decode? (α := Syntax) json with
+        | none => none
+        | some a => some ⟨a⟩;
+    exact Encodable.ofLeftInj f finv fun _ => by simp [f, finv])
+
+instance : ToChunks (TSyntax ``Lean.Parser.Tactic.tacticSeq) where
+  toChunks tacticSeq :=
+    match tacticSeq with
+    | `(tacticSeq| $tacs*) => tacs.getElems.map encode |>.toList
+    | _ => []
+
+instance : FromChunks (TSyntax ``Lean.Parser.Tactic.tacticSeq) where
+  fromChunks? xs := do
+    let seq ← xs.mapM (@decode? Syntax _)
+    let args := seq.foldl (init := #[]) fun acc stx =>
+      if acc.isEmpty then acc.push stx
+      else acc.push .missing |>.push stx
+    let node := .node .none ``Lean.Parser.Tactic.tacticSeq #[.node .none ``Lean.Parser.Tactic.tacticSeq1Indented args]
+    return ⟨node⟩
 
 end TSyntax
 
-#eval show MetaM Unit from do
-  let x ← `(tactic| exact?)
-  println! encode x
-  println! decode? (α := TSyntax `tactic) (encode x)
+#eval show MetaM Format from do
+  let stx := TSyntax.encodable_syntax `tactic
+  println! encode stx
+  println! decode? (α := TSyntax ``Lean.Parser.Tactic.tacticSeq) (encode stx)
+  return stx.raw.prettyPrint
 
 end Lean

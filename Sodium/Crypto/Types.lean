@@ -14,33 +14,33 @@ inductive DecryptError
   | invalidJson (json : Json)
   deriving TypeName, Hashable, Inhabited
 
-inductive DecryptResult (α : Type)
+inductive Decrypt (α : Type)
   | refused
   | mangled (data : ByteArray)
   | unknown (string : String)
   | almost (json : Json)
   | accepted (a : α)
 
-namespace DecryptResult
+namespace Decrypt
 
 variable {α : Type}
 
-@[coe] def toExcept : DecryptResult α → Except DecryptError α
+@[coe] def toExcept : Decrypt α → Except DecryptError α
 | .refused => .error .refused
 | .mangled data => .error (.invalidEncoding data)
 | .unknown string => .error (.invalidString string)
 | .almost json => .error (.invalidJson json)
 | .accepted a => .ok a
 
-@[coe] def ofExcept : Except DecryptError α → DecryptResult α
+@[coe] def ofExcept : Except DecryptError α → Decrypt α
 | .ok a => .accepted a
 | .error .refused => .refused
 | .error (.invalidEncoding data) => .mangled data
 | .error (.invalidString string) => .unknown string
 | .error (.invalidJson json) => .almost json
 
-instance : Coe (DecryptResult α) (Except DecryptError α) := ⟨toExcept⟩
-instance : Coe (Except DecryptError α) (DecryptResult α) := ⟨ofExcept⟩
+instance : Coe (Decrypt α) (Except DecryptError α) := ⟨toExcept⟩
+instance : Coe (Except DecryptError α) (Decrypt α) := ⟨ofExcept⟩
 
 @[simp]
 theorem toExcept_inj : ∀ r : Except DecryptError α, toExcept (ofExcept r) = r := by
@@ -49,28 +49,28 @@ theorem toExcept_inj : ∀ r : Except DecryptError α, toExcept (ofExcept r) = r
   aesop
 
 @[simp]
-theorem ofExcept_inj : ∀ r : DecryptResult α, ofExcept (toExcept r) = r := by
+theorem ofExcept_inj : ∀ r : Decrypt α, ofExcept (toExcept r) = r := by
   intro
   unfold ofExcept toExcept
   aesop
 
 @[simp]
-theorem toExcept_ok_iff {a : α} : ∀ r : DecryptResult α, toExcept r = .ok a ↔ r = .accepted a := by
+theorem toExcept_ok_iff {a : α} : ∀ r : Decrypt α, toExcept r = .ok a ↔ r = .accepted a := by
   intro
   unfold toExcept
   aesop
 
-def toOption : DecryptResult α → Option α
+def toOption : Decrypt α → Option α
 | .accepted a => some a
 | _ => none
 
 @[simp]
-theorem toOption_some_iff {a : α} : ∀ r : DecryptResult α, toOption r = some a ↔ r = .accepted a := by
+theorem toOption_some_iff {a : α} : ∀ r : Decrypt α, toOption r = some a ↔ r = .accepted a := by
   intro
   unfold toOption
   aesop
 
-end DecryptResult
+end Decrypt
 
 abbrev Nonce (spec : Spec) [spec.HasValidShape `nonce] :=
   ByteVector spec[`nonce]
@@ -92,9 +92,6 @@ abbrev PublicKey (spec : Spec) [spec.HasValidShape `publickey] :=
 
 structure PublicKeyId (spec : Spec) where
   get : (h : spec.HasValidShape `publickey) → PublicKey spec
-
-abbrev SharedKey (τ : Sodium σ) (spec : Spec) [h : spec.HasValidShape `sharedkey] :=
-  SecretVector τ <| USize.ofNatLT spec[`sharedkey] (by simp [h.shape_is_valid])
 
 structure KeyPair (τ : Sodium σ) (spec : Spec) [spec.HasValidShape `publickey] [spec.HasValidShape `secretkey] where
   pkey : PublicKey spec
@@ -129,7 +126,7 @@ structure SignatureId (spec : Spec) where
   get : (h : spec.HasValidShape `signature) → Signature spec
 
 structure SignedJson (spec : Spec) [spec.HasValidShape `signature] [spec.HasValidShape `publickey] where
-  protected toJson : Json
+  json : Json
   sig : Signature spec
   pkey : PublicKey spec
   deriving ToJson, FromJson
@@ -142,10 +139,11 @@ namespace SignedJson
 variable {spec : Spec} [spec.HasValidShape `signature] [spec.HasValidShape `publickey]
 
 instance : Encodable (SignedJson spec) :=
-  Encodable.ofEquiv (α := Json × Signature spec × PublicKey spec)
-    (fun ⟨json, sig, pkey⟩ => ⟨json, sig, pkey⟩)
-    (fun ⟨json, sig, pkey⟩ => ⟨json, sig, pkey⟩)
-    (fun _ => rfl)
+  have : Encodable.Equiv (SignedJson spec) (Json × Signature spec × PublicKey spec) := {
+    push := fun ⟨json, sig, pkey⟩ => ⟨json, sig, pkey⟩
+    pull := fun ⟨json, sig, pkey⟩ => ⟨json, sig, pkey⟩
+  }
+  Encodable.ofEquiv _ this
 
 end SignedJson
 
@@ -153,7 +151,7 @@ structure CipherText (spec : Spec) [spec.HasValidShape `nonce] [spec.HasValidSha
   size : Nat
   data : ByteVector size
   nonce : Nonce spec
-  shapeOf_mac_le_size : spec[`mac] ≤ size
+  mac_le_size : spec[`mac] ≤ size
 
 namespace CipherText
 
@@ -161,39 +159,31 @@ variable {spec : Spec} [spec.HasValidShape `nonce] [spec.HasValidShape `mac]
 
 instance : ToJson (CipherText spec) where
   toJson cipher := json% {
-    size : $cipher.size,
     data : $cipher.data,
     nonce : $cipher.nonce
   }
 
 instance : FromJson (CipherText spec) where
   fromJson? json := do
-    let size ← json.getObjValAs? Nat "size"
-    let data ← json.getObjValAs? (ByteVector size) "data"
     let nonce ← json.getObjValAs? (Nonce spec) "nonce"
-    if h : spec.shapeOf `mac ≤ size then
-      return ⟨size, data, nonce, h⟩
-    else
-      throw "expected data to contain embedded mac"
+    let data ← json.getObjValAs? ByteArray "data"
+    if h : spec[`mac] ≤ data.size then return ⟨data.size, data.toVector, nonce, h⟩
+    throw "expected data to contain embedded mac"
 
 instance : Encodable (CipherText spec) :=
-  Encodable.ofLeftInj (α := Σ n, ByteVector n × Nonce spec)
-    (fun ⟨size, data, nonce, _⟩ => ⟨size, ⟨data, nonce⟩⟩)
-    (fun ⟨size, ⟨data, nonce⟩⟩ =>
-      if h : spec[`mac] ≤ size then
-        some ⟨size, data, nonce, h⟩
-      else
-        none)
-    (fun x => by
+  Encodable.ofLeftInj (α := Σ n, Nonce spec × ByteVector n)
+    (fun ⟨size, data, nonce, _⟩ => ⟨size, ⟨nonce, data⟩⟩)
+    (fun ⟨size, ⟨nonce, data⟩⟩ => if h : spec[`mac] ≤ size then some ⟨size, data, nonce, h⟩ else none)
+    fun x => by
       simp only [getElem, Option.dite_none_right_eq_some, exists_prop, and_true]
-      exact x.shapeOf_mac_le_size)
+      exact x.mac_le_size
 
 end CipherText
 
 structure SealedCipherText (spec : Spec) [spec.HasValidShape `publickey] [spec.HasValidShape `mac] where
   size : Nat
   data : ByteVector size
-  shapeOf_seal_le_size : spec[`publickey] + spec[`mac] ≤ size
+  seal_le_size : spec[`publickey] + spec[`mac] ≤ size
 
 namespace SealedCipherText
 
@@ -201,68 +191,55 @@ variable {spec : Spec} [spec.HasValidShape `publickey] [spec.HasValidShape `mac]
 
 instance : ToJson (SealedCipherText spec) where
   toJson cipher := json% {
-    size : $cipher.size,
     data : $cipher.data
   }
 
 instance : FromJson (SealedCipherText spec) where
   fromJson? json := do
-    let size ← json.getObjValAs? Nat "size"
-    let data ← json.getObjValAs? (ByteVector size) "data"
-    if h : spec.shapeOf `publickey + spec.shapeOf `mac ≤ size then
-      return ⟨size, data, h⟩
-    else
-      throw "expected data to contain embedded seal"
+    let data ← json.getObjValAs? ByteArray "data"
+    if h : spec[`publickey] + spec[`mac] ≤ data.size then return ⟨data.size, data.toVector, h⟩
+    throw "expected data to contain embedded seal"
 
 instance : Encodable (SealedCipherText spec) :=
   Encodable.ofLeftInj (α := Σ n, ByteVector n)
     (fun ⟨size, data, _⟩ => ⟨size, data⟩)
-    (fun ⟨size, data⟩ =>
-      if h : spec[`publickey] + spec[`mac] ≤ size then
-        some ⟨size, data, h⟩
-      else
-        none)
-    (fun x => by
+    (fun ⟨size, data⟩ => if h : spec[`publickey] + spec[`mac] ≤ size then some ⟨size, data, h⟩ else none)
+    fun x => by
       simp only [getElem, Option.dite_none_right_eq_some, exists_prop, and_true]
-      exact x.shapeOf_seal_le_size)
+      exact x.seal_le_size
 
 end SealedCipherText
 
 structure CipherChunk (spec : Spec) [spec.HasValidShape `mac] where
   size : Nat
   data : ByteVector size
-  shapeOf_mac_le_size : spec[`mac] ≤ size
+  mac_le_size : spec[`mac] ≤ size
 
 namespace CipherChunk
 
 variable {spec : Spec} [spec.HasValidShape `mac]
 
 instance : ToJson (CipherChunk spec) where
-  toJson cipher := json% {
-    size : $cipher.size,
-    data : $cipher.data
-  }
+  toJson cipher := json% $cipher.data
 
 instance : FromJson (CipherChunk spec) where
   fromJson? json := do
-    let size ← json.getObjValAs? Nat "size"
-    let data ← json.getObjValAs? (ByteVector size) "data"
-    if h : spec.shapeOf `mac ≤ size then
-      return ⟨size, data, h⟩
-    else
-      throw "expected data to contain embedded mac"
+    let data ← fromJson? (α := ByteArray) json
+    if h : spec[`mac] ≤ data.size then return ⟨data.size, data.toVector, h⟩
+    throw "expected data to contain embedded mac"
 
 instance : Encodable (CipherChunk spec) :=
-  Encodable.ofLeftInj (α := Σ n, ByteVector n)
-    (fun ⟨size, data, _⟩ => ⟨size, data⟩)
-    (fun ⟨size, data⟩ =>
-      if h : spec[`mac] ≤ size then
-        some ⟨size, data, h⟩
-      else
-        none)
-    (fun x => by
-      simp only [getElem, Option.dite_none_right_eq_some, exists_prop, and_true]
-      exact x.shapeOf_mac_le_size)
+  Encodable.ofLeftInj (α := ByteArray)
+    (fun ⟨_, data, _⟩ => data.toArray)
+    (fun data => if h : spec[`mac] ≤ data.toVector.size then some ⟨data.size, data.toVector, h⟩ else none)
+    fun x => by
+      obtain ⟨size, data, h⟩ := x
+      simp only [getElem, ByteVector.toArray_inj, ByteArray.toVector_size, ByteVector.size_toArray,
+        Option.dite_none_right_eq_some, Option.some.injEq]
+      constructor
+      . simp only [mk.injEq, ByteVector.size_toArray, true_and]
+        exact ByteVector.instHEqCast _
+      . exact h
 
 end CipherChunk
 
