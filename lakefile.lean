@@ -99,6 +99,13 @@ lean_lib «Sodium» where
     else
       #[Module.oNoExportFacet, `module.alloy.c.o.noexport]
   moreLeancArgs := #["-fPIC"]
+  weakLeancArgs := #[
+    "-I.lake/build/libsodium-build/install/include"
+  ]
+  moreLinkArgs := #[
+    "-L.lake/build/lib",
+    "-lsodium"
+  ]
 
 lean_exe Debug where
   nativeFacets := fun shouldExport =>
@@ -107,3 +114,10 @@ lean_exe Debug where
     else
       #[Module.oNoExportFacet, `module.alloy.c.o.noexport]
   moreLeancArgs := #["-fPIC", "-g", "-O0"]  -- Debug symbols, no optimization
+  weakLeancArgs := #[
+    "-I.lake/build/libsodium-build/install/include"
+  ]
+  moreLinkArgs := #[
+    "-L.lake/build/lib",
+    "-lsodium"
+  ]

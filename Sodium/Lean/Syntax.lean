@@ -202,10 +202,10 @@ instance : FromChunks (TSyntax ``Lean.Parser.Tactic.tacticSeq) where
 
 end TSyntax
 
-#eval show MetaM Format from do
-  let stx := TSyntax.encodable_syntax `tactic
-  println! encode stx
-  println! decode? (α := TSyntax ``Lean.Parser.Tactic.tacticSeq) (encode stx)
-  return stx.raw.prettyPrint
+/- #eval show MetaM Format from do -/
+/-   let stx := TSyntax.encodable_syntax `tactic -/
+/-   println! encode stx -/
+/-   println! decode? (α := TSyntax ``Lean.Parser.Tactic.tacticSeq) (encode stx) -/
+/-   return stx.raw.prettyPrint -/
 
 end Lean

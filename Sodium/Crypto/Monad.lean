@@ -136,12 +136,10 @@ where
     let {nonces, entropy, ..} := st
     let shape := spec.shapeOf `nonce
 
-    let (nonce, entropy) ←
+    let (nonce, entropy) ← do
       if entropy.size - entropy.off < shape then
         let entropy ← entropy.refresh
-        entropy.extract shape
-      else
-        entropy.extract shape
+      entropy.extract shape
 
     if size_eq : nonce.size = shape then
       let nonce : Nonce spec := ⟨nonce, size_eq⟩
