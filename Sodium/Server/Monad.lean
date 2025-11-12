@@ -49,9 +49,9 @@ protected def bind [h : Monad (m τ)] [MonadError (m τ)] (st : ServerT τ m α)
   match st with | ⟨ka, k⟩ => by refine ⟨ka, ?_⟩; exact fun x => do
     bind (k x) fun a => match f a with
       | ⟨.ephemeral, k⟩ => k ()
-      | ⟨msg, k⟩ =>
-        if h : msg = ka then k (h ▸ x)
-        else throwError toMessageData (@toJson MessageKind _ msg)
+      | ⟨kb, k⟩ =>
+        if h : kb = ka then k (h ▸ x)
+        else throwError toMessageData (@toJson MessageKind _ kb)
 
 instance [Functor (m τ)] : Functor (ServerT τ m) where map := ServerT.map
 
@@ -77,11 +77,12 @@ abbrev ServerM (τ : Sodium σ) := ReaderT (ServerContext τ) (ServerT τ Crypto
 namespace ServerM
 
 def toCryptoM (msg : Message.Id) (x : ServerM τ α) (session : Option (Session τ Curve25519Blake2b) := none) : CryptoM τ α :=
-  ServerT.run msg (x {session})
+  Meta.withoutModifyingMCtx do Meta.withNewMCtxDepth (allowLevelAssignments := true) do
+    ServerT.run msg (x {session})
 
 def recv? (α : Type) [Encodable α] : ServerM τ (Decrypt (Verified α))
-  | { session := none } => ServerT.anonymous fun x => do decryptAnon? x
-  | { session := some session } => ServerT.addressed fun x =>
+  | { session := none, .. } => ServerT.anonymous fun x => do decryptAnon? x
+  | { session := some session, .. } => ServerT.addressed fun x =>
     session.withReceiver do
       match ← decrypt? x with
       | .accepted a => return .accepted (← sign a)
@@ -95,12 +96,12 @@ def recv! (α : Type) [Encodable α] : ServerM τ (Verified α) := do
   return x
 
 def recvFrom? (α : Type) [Encodable α] (pkey : MachineId) : ServerM τ (Decrypt (Verified α))
-  | { session := none } => ServerT.anonymous fun x => do
-    let some key ← newSharedKey? pkey | throwSpecViolation Curve25519 `publickey
+  | { session := none, .. } => ServerT.anonymous fun x => do
+    let some key ← newSharedKey? pkey | throwSpecViolation Curve25519 decl_name%
     withSharedKey key do decryptAnon? x
-  | { session := some session } => ServerT.addressed fun x => do
+  | { session := some session, .. } => ServerT.addressed fun x => do
     session.withReceiver do
-      let some key ← newSharedKey? pkey | throwSpecViolation Curve25519 `publickey
+      let some key ← newSharedKey? pkey | throwSpecViolation Curve25519 decl_name%
       match ← decryptFrom? key x with
       | .accepted a => return .accepted (← sign a)
       | .almost json => return .almost json
@@ -114,16 +115,16 @@ def recvFrom! (α : Type) [Encodable α] (pkey : MachineId) : ServerM τ (Verifi
 
 def send {α : Type} [Encodable α] (a : α) : Server β → ServerM τ (ServerTask β)
   | ⟨.ephemeral, k⟩, _ => ServerT.ephemeral do k ()
-  | ⟨.addressed, k⟩, {session} => ServerT.ephemeral do (session.map (·.withTransmitter)).getD id do k (← encrypt a)
+  | ⟨.addressed, k⟩, {session, ..} => ServerT.ephemeral do (session.map (·.withTransmitter)).getD id do k (← encrypt a)
   | _, _ => default
 
 def sendTo {α : Type} [Encodable α] (pkey : MachineId) (a : α) : Server β → ServerM τ (ServerTask β)
   | ⟨.ephemeral, k⟩, _ => ServerT.ephemeral do k ()
-  | ⟨.anonymous, k⟩, {session} => ServerT.ephemeral do (session.map (·.withTransmitter)).getD id do
-    let some msg ← encryptAnon? pkey a | throwSpecViolation Curve25519 `publickey
+  | ⟨.anonymous, k⟩, {session, ..} => ServerT.ephemeral do (session.map (·.withTransmitter)).getD id do
+    let some msg ← encryptAnon? pkey a | throwSpecViolation Curve25519 decl_name%
     k msg
-  | ⟨.addressed, k⟩, {session} => ServerT.ephemeral do (session.map (·.withTransmitter)).getD id do
-    let some key ← newSharedKey? pkey | throwSpecViolation Curve25519 `publickey
+  | ⟨.addressed, k⟩, {session, ..} => ServerT.ephemeral do (session.map (·.withTransmitter)).getD id do
+    let some key ← newSharedKey? pkey | throwSpecViolation Curve25519 decl_name%
     k (← encryptTo key a)
   | _, _ => default
 

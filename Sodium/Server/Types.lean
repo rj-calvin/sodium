@@ -21,7 +21,7 @@ def new (keys : Option (KeyPair τ Ed25519) := none) : CryptoM τ PeerId := do
   let keys ← keys.getDM mkStaleSignature
   let sig ← sign keys.pkey keys
   if h : sig.pkey = sig.val then return ⟨sig, h⟩
-  throwSpecViolation Ed25519 `publickey
+  throwSpecViolation Ed25519 decl_name%
 
 instance encodable : Encodable PeerId :=
   Encodable.ofEquiv {x : AgentId // x.pkey = x.val} {
@@ -36,16 +36,17 @@ end PeerId
 
 structure FriendId (τ : Sodium σ) extends AgentId where
   keys : KeyPair τ Ed25519
+  peer : PeerId
+  peer_rfl : peer.pkey = val
   signed_with_held_secret : keys.pkey = pkey
-  exists_peer : ∃ peer : PeerId, peer.pkey = val
 
 namespace FriendId
 
 def new (peer : PeerId) (keys : Option (KeyPair τ Ed25519) := none) : CryptoM τ (FriendId τ) := do
   let keys ← keys.getDM mkStaleSignature
   let sig ← sign peer.pkey keys
-  if h : keys.pkey = sig.pkey ∧ peer.pkey = sig.val then return ⟨sig, keys, h.1, by constructor; exact h.2⟩
-  throwSpecViolation Ed25519 `publickey
+  if h : keys.pkey = sig.pkey ∧ peer.pkey = sig.val then return ⟨sig, keys, peer, h.2, h.1⟩
+  throwSpecViolation Ed25519 decl_name%
 
 class Signed {α : Type} [Encodable α] (f : FriendId τ) (x : Verified α) : Prop where
   signed : f.pkey = x.pkey
@@ -59,8 +60,8 @@ namespace MetaId
 def new (keys : Option (KeyPair τ Ed25519) := none) : CryptoM τ (MetaId τ) := do
   let keys ← keys.getDM mkStaleSignature
   let peer ← PeerId.new keys
-  if h : keys.pkey = peer.pkey then return ⟨peer, keys, h, by constructor; exact peer.self_signed⟩
-  throwSpecViolation Ed25519 `publickey
+  if h : keys.pkey = peer.pkey then return ⟨peer, keys, peer, peer.self_signed, h⟩
+  throwSpecViolation Ed25519 decl_name%
 
 class Signed {α : Type} [Encodable α] (m : MetaId τ) (x : Verified α) : Prop where
   signed : m.pkey = x.pkey

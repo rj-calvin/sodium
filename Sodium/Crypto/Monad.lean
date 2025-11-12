@@ -461,9 +461,9 @@ def sign [Encodable α] (msg : α) (keys : Option (KeyPair τ Ed25519) := none) 
   let keys ← keys.getDM mkStaleSignature
   let json := encode msg
   let sig ← signDetached json.compress.toUTF8.toVector keys.skey.cast
-  let sig := ⟨json, sig.cast, keys.pkey⟩
-  match h : verify sig with
-  | .accepted a => return ⟨sig, a, h⟩
+  let cert := ⟨json, sig.cast, keys.pkey⟩
+  match h : verify cert with
+  | .accepted a => return ⟨cert, a, h⟩
   | _ => throwSpecViolation Ed25519 `publickey
 
 def loadSecret? {kind : Name} {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape kind] → Type} [spec.HasValidShape kind]
