@@ -6,9 +6,11 @@ universe u
 
 open Lean Sodium Crypto Meta
 
-variable {σ : Type u}
-
 namespace Aesop
+
+export Ethos (Probability)
+
+def Percent.ofProbability (p : Probability) : Percent := ⟨p⟩
 
 instance _root_.Lean.Meta.TransparencyMode.encodable : Encodable TransparencyMode :=
   Encodable.ofEquiv (Fin 4) {
@@ -65,6 +67,7 @@ inductive PhaseAngle where
   | right
   | top
   | bot
+  deriving Inhabited, BEq, Hashable, TypeName, ToJson, FromJson
 
 instance PhaseAngle.encodable : Encodable PhaseAngle :=
   Encodable.ofEquiv (Fin 6) {
@@ -120,13 +123,16 @@ end Aesop
 
 namespace Ethos
 
-export Aesop (PhaseName PhaseAngle)
+export Aesop (PhaseName PhaseAngle Percent Percent.ofProbability)
 
 structure Observable extends Probability where
-  phase : PhaseName
+  phase : PhaseName := default
   carrier : Verified Syntax
 
 namespace Observable
+
+def toProbability (o : Observable) : Probability := o.toPSigma
+def toPercent (o : Observable) : Percent := Percent.ofProbability o.toProbability
 
 def format (o : Observable) : Format := o.carrier.val.prettyPrint
 def size (o : Observable) : Nat := (toString o.format).length
@@ -137,10 +143,22 @@ protected def Id : PFunctor where
 
 instance : Coe Observable.Id.A Prop := ⟨id⟩
 
-instance : Inhabited Observable.Id.A :=
-  ⟨∀ x y, Probability.Shape.pull.{0} (Probability.Shape.part.{0} x) = some y → y.toFloat < x.toFloat⟩
+instance prop : Inhabited Observable.Id.A :=
+  ⟨∀ x y, Probability.Shape.pull.{0} (Probability.Shape.part.{0} x) = some y → y.toFloat ≤ x.toFloat⟩
 
-instance : Coe (Observable.Id.B default) Observable := ⟨id⟩
+instance decohere : Coe (Observable.Id.B default) Observable := ⟨id⟩
+
+instance {α} [Inhabited α] : Inhabited (Observable.Id α) where
+  default := ⟨default, fun _ => default⟩
+
+instance : Inhabited (Observable.Id Observable) where
+  default := ⟨default, id⟩
+
+instance encodable : Encodable Observable :=
+  Encodable.ofEquiv (Probability × PhaseName × Verified Syntax) {
+    push | ⟨p, x, s⟩ => ⟨p, x, s⟩
+    pull | ⟨p, x, s⟩ => ⟨p, x, s⟩
+  }
 
 @[always_inline]
 def rotate : PhaseAngle → Observable → Observable
@@ -183,24 +201,27 @@ theorem rotate_bot : ∀ p : PhaseAngle, ∀ o : Observable, p = .bot → (o.rot
   | safe => split <;> simp <;> contradiction
   | «unsafe» => split <;> simp <;> contradiction
 
-theorem rotate_up? : ∀ p : PhaseAngle, ∃ o : Observable, p = .up → (o.rotate p).phase = .safe := by
-  intro p
-  unfold rotate
-  sorry
-
 end Ethos.Observable
 
-def Ethos (τ : Sodium σ) (α : Type) :=
+def Ethos {σ : Type u} (τ : Sodium σ) (α : Type) :=
   MVarId → ServerM τ (Array (Syntax.Tactic × Ethos.Observable.Id α))
+
+protected def Ethos.map {σ : Type u} {τ : Sodium σ} {α β} (f : α → β) (ε : Ethos τ α) : Ethos τ β :=
+  fun δ => (ε δ {}).map (·.map fun ⟨t, o⟩ => ⟨t, ⟨default, fun k => f (o.snd k)⟩⟩)
 
 namespace Ethos
 
-variable {τ : Sodium σ}
+variable {σ : Type} {τ : Sodium σ}
 
-def map {α β} (f : α → β) (ε : Ethos τ α) : Ethos τ β :=
-  fun δ => (ε δ {}).map (·.map fun ⟨t, o⟩ => ⟨t, ⟨default, fun k => f (o.snd k)⟩⟩)
+def Suggestion := String × Float
 
-def main {β} (session : Session τ Curve25519Blake2b) (α : Type) : (α → β) → Ethos τ α → Ethos τ β :=
-  fun f ε δ => (ε δ {session}).map (·.map fun ⟨t, o⟩ => ⟨t, ⟨default, fun k => f (o.snd k)⟩⟩)
+def Suggestion.ofMetaObservable (mo : Syntax.Tactic × Observable) : Suggestion :=
+  (toString mo.1.raw.prettyPrint, mo.2.toProbability.toFloat)
+
+instance : Functor (Ethos τ) where
+  map := Ethos.map
+
+def main {α} {β : Prop} (session : Session τ Curve25519Blake2b) : (α → β) → Ethos τ α → Ethos τ (PLift β) :=
+  fun f ε δ => (ε δ {session}).map (·.map fun ⟨t, o⟩ => ⟨t, ⟨default, fun k => ⟨f (o.snd k)⟩⟩⟩)
 
 end Ethos

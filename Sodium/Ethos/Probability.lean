@@ -1,76 +1,98 @@
 import Sodium.Data.Encodable.Basic
 
-universe u v
+universe u
 
 namespace Ethos
 
 def Probability := Σ' n, ULift (Fin n)
 
-instance : BEq Probability where
-  beq x y := x.1 = y.1 ∧ x.2.down.toNat = y.2.down.toNat
-
 instance : Inhabited Probability where
   default := ⟨1, ⟨0⟩⟩
+
+def Probability.mk (n₁ : Nat) (n₂ : Nat) (h : n₁ < n₂) : Probability :=
+  ⟨n₂, ⟨n₁, h⟩⟩
 
 instance : Hashable Probability where
   hash x := mixHash 3 (mixHash (hash x.1) (hash x.2.down))
 
+notation "Δ(" n₁ " | " n₂ ")" => Probability.mk n₁ n₂ (by omega)
+
 namespace Probability
 
-protected abbrev Id := Fin
+def den (x : Probability) : Nat := x.1
+def num (x : Probability) : Fin x.den := x.2.down
 
-def toFloat (ι : Probability) : Float := ι.2.down.toNat.toFloat / ι.1.toFloat
+@[simp]
+theorem den_nezero : ∀ x : Probability, x.den ≠ 0 := by
+  intro x
+  obtain ⟨_, ⟨_, h⟩⟩ := x
+  exact Nat.ne_zero_of_lt h
 
-def Shape := Nat × Nat
+@[simp]
+theorem num_lt_den : ∀ x : Probability, x.num < x.den := by
+  intro x
+  obtain ⟨_, ⟨_, h⟩⟩ := x
+  exact h
 
--- def Shape.push (x : Probability) : Shape := (x.1, x.2.down) -- whoops!
-def Shape.push (x : Probability) : Shape := (x.2.down, x.1)
-def Shape.part (x : Probability) : Shape := (x.1, x.2.down)
+instance : ∀ x : Probability, NeZero x.den := fun x => ⟨den_nezero x⟩
 
-def Shape.pull (x : Shape) : Option Probability := by
-  cases h₁ : x.1 with
-  | zero => exact none
-  | succ n₁ =>
-    cases h₂ : x.2 with
-    | zero => exact some default
-    | succ n₂ =>
-      if h : n₁ < n₂ then
-        exact some ⟨x.2, ⟨⟨x.1, by omega⟩⟩⟩
-      else
-        exact some ⟨x.1.succ, ⟨⟨x.2, by omega⟩⟩⟩
+@[simp]
+theorem num_zero : ∀ x : Probability, x.den = 1 → x.num = 0 := by omega
 
-theorem Shape.push_pull_eq? : ∀ x, Shape.pull (Shape.push x) = some x := by
+@[ext, simp]
+theorem ext : ∀ x y : Probability, (x.den = y.den) → (∀ (h : x.den = y.den), h ▸ x.num = y.num) → x = y := by
+  intros x y h_den h_num
+  obtain ⟨x_den, ⟨x_num, hx⟩⟩ := x
+  obtain ⟨y_den, ⟨y_num, hy⟩⟩ := y
+  subst h_den
+  simp [den, num] at h_num hy
+  have : x_num = y_num := h_num
+  subst this
+  rfl
+
+@[simp]
+theorem mk_num_den : ∀ x : Probability, Δ(x.num | x.den) = x := by
+  intro _
+  rfl
+
+@[coe]
+def toFloat (x : Probability) : Float := x.num.toNat.toFloat / x.den.toFloat
+
+instance : Coe Probability Float := ⟨toFloat⟩
+
+class Positive (x : Probability) : Prop where
+  num_nezero : x.num ≠ 0
+
+def Shape := { s : Nat × Nat // s.2 ≠ 0 }
+
+def Shape.push (x : Probability) : Shape := ⟨(x.num, x.den), by exact den_nezero x⟩
+
+def Shape.pull (x : Shape) : Probability :=
+  let ⟨⟨n₁, n₂⟩, _⟩ := x
+  if _ : n₁ < n₂ then Δ(n₁ | n₂)
+  else Δ(n₂ | n₁.succ)
+
+theorem Shape.push_pull_eq : ∀ x, Shape.pull (Shape.push x) = x := by
   unfold Shape.push Shape.pull
   intro x
-  sorry
-
-theorem Shape.part_pull_mono? : ∀ x y, Shape.pull (Shape.part x) = some y → y.toFloat < x.toFloat := by
-  unfold Shape.part Shape.pull
-  intros x y
-  sorry
+  simp only [Fin.is_lt, reduceDIte, mk_num_den]
 
 instance : Encodable Probability :=
   have : Encodable Shape := by unfold Shape; infer_instance
-  Encodable.ofLeftInj Shape.push Shape.pull Shape.push_pull_eq?
+  Encodable.ofEquiv _ {
+    push := Shape.push
+    pull := Shape.pull
+    push_pull_eq := Shape.push_pull_eq
+  }
 
 #eval show IO Unit from do
-  let x : Probability.{0} := ⟨11, ⟨3⟩⟩
-  println! x.toFloat
+  let x : Probability.{0} := Δ(3 | 11)
   let y? : Option Probability.{0} := Shape.pull (Shape.push x)
   let z? : Option Probability.{0} := y?.bind fun y => Shape.pull (Shape.push y)
-  println! y?.map toFloat
-  println! z?.map toFloat
-  let a? : Option Probability.{0} := z?.bind fun y => Shape.pull (Shape.push y)
-  println! a?.map toFloat
-
-#eval show IO Unit from do
-  let x : Probability.{0} := ⟨11, ⟨3⟩⟩
+  let w? : Option Probability.{0} := z?.bind fun z => Shape.pull (Shape.push z)
   println! x.toFloat
-  let y? : Option Probability.{0} := Shape.pull (Shape.part x)
-  let z? : Option Probability.{0} := y?.bind fun y => Shape.pull (Shape.part y)
   println! y?.map toFloat
   println! z?.map toFloat
-  let w? : Option Probability.{0} := z?.bind fun z => Shape.pull (Shape.part z)
   println! w?.map toFloat
 
 end Ethos.Probability

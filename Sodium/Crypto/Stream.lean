@@ -1,13 +1,15 @@
 import Sodium.Data.Chunk
 import Sodium.Crypto.Monad
 
+universe u
+
 open Lean Sodium FFI SecretStream
 
 namespace Sodium.Crypto
 
 deriving instance ToJson, FromJson for Tag
 
-variable {α ε σ : Type} {τ : Sodium σ}
+variable {α ε : Type} {σ : Type u} {τ : Sodium σ}
 
 structure SecretEncoder (τ : Sodium σ) where
   private mk ::
@@ -17,7 +19,7 @@ structure SecretEncoder (τ : Sodium σ) where
 namespace SecretEncoder
 
 def new (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (SecretEncoder τ) := do
-  let key ← key.getDM (mkStaleKey (.up ·.cast))
+  let key ← key.getDM (mkStaleKey (·.cast))
   let (stream, header) ← streamInitPush (key.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
   return {stream, header := header.cast}
 
@@ -48,7 +50,7 @@ structure SecretDecoder (τ : Sodium σ) where
 namespace SecretDecoder
 
 def new (header : Header XChaCha20Poly1305) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (SecretDecoder τ) := do
-  let key ← key.getDM (mkStaleKey (.up ·.cast))
+  let key ← key.getDM (mkStaleKey (·.cast))
   let stream ← streamInitPull header.cast (key.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
   let buffer ← IO.mkRef #[]
   return {stream, buffer}
