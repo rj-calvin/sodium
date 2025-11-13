@@ -2,11 +2,13 @@ import Sodium.FFI.Basic
 
 open scoped Alloy.C
 
+universe u
+
 alloy c include <sodium.h> <lean/lean.h>
 
 namespace Sodium.FFI.KeyDeriv
 
-variable {σ : Type}
+variable {σ : Type u}
 
 alloy c section
 extern lean_obj_res lean_sodium_malloc(b_lean_obj_arg, size_t, lean_obj_arg);

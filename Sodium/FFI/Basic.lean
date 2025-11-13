@@ -1,12 +1,12 @@
 import Sodium.Data.ByteVector
 
-import Alloy.C
+universe u
 
 open scoped Alloy.C
 
 alloy c include <sodium.h> <lean/lean.h> <string.h> <stdio.h> <stdlib.h> <unistd.h>
 
-structure Sodium (σ : Type) where private mk ::
+structure Sodium (σ : Type u) where private mk ::
 
 namespace Sodium
 
@@ -21,7 +21,7 @@ def init (σ : Type) : IO (Sodium σ) :=
   lean_object* ctx = lean_alloc_ctor(0, 0, 0)
   return lean_io_result_mk_ok(ctx)
 
-variable {n m : USize} {σ : Type}
+variable {n m : USize} {σ : Type u}
 
 private alloy c opaque_extern_type SecurePointed => void where
   finalize(ptr) := sodium_free(ptr)

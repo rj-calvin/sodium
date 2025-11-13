@@ -6,7 +6,7 @@ open Lean Sodium Crypto
 
 variable {σ : Type} {τ : Sodium σ}
 
-namespace Sodium.Server
+namespace Sodium
 
 abbrev MachineId := Verified (PublicKey Curve25519)
 
@@ -137,4 +137,4 @@ instance encodable_id : Encodable Message.Id := by infer_instance
 
 end Message
 
-end Sodium.Server
+end Sodium

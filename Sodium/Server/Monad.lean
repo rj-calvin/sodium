@@ -1,12 +1,14 @@
 import Sodium.Server.Types
 
+universe u
+
 open Lean Sodium Crypto
 
-namespace Sodium.Server
+namespace Sodium
 
 export Lean.Server (ServerTask)
 
-variable {α β σ : Type} {τ : Sodium σ} {m : {σ : Type} → Sodium σ → Type → Type}
+variable {α β : Type} {σ : Type u} {τ : Sodium σ} {m : {σ : Type u} → Sodium σ → Type → Type}
 
 def Server (α : Type) := Message (BaseIO (ServerTask α))
 
@@ -23,7 +25,7 @@ def anonymous (x : Message.B .anonymous → BaseIO (ServerTask α)) : Server α 
 
 end Server
 
-def ServerT (τ : Sodium σ) (m : {σ : Type} → Sodium σ → Type → Type) (α : Type) :=
+def ServerT (τ : Sodium σ) (m : {σ : Type u} → Sodium σ → Type → Type) (α : Type) :=
   Message (m τ α)
 
 namespace ServerT
@@ -130,4 +132,4 @@ def sendTo {α : Type} [Encodable α] (pkey : MachineId) (a : α) : Server β �
 
 end ServerM
 
-end Sodium.Server
+end Sodium

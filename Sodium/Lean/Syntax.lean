@@ -65,7 +65,6 @@ instance encodable : Encodable SourceInfo :=
       | .inl _ => .none
       | .inr (.inl (leading, pos, trailing, endPos)) => .original leading pos trailing endPos
       | .inr (.inr (pos, endPos, canonical)) => .synthetic pos endPos canonical
-    push_pull_eq n := by induction n <;> rfl
   }
   Encodable.ofEquiv _ this
 
@@ -83,7 +82,6 @@ instance encodable : Encodable Syntax.Preresolved :=
     pull
       | .inl n => .namespace n
       | .inr (n, fs) => .decl n fs
-    push_pull_eq n := by induction n <;> rfl
   }
   Encodable.ofEquiv _ this
 

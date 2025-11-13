@@ -128,7 +128,12 @@ def ofLeftInj (f : β → α) (g : α → Option β) (h : ∀ x, g (f x) = some 
 class Equiv (α : Type u) (β : Type v) where
   push : α → β
   pull : β → α
-  push_pull_eq : ∀ a, pull (push a) = a := by intro; first | rfl | ext <;> rfl
+  push_pull_eq : ∀ a, pull (push a) = a := by
+    intro n
+    first
+      | rfl
+      | ext <;> rfl
+      | induction n <;> rfl
 
 @[simp]
 def ofEquiv (α) [Encodable α] (h : Equiv β α) : Encodable β :=
@@ -290,8 +295,18 @@ instance _root_.Prod.encodable [Encodable β] : Encodable (α × β) where
     simp only [toJson, Json.arr_getArrVal?_zero_eq_ok, Json.arr_getArrVal?_one_eq_ok, encodek,
       Option.bind_some, id_eq]
 
+instance _root_.Except.encodable [Encodable β] : Encodable (Except α β) :=
+  ofEquiv (α ⊕ β) {
+    push
+      | .ok b => .inr b
+      | .error a => .inl a
+    pull
+      | .inr b => .ok b
+      | .inl a => .error a
+  }
+
 instance _root_.String.Pos.encodable : Encodable String.Pos :=
-  ofEquiv Nat {push := String.Pos.byteIdx, pull := String.Pos.mk}
+  ofEquiv _ {push := String.Pos.byteIdx, pull := String.Pos.mk}
 
 instance _root_.Substring.encodable : Encodable Substring :=
   ofEquiv (String × String.Pos × String.Pos) {
@@ -316,6 +331,24 @@ instance _root_.Sigma.encodable : Encodable (Σ a, γ a) where
       Option.bind_some, id_eq]
 
 end Sigma
+
+section PSigma
+
+variable {γ : α → Type v} [∀ a, Encodable (γ a)]
+
+instance _root_.PSigma.encodable : Encodable (Σ' a, γ a) where
+  encode x := json% [$(encode x.1), $(encode x.2)]
+  decode? json :=
+    match json.getArrVal? 0, json.getArrVal? 1 with
+    | .ok fst, .ok snd =>
+      (decode? (α := α) fst).bind fun a => (decode? (α := γ a) snd).bind fun b => some ⟨a, b⟩
+    | _, _ => none
+  encodek a := by
+    obtain ⟨fst, snd⟩ := a
+    simp only [toJson, Json.arr_getArrVal?_zero_eq_ok, Json.arr_getArrVal?_one_eq_ok, encodek,
+      Option.bind_some, id_eq]
+
+end PSigma
 
 section Subtype
 

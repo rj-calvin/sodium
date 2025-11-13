@@ -1,4 +1,3 @@
-import Aesop
 import Sodium.FFI
 
 open Lean

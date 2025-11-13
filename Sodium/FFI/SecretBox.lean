@@ -1,12 +1,14 @@
 import Sodium.FFI.Basic
 
+universe u
+
 open scoped Alloy.C
 
 alloy c include <sodium.h> <lean/lean.h>
 
 namespace Sodium.FFI.SecretBox
 
-variable {n m : Nat} {σ : Type}
+variable {n m : Nat} {σ : Type u}
 
 alloy c section
 extern lean_obj_res lean_sodium_malloc(b_lean_obj_arg, size_t, lean_obj_arg);

@@ -1,11 +1,13 @@
 import Sodium.Data.Encodable.WType
 import Sodium.Crypto.Spec
 
+universe u
+
 open Lean
 
 namespace Sodium.Crypto
 
-variable {σ : Type}
+variable {σ : Type u}
 
 inductive DecryptError
   | refused
@@ -46,19 +48,24 @@ instance : Coe (Except DecryptError α) (Decrypt α) := ⟨ofExcept⟩
 theorem toExcept_inj : ∀ r : Except DecryptError α, toExcept (ofExcept r) = r := by
   intro
   unfold toExcept ofExcept
-  aesop
+  split <;> next _ _ h => split at h <;> simp_all
 
 @[simp]
 theorem ofExcept_inj : ∀ r : Decrypt α, ofExcept (toExcept r) = r := by
   intro
   unfold ofExcept toExcept
-  aesop
+  split <;> next _ _ h => split at h <;> simp_all
 
 @[simp]
 theorem toExcept_ok_iff {a : α} : ∀ r : Decrypt α, toExcept r = .ok a ↔ r = .accepted a := by
   intro
   unfold toExcept
-  aesop
+  constructor
+  · intro a
+    split at a <;> next _ _ => simp_all
+  · intro a
+    subst a
+    simp_all only
 
 def toOption : Decrypt α → Option α
 | .accepted a => some a
@@ -68,7 +75,12 @@ def toOption : Decrypt α → Option α
 theorem toOption_some_iff {a : α} : ∀ r : Decrypt α, toOption r = some a ↔ r = .accepted a := by
   intro
   unfold toOption
-  aesop
+  constructor
+  · intro a
+    split at a <;> next _ _ => simp_all
+  · intro a
+    subst a
+    simp_all only
 
 end Decrypt
 

@@ -17,7 +17,7 @@ structure SecretEncoder (τ : Sodium σ) where
 namespace SecretEncoder
 
 def new (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (SecretEncoder τ) := do
-  let key ← key.getDM (mkStaleKey (·.cast))
+  let key ← key.getDM (mkStaleKey (.up ·.cast))
   let (stream, header) ← streamInitPush (key.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
   return {stream, header := header.cast}
 
@@ -48,7 +48,7 @@ structure SecretDecoder (τ : Sodium σ) where
 namespace SecretDecoder
 
 def new (header : Header XChaCha20Poly1305) (key : Option (SymmKey τ XChaCha20) := none) : CryptoM τ (SecretDecoder τ) := do
-  let key ← key.getDM (mkStaleKey (·.cast))
+  let key ← key.getDM (mkStaleKey (.up ·.cast))
   let stream ← streamInitPull header.cast (key.cast (by simp [USize.ofNatLT_eq_ofNat]; congr))
   let buffer ← IO.mkRef #[]
   return {stream, buffer}
