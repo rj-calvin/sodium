@@ -1,3 +1,4 @@
+import Aesop
 import Sodium.Data.Encodable.Basic
 
 universe u
@@ -61,38 +62,62 @@ def toFloat (x : Probability) : Float := x.num.toNat.toFloat / x.den.toFloat
 instance : Coe Probability Float := ⟨toFloat⟩
 
 class Positive (x : Probability) : Prop where
-  num_nezero : x.num ≠ 0
+  positive : x.num ≠ 0
+
+instance (x : Probability) [h : x.Positive] : NeZero x.num where
+  out := h.positive
+
+@[simp]
+theorem mk_num_pos : ∀ n m, NeZero n → (h : n < m) → Δ(n | m).Positive := by
+  intro n m hn hnm
+  refine { positive := ?_ }
+  unfold mk num
+  simp only [ne_eq, Fin.mk_eq_zero]
+  exact hn.out
 
 def Shape := { s : Nat × Nat // s.2 ≠ 0 }
 
 def Shape.push (x : Probability) : Shape := ⟨(x.num, x.den), by exact den_nezero x⟩
+
+def Shape.part (x : Probability) [h : x.Positive] : Shape := by
+  refine ⟨⟨x.den, x.num⟩, ?_⟩
+  simp only [ne_eq, Fin.val_eq_zero_iff]
+  exact Positive.positive
 
 def Shape.pull (x : Shape) : Probability :=
   let ⟨⟨n₁, n₂⟩, _⟩ := x
   if _ : n₁ < n₂ then Δ(n₁ | n₂)
   else Δ(n₂ | n₁.succ)
 
+@[simp]
 theorem Shape.push_pull_eq : ∀ x, Shape.pull (Shape.push x) = x := by
-  unfold Shape.push Shape.pull
   intro x
+  unfold push pull
   simp only [Fin.is_lt, reduceDIte, mk_num_den]
+
+-- @[simp]
+-- theorem Shape.part_pull_pos : ∀ x : Probability, ∀ (h : x.Positive), (Shape.pull (Shape.part x)).Positive := by
+--   intro x h
+--   refine { positive := ?_ }
+--   unfold part pull
+--   sorry
 
 instance : Encodable Probability :=
   have : Encodable Shape := by unfold Shape; infer_instance
   Encodable.ofEquiv _ {
     push := Shape.push
     pull := Shape.pull
-    push_pull_eq := Shape.push_pull_eq
+    push_pull_eq := by simp
   }
 
 #eval show IO Unit from do
   let x : Probability.{0} := Δ(3 | 11)
-  let y? : Option Probability.{0} := Shape.pull (Shape.push x)
-  let z? : Option Probability.{0} := y?.bind fun y => Shape.pull (Shape.push y)
-  let w? : Option Probability.{0} := z?.bind fun z => Shape.pull (Shape.push z)
-  println! x.toFloat
-  println! y?.map toFloat
-  println! z?.map toFloat
-  println! w?.map toFloat
+  have : x.Positive := by
+    apply mk_num_pos
+    exact Nat.instNeZeroSucc
+  let y : Probability.{0} := Shape.pull (Shape.push x)
+  let z : Probability.{0} := Shape.pull (Shape.part x)
+  println! y.toFloat
+  println! z.toFloat
 
 end Ethos.Probability

@@ -441,7 +441,7 @@ def sign [Encodable α] (msg : α) (keys : Option (KeyPair τ Ed25519) := none) 
   let cert := ⟨json, sig.cast, keys.pkey⟩
   match h : verify cert with
   | .accepted a => return ⟨cert, a, h⟩
-  | _ => throwSpecViolation Ed25519 `publickey
+  | _ => throwSpecViolation Ed25519 decl_name%
 
 variable {σ : Type} {τ : Sodium σ}
 

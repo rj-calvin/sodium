@@ -142,17 +142,16 @@ protected def Id : PFunctor where
   B := fun _ => Observable
 
 instance : Coe Observable.Id.A Prop := ⟨id⟩
+instance : Coe Prop Observable.Id.A := ⟨id⟩
 
-instance prop : Inhabited Observable.Id.A :=
-  ⟨∀ x y, Probability.Shape.pull.{0} (Probability.Shape.part.{0} x) = some y → y.toFloat ≤ x.toFloat⟩
+instance : Inhabited Observable.Id.A where
+  default := ∀ x, Probability.Shape.pull (Probability.Shape.push.{0} x) = x
 
-instance decohere : Coe (Observable.Id.B default) Observable := ⟨id⟩
+instance : Coe (Observable.Id.B default) Observable := ⟨id⟩
+instance : Coe Observable (Observable.Id.B default) := ⟨id⟩
 
 instance {α} [Inhabited α] : Inhabited (Observable.Id α) where
   default := ⟨default, fun _ => default⟩
-
-instance : Inhabited (Observable.Id Observable) where
-  default := ⟨default, id⟩
 
 instance encodable : Encodable Observable :=
   Encodable.ofEquiv (Probability × PhaseName × Verified Syntax) {
@@ -160,7 +159,6 @@ instance encodable : Encodable Observable :=
     pull | ⟨p, x, s⟩ => ⟨p, x, s⟩
   }
 
-@[always_inline]
 def rotate : PhaseAngle → Observable → Observable
   | .top, o@{phase := .norm, ..} => {o with phase := .norm}
   | .top, o@{phase := .unsafe, ..} => {o with phase := .unsafe}
@@ -186,42 +184,53 @@ theorem rotate_top : ∀ p : PhaseAngle, ∀ o : Observable, p = .top → (o.rot
   intro p o _
   unfold rotate
   induction p <;> try contradiction
-  cases h : o.phase with
-  | norm => split <;> simp <;> contradiction
-  | safe => split <;> simp <;> contradiction
-  | «unsafe» => split <;> simp <;> contradiction
+  cases h : o.phase <;> split <;> simp <;> contradiction
 
 @[simp]
 theorem rotate_bot : ∀ p : PhaseAngle, ∀ o : Observable, p = .bot → (o.rotate p).phase = o.phase := by
   intro p o _
   unfold rotate
   induction p <;> try contradiction
-  cases h : o.phase with
-  | norm => split <;> simp <;> contradiction
-  | safe => split <;> simp <;> contradiction
-  | «unsafe» => split <;> simp <;> contradiction
+  cases h : o.phase <;> split <;> simp <;> contradiction
 
-end Ethos.Observable
+end Observable
+
+abbrev MetaObservable := Observable.Id Observable
+
+namespace MetaObservable
+
+instance : Inhabited MetaObservable where
+  default := ⟨default, id⟩
+
+abbrev prop (mo : MetaObservable) : Prop := mo.1
+def collapse (mo : MetaObservable) [h : Inhabited (Observable.Id.B mo.prop)] := mo.2 h.default
+def carrier (mo : MetaObservable) [h : Inhabited (Observable.Id.B mo.prop)] := mo.collapse.carrier
+def phase (mo : MetaObservable) [h : Inhabited (Observable.Id.B mo.prop)] := mo.collapse.phase
+
+end Ethos.MetaObservable
 
 def Ethos {σ : Type u} (τ : Sodium σ) (α : Type) :=
-  MVarId → ServerM τ (Array (Syntax.Tactic × Ethos.Observable.Id α))
-
-protected def Ethos.map {σ : Type u} {τ : Sodium σ} {α β} (f : α → β) (ε : Ethos τ α) : Ethos τ β :=
-  fun δ => (ε δ {}).map (·.map fun ⟨t, o⟩ => ⟨t, ⟨default, fun k => f (o.snd k)⟩⟩)
+  MVarId → ServerM τ (Array (Ethos.Observable.Id α))
 
 namespace Ethos
 
-variable {σ : Type} {τ : Sodium σ}
+variable {σ : Type u} {τ : Sodium σ}
 
-def Suggestion := String × Float
+protected def map {α β} (f : α → β) (ε : Ethos τ α) : Ethos τ β :=
+  fun δ => (ε δ {}).map (·.map fun k => ⟨k.fst, fun o => f (k.snd o)⟩)
 
-def Suggestion.ofMetaObservable (mo : Syntax.Tactic × Observable) : Suggestion :=
-  (toString mo.1.raw.prettyPrint, mo.2.toProbability.toFloat)
+def observe {α} (ε : Ethos τ α) : Ethos τ Observable :=
+  fun δ => (ε δ {}).map (·.map fun _ => default)
+
+def Suggestion := Format × Probability
+
+def Suggestion.ofMetaObservable (mo : MetaObservable) [Inhabited (Observable.Id.B mo.prop)] : Suggestion :=
+  (mo.carrier.val.prettyPrint, mo.collapse.toProbability)
 
 instance : Functor (Ethos τ) where
   map := Ethos.map
 
 def main {α} {β : Prop} (session : Session τ Curve25519Blake2b) : (α → β) → Ethos τ α → Ethos τ (PLift β) :=
-  fun f ε δ => (ε δ {session}).map (·.map fun ⟨t, o⟩ => ⟨t, ⟨default, fun k => ⟨f (o.snd k)⟩⟩⟩)
+  fun f ε δ => (ε δ {session}).map (·.map fun k => ⟨k.fst, fun o => ⟨f (k.snd o)⟩⟩)
 
 end Ethos
