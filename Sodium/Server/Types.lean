@@ -68,7 +68,7 @@ class Signed {α : Type} [Encodable α] (m : MetaId τ) (x : Verified α) : Prop
 
 end MetaId
 
-inductive MessageKind
+inductive MessageName
   | terminal
   | anonymous
   | addressed
@@ -76,16 +76,16 @@ inductive MessageKind
   | ephemeral
   deriving Inhabited, BEq, DecidableEq, Repr, TypeName, ToJson, FromJson
 
-namespace MessageKind
+namespace MessageName
 
-def ofFin : Fin 5 → MessageKind
+def ofFin : Fin 5 → MessageName
   | 0 => .terminal
   | 1 => .anonymous
   | 2 => .addressed
   | 3 => .partial
   | 4 => .ephemeral
 
-@[coe] def toFin : MessageKind → Fin 5
+@[coe] def toFin : MessageName → Fin 5
   | .terminal => 0
   | .anonymous => 1
   | .addressed => 2
@@ -94,14 +94,54 @@ def ofFin : Fin 5 → MessageKind
 
 @[simp] theorem ofFin_toFin_eq : ∀ k, ofFin (toFin k) = k := by intro k; cases k <;> rfl
 
-instance : Coe MessageKind (Fin 5) := ⟨toFin⟩
+instance : Coe MessageName (Fin 5) := ⟨toFin⟩
 
-instance encodable : Encodable MessageKind :=
+instance encodable : Encodable MessageName :=
   Encodable.ofEquiv _ {
     push := toFin
     pull := ofFin
     push_pull_eq k := ofFin_toFin_eq k
   }
+
+end MessageName
+
+inductive MessageKind where
+  | terminal : MessageKind
+  | anonymous : MessageKind
+  | ephemeral : MessageKind
+  | addressed : MessageKind
+  | «partial» : PublicKey Curve25519 → Header XChaCha20Poly1305 → MessageKind
+  deriving DecidableEq
+
+namespace MessageKind
+
+def name : MessageKind → MessageName
+  | .terminal => .terminal
+  | .anonymous => .anonymous
+  | .ephemeral => .ephemeral
+  | .addressed => .addressed
+  | .partial _ _ => .partial
+
+def Shape := Fin 4 ⊕ PublicKey Curve25519 × Header XChaCha20Poly1305
+
+def toShape : MessageKind → Shape
+  | .terminal => .inl 0
+  | .anonymous => .inl 1
+  | .ephemeral => .inl 2
+  | .addressed => .inl 3
+  | .partial x y => .inr (x, y)
+
+def ofShape : Shape → MessageKind
+  | .inl 0 => .terminal
+  | .inl 1 => .anonymous
+  | .inl 2 => .ephemeral
+  | .inl 3 => .addressed
+  | .inr (x, y) => .partial x y
+
+instance Shape.encodable : Encodable Shape := by unfold Shape; infer_instance
+
+instance encodable : Encodable MessageKind :=
+  Encodable.ofEquiv _ { push := toShape, pull := ofShape }
 
 end MessageKind
 
@@ -110,24 +150,22 @@ def Message : PFunctor where
   B | .terminal => Empty
     | .anonymous => SealedCipherText Curve25519XSalsa20Poly1305
     | .addressed => CipherText XSalsa20Poly1305
-    | .partial => List (CipherChunk XChaCha20Poly1305)
+    | .partial _ _ => List (CipherChunk XChaCha20Poly1305)
     | .ephemeral => Unit
 
 namespace Message
 
 instance : Coe Message.A MessageKind := ⟨id⟩
-instance : Inhabited Message.A := by unfold Message; infer_instance
 instance : DecidableEq Message.A := by unfold Message; infer_instance
 
-instance {α} : Inhabited (Message α) := ⟨⟨default, Empty.elim⟩⟩
+instance {α} : Inhabited (Message α) := ⟨⟨.terminal, Empty.elim⟩⟩
 instance : Inhabited Message.Id := ⟨⟨.ephemeral, ()⟩⟩
 
 instance encodable : Encodable Message.A := by unfold Message; infer_instance
 
-instance : IsEmpty (Message.B default) := by unfold Message; simp [instInhabitedA]; infer_instance
+instance : IsEmpty (Message.B .terminal) := by unfold Message; infer_instance
 
-instance : ∀ a, HEq (Message.B a) (Message.B a) := fun _ => by
-  simp only [heq_eq_eq]
+instance : ∀ a, HEq (Message.B a) (Message.B a) := fun _ => by simp only [heq_eq_eq]
 
 instance encodable_pi : ∀ a, Encodable (Message.B a) := fun a => by
   have : Encodable Empty := Empty.encodable
@@ -135,6 +173,4 @@ instance encodable_pi : ∀ a, Encodable (Message.B a) := fun a => by
 
 instance encodable_id : Encodable Message.Id := by infer_instance
 
-end Message
-
-end Sodium
+end Sodium.Message

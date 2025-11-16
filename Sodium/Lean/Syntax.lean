@@ -104,13 +104,13 @@ def Shape.arity : Shape → Nat
   | missing% | atom% _, _ | ident% _, _, _, _ => 0
   | node% _, _, k => k
 
-private def f : Syntax → WType fun i : Shape => Fin i.arity
+def Shape.push : Syntax → WType fun i : Shape => Fin i.arity
   | .missing => ⟨missing%, Fin.elim0⟩
   | .atom info s => ⟨atom% info, s, Fin.elim0⟩
   | .ident info s n pre => ⟨ident% info, s, n, pre, Fin.elim0⟩
   | .node info kind stx =>
     if _ : stx.size = 0 then ⟨node% info, kind, 0, Fin.elim0⟩
-    else ⟨node% info, kind, stx.size, fun i => f (stx[i]'i.isLt)⟩
+    else ⟨node% info, kind, stx.size, fun i => Shape.push (stx[i]'i.isLt)⟩
 decreasing_by
   simp_all only [Syntax.node.sizeOf_spec, gt_iff_lt]
   have h₁ : sizeOf stx < 1 + sizeOf info + sizeOf stx := by omega
@@ -118,28 +118,28 @@ decreasing_by
     simp_all only [Nat.lt_add_left_iff_pos, Fin.getElem_fin, Array.sizeOf_getElem]
   omega
 
-private def finv : WType (fun i : Shape => Fin i.arity) → Syntax
+def Shape.pull : WType (fun i : Shape => Fin i.arity) → Syntax
   | ⟨missing%, _⟩ => .missing
   | ⟨atom% info, s, _⟩ => .atom info s
   | ⟨ident% info, s, n, pre, _⟩ => .ident info s n pre
-  | ⟨node% info, kind, k, fn⟩ => .node info kind <| (Array.ofFn (n := k) id).map fun i => finv (fn i)
+  | ⟨node% info, kind, k, fn⟩ => .node info kind <| (Array.ofFn (n := k) id).map fun i => Shape.pull (fn i)
 
 instance encodable_equiv : Encodable.Equiv Syntax (WType fun i : Shape => Fin i.arity) where
-  push := f
-  pull := finv
+  push := Shape.push
+  pull := Shape.pull
   push_pull_eq stx := by
-    have : ∀ n (s : Syntax), sizeOf s < n → finv (f s) = s := fun n => by
+    have : ∀ n (s : Syntax), sizeOf s < n → Shape.pull (Shape.push s) = s := fun n => by
       induction n with
       | zero => intros; omega
       | succ n ih =>
         intro s hs
-        cases s <;> try simp only [f, finv]
+        cases s <;> try simp only [Shape.push, Shape.pull]
         rename_i args
         if h : args.size = 0 then
-          simp only [h, Array.eq_empty_of_size_eq_zero, List.size_toArray, List.length_nil, f,
-            ↓reduceDIte, finv, Array.ofFn_zero, List.map_toArray, List.map_nil]
+          simp only [h, Array.eq_empty_of_size_eq_zero, List.size_toArray, List.length_nil, Shape.push,
+            ↓reduceDIte, Shape.pull, Array.ofFn_zero, List.map_toArray, List.map_nil]
         else
-          rw [dif_neg h, finv]
+          rw [dif_neg h, Shape.pull]
           congr
           ext i
           . simp only [Array.size_map, Array.size_ofFn]

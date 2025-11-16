@@ -23,6 +23,14 @@ def addressed (x : Message.B .addressed → BaseIO (ServerTask α)) : Server α 
 def anonymous (x : Message.B .anonymous → BaseIO (ServerTask α)) : Server α :=
   ⟨.anonymous, x⟩
 
+def «partial» {pkey : PublicKey Curve25519} {header : Header XChaCha20Poly1305} (x : Message.B (.partial pkey header) → BaseIO (ServerTask α)) : Server α :=
+  ⟨.partial pkey header, x⟩
+
+def subscribe (x : Server α) : CryptoM τ (ServerTask α) := do
+  match h : x.1 with
+  | .ephemeral => x.2 (h ▸ ())
+  | _ => default
+
 end Server
 
 def ServerT (τ : Sodium σ) (m : {σ : Type u} → Sodium σ → Type → Type) (α : Type) :=
@@ -41,6 +49,9 @@ def anonymous (x : Message.B .anonymous → m τ α) : ServerT τ m α :=
 def addressed (x : Message.B .addressed → m τ α) : ServerT τ m α :=
   ⟨.addressed, x⟩
 
+def «partial» {pkey : PublicKey Curve25519} {header : Header XChaCha20Poly1305} (x : Message.B (.partial pkey header) → m τ α) : ServerT τ m α :=
+  ⟨.partial pkey header, x⟩
+
 protected def pure [Pure (m τ)] (a : α) : ServerT τ m α :=
   ephemeral (Pure.pure a)
 
@@ -49,11 +60,12 @@ protected def map [Functor (m τ)] (f : α → β) : ServerT τ m α → ServerT
 
 protected def bind [h : Monad (m τ)] [MonadError (m τ)] (st : ServerT τ m α) (f : α → ServerT τ m β) : ServerT τ m β :=
   match st with | ⟨ka, k⟩ => by refine ⟨ka, ?_⟩; exact fun x => do
-    bind (k x) fun a => match f a with
+    bind (k x) fun a => match h : f a with
+      | ⟨.terminal, _⟩ => throwError toMessageData (@toJson MessageName _ .terminal)
       | ⟨.ephemeral, k⟩ => k ()
       | ⟨kb, k⟩ =>
         if h : kb = ka then k (h ▸ x)
-        else throwError toMessageData (@toJson MessageKind _ kb)
+        else throwError toMessageData (encode kb)
 
 instance [Functor (m τ)] : Functor (ServerT τ m) where map := ServerT.map
 
@@ -64,10 +76,11 @@ instance [Monad (m τ)] [MonadError (m τ)] : Monad (ServerT τ m) where
 variable [Monad (m τ)] [MonadError (m τ)]
 
 def run (x : Message.Id) : ServerT τ m α → m τ α
+  | ⟨.terminal, _⟩ => throwError toMessageData (@toJson MessageName _ .terminal)
   | ⟨.ephemeral, k⟩ => k ()
   | ⟨a, k⟩ =>
     if h : a = x.1 then k (h ▸ x.2)
-    else throwError toMessageData (@toJson MessageKind _ a)
+    else throwError toMessageData (encode a)
 
 end ServerT
 
@@ -81,6 +94,13 @@ namespace ServerM
 def toCryptoM (msg : Message.Id) (x : ServerM τ α) (session : Option (Session τ Curve25519Blake2b) := none) : CryptoM τ α :=
   Meta.withoutModifyingMCtx do Meta.withNewMCtxDepth (allowLevelAssignments := true) do
     ServerT.run msg (x {session})
+
+open Lean.Server.ServerTask in
+def conn : Message.Id → Server α → ServerM τ (ServerTask α)
+  | ⟨.ephemeral, _⟩, ⟨.ephemeral, k⟩, {..} => ServerT.ephemeral do k ()
+  | ⟨.addressed, msg⟩, ⟨.addressed, k⟩, {..} => ServerT.ephemeral do k msg
+  | ⟨.anonymous, msg⟩, ⟨.anonymous, k⟩, {..} => ServerT.ephemeral do k msg
+  | ⟨_, _⟩, ⟨_, _⟩, {..} => default
 
 def recv? (α : Type) [Encodable α] : ServerM τ (Decrypt (Verified α))
   | { session := none, .. } => ServerT.anonymous fun x => do decryptAnon? x

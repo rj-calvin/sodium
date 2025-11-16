@@ -11,7 +11,7 @@ structure Sodium (σ : Type u) where private mk ::
 namespace Sodium
 
 alloy c extern "lean_sodium_init"
-def init (σ : Type) : IO (Sodium σ) :=
+def init (σ : Type u) : IO (Sodium σ) :=
   if (sodium_init() < 0) {
     lean_object* error_msg = lean_mk_string("Failed to initialize LibSodium")
     lean_object* io_error = lean_mk_io_user_error(error_msg);

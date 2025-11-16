@@ -5,23 +5,33 @@ universe u
 
 namespace Ethos
 
-def Probability := Σ' n, ULift (Fin n)
+export Aesop (ScopeName)
 
-instance : Inhabited Probability where
-  default := ⟨1, ⟨0⟩⟩
+deriving instance DecidableEq for ScopeName
+
+/--
+An abstract, universe-polymorphic definition for a quantized collection of units.
+-/
+def Probability := Σ' n, ULift (Fin n)
 
 def Probability.mk (n₁ : Nat) (n₂ : Nat) (h : n₁ < n₂) : Probability :=
   ⟨n₂, ⟨n₁, h⟩⟩
 
+notation "Δ(" n₁ " | " n₂ ")" => Probability.mk n₁ n₂ (by omega)
+
+instance : Inhabited Probability where
+  default := Δ(0 | 1)
+
 instance : Hashable Probability where
   hash x := mixHash 3 (mixHash (hash x.1) (hash x.2.down))
-
-notation "Δ(" n₁ " | " n₂ ")" => Probability.mk n₁ n₂ (by omega)
 
 namespace Probability
 
 def den (x : Probability) : Nat := x.1
 def num (x : Probability) : Fin x.den := x.2.down
+
+@[simp]
+theorem mk_num_den : ∀ x : Probability, Δ(x.num | x.den) = x := by intro; rfl
 
 @[simp]
 theorem den_nezero : ∀ x : Probability, x.den ≠ 0 := by
@@ -51,38 +61,34 @@ theorem ext : ∀ x y : Probability, (x.den = y.den) → (∀ (h : x.den = y.den
   subst this
   rfl
 
-@[simp]
-theorem mk_num_den : ∀ x : Probability, Δ(x.num | x.den) = x := by
-  intro _
-  rfl
-
 @[coe]
 def toFloat (x : Probability) : Float := x.num.toNat.toFloat / x.den.toFloat
 
 instance : Coe Probability Float := ⟨toFloat⟩
+instance : ToString Probability := ⟨(·.toFloat.toString)⟩
 
-class Positive (x : Probability) : Prop where
-  positive : x.num ≠ 0
+instance : Repr Probability where
+  reprPrec x
+  | _ => f!"Δ({x.num}|{x.den})"
 
-instance (x : Probability) [h : x.Positive] : NeZero x.num where
-  out := h.positive
+abbrev Positive (x : Probability) : Prop := x.num ≠ 0
+
+instance (x : Probability) : x.Positive → NeZero x.num := fun h => { out := h }
 
 @[simp]
 theorem mk_num_pos : ∀ n m, NeZero n → (h : n < m) → Δ(n | m).Positive := by
-  intro n m hn hnm
-  refine { positive := ?_ }
-  unfold mk num
-  simp only [ne_eq, Fin.mk_eq_zero]
-  exact hn.out
+  intro _ _ h _
+  unfold mk
+  simp only [ne_eq, num, Fin.mk_eq_zero]
+  exact h.out
 
-def Shape := { s : Nat × Nat // s.2 ≠ 0 }
+def Shape := { x : Nat × Nat // x.2 ≠ 0 }
 
-def Shape.push (x : Probability) : Shape := ⟨(x.num, x.den), by exact den_nezero x⟩
+def Shape.push (x : Probability) : Shape := ⟨(x.num, x.den), den_nezero x⟩
 
-def Shape.part (x : Probability) [h : x.Positive] : Shape := by
+def Shape.part (x : Probability) (h : x.num ≠ 0) : Shape := by
   refine ⟨⟨x.den, x.num⟩, ?_⟩
-  simp only [ne_eq, Fin.val_eq_zero_iff]
-  exact Positive.positive
+  simpa only [ne_eq, Fin.val_eq_zero_iff]
 
 def Shape.pull (x : Shape) : Probability :=
   let ⟨⟨n₁, n₂⟩, _⟩ := x
@@ -110,13 +116,27 @@ instance : Encodable Probability :=
     push_pull_eq := by simp
   }
 
+protected def spin (x : Probability) (scope : ScopeName := .local) : Probability :=
+  Shape.pull <| if h : scope = .global ∧ x.num ≠ 0 then Shape.part x h.2 else Shape.push x
+
+protected def quantize (x : Probability) (scope : ScopeName := .global) : Nat :=
+  let x : Probability.{0} := x.spin scope
+  x.den - x.num
+
+@[simp]
+theorem quantize_nezero : ∀ (x : Probability) (s : ScopeName), (h : x.num ≠ 0) → x.quantize s ≠ 0 := by
+  intros
+  unfold Probability.quantize Probability.spin
+  simp only [ne_eq]
+  omega
+
 #eval show IO Unit from do
   let x : Probability.{0} := Δ(3 | 11)
   have : x.Positive := by
     apply mk_num_pos
     exact Nat.instNeZeroSucc
   let y : Probability.{0} := Shape.pull (Shape.push x)
-  let z : Probability.{0} := Shape.pull (Shape.part x)
+  let z : Probability.{0} := Shape.pull (Shape.part x (by omega))
   println! y.toFloat
   println! z.toFloat
 
