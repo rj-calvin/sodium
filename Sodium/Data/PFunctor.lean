@@ -71,6 +71,7 @@ def new.iget [DecidableEq P.A] [Inhabited α] (x : P α) (i : P.Id) : α :=
   cases x
   rfl
 
+@[reducible]
 def comp (P₂ : PFunctor.{uγ,uδ}) (P₁ : PFunctor.{uα,uβ}) : PFunctor.{max uα uγ uδ, max uβ uδ} where
   A := Σ a₂ : P₂.A, P₂.B a₂ → P₁.A
   B | ⟨a, k⟩ => Σ u : P₂.B a, P₁.B (k u)

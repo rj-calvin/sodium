@@ -1,13 +1,13 @@
-import Sodium.Typography.Emulator
+import Sodium.Typography.Latin
 
-open Lean Meta Typography Server Sodium Crypto
+open Lean Meta Server Sodium Crypto Typography
 
 def shell : List String := [
   "import «Sodium».«Typography».«Frontend».«Qwerty»",
-  "open Lean Elab Meta Tactic Sodium Crypto Ethos Typography",
+  "open Lean Elab Command Tactic Typography",
   "declare_syntax_cat shell",
   "@[reducible] def Shell := MetaM (ULift String)",
-  "elab \"#shell \" γ:term : command => do discard <| Lean.Elab.Command.elabRunMeta <| ← `(command|#eval show Shell.{1} from by exact ⟨$γ⟩)",
+  "example : (default : Ethos.Universal.A) := by aesop (rule_sets := [«standard», «cautious»])",
 ]
 
 def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (delay : Nat := 31) : IO Unit := do
@@ -28,6 +28,7 @@ def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (dela
     : DocumentMeta
   }
 
+  IO.FS.writeFile shell doc.text.source
   let _ ← FileWorker.setupFile doc #[] default
 
   let config := {
@@ -59,18 +60,16 @@ def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (dela
   }
 
   let (ctx, st) ← FileWorker.initializeWorker doc (← IO.getStdout) (← IO.getStderr) config default
-  IO.FS.writeFile shell doc.text.source
 
   StateRefT'.run' (s := st) <| ReaderT.run (r := ctx) <| show FileWorker.WorkerM Unit from do
-    let doc := (← get).doc
     let hLog := (← read).hLog
 
     let bridge : Syntax.Tactic → MetaM _
     | `(tactic|aesop $config*) => Emulator.bridge (σ := by simp only [Encodable.encodek, implies_true, and_self]) hLog
     | _ => Elab.throwUnsupportedSyntax
 
-    repeat match ← doc.cmdSnaps.getFinishedPrefixWithConsistentLatency latency with
-    | (snap :: _, _, true) => discard <| EIO.toBaseIO <| snap.runTermElabM doc.meta do bridge <| ← `(tactic|aesop (rule_sets := [«cautious»]))
+    repeat match ← (← get).doc.cmdSnaps.getFinishedPrefixWithConsistentLatency latency with
+    | (snap :: _, _, true) => discard <| EIO.toBaseIO <| snap.runTermElabM (← get).doc.meta do bridge <| ← `(tactic|aesop (rule_sets := [«standard»]))
     | (_, some e, _) => throw e
     | ([], _, _) | (_, _, false) => continue
 
@@ -78,3 +77,5 @@ def main (args : List String) : IO UInt32 := do
   let uri := (← IO.appDir) / ".." / ".."
   run uri <| if args.length > 0 ∧ args.tail.length > 0 then args.tail else shell
   return 0
+
+example : (default : Ethos.Universal.A) := by aesop (rule_sets := [«standard»])

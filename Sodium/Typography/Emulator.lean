@@ -2,17 +2,23 @@ import Sodium.Ethos.Basic
 
 open Lean Elab Tactic Sodium Crypto Ethos
 
-attribute [aesop norm 0 unfold (rule_sets := [«standard»])]
-  Universal.prompt Universal.map
+attribute [aesop norm 1 unfold (rule_sets := [«standard»])]
+  Universal.prompt
+
+attribute [aesop norm 2 apply (rule_sets := [«standard»])]
+  Universal.map
+
+attribute [aesop [unsafe 29% constructors (rule_sets := [«standard»]), safe cases (rule_sets := [«cautious»])]]
+  MessageKind
+
+attribute [aesop safe 0 cases (rule_sets := [«standard», «cautious»])]
+  Decrypt
+
+attribute [aesop safe 1 apply (rule_sets := [«cautious»])]
+  Observable.observe
 
 attribute [aesop unsafe 31% unfold (rule_sets := [«cautious»])]
   Observable.encodable
-
-attribute [aesop safe 0 apply (rule_sets := [«cautious»])]
-  Observable.observe
-
-attribute [aesop safe [constructors (rule_sets := [«cautious»]), cases (rule_sets := [«standard»])]]
-  MessageKind
 
 namespace Typography
 
@@ -114,9 +120,6 @@ end quotPrecheckFalse
 
 @[aesop norm]
 protected def map {α β} := @PFunctor.map α β (Emulator σ)
-
-instance : Coe (Emulator σ).A (Σ' τ : Sodium σ, IO.RealWorld.Shape τ × IO.RealWorld.Point τ) := ⟨id⟩
-instance : Coe (Σ' τ : Sodium σ, IO.RealWorld.Shape τ × IO.RealWorld.Point τ) (Emulator σ).A := ⟨id⟩
 
 /--
 Produce a stream of bytes on `log` using magic.

@@ -37,6 +37,7 @@ syntax (name := w) "w" : grapheme
 syntax (name := x) "x" : grapheme
 syntax (name := y) "y" : grapheme
 syntax (name := z) "z" : grapheme
+
 syntax (name := A) "A" : grapheme
 syntax (name := B) "B" : grapheme
 syntax (name := C) "C" : grapheme
@@ -63,6 +64,7 @@ syntax (name := W) "W" : grapheme
 syntax (name := X) "X" : grapheme
 syntax (name := Y) "Y" : grapheme
 syntax (name := Z) "Z" : grapheme
+
 syntax (name := zero) &"0" : grapheme
 syntax (name := one) &"1" : grapheme
 syntax (name := two) &"2" : grapheme
@@ -351,8 +353,8 @@ abbrev Zed : Grapheme := ⟨mkNode ``«Z» #[mkAtom "Z"]⟩
 
 end Alphabet
 
-abbrev Symbol (γ : Grapheme) : TermElabM Syntax.Tactic := `(tactic|leader% $γ)
-abbrev Return : TermElabM Syntax.Tactic := `(tactic|done%)
+abbrev Leader (γ : Grapheme) : TermElabM Syntax.Tactic := `(tactic|leader% $γ)
+abbrev Done : TermElabM Syntax.Tactic := `(tactic|done%)
 
 def Key := Option (Grapheme ⊕ Terminal)
 
