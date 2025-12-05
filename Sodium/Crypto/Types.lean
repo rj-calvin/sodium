@@ -44,6 +44,21 @@ variable {α : Type}
 instance : Coe (Decrypt α) (Except DecryptError α) := ⟨toExcept⟩
 instance : Coe (Except DecryptError α) (Decrypt α) := ⟨ofExcept⟩
 
+def ofJson (α : Type) [Encodable α] (json : Json) : Decrypt α :=
+  match decode? (α := α) json with
+  | .some a => .accepted a
+  | _ => .almost json
+
+def ofString (α : Type) [Encodable α] (msg : String) : Decrypt α :=
+  match Json.parse msg with
+  | .ok json => ofJson α json
+  | _ => .unknown msg
+
+def ofByteArray (α : Type) [Encodable α] (data : ByteArray) : Decrypt α :=
+  match String.fromUTF8? data with
+  | .some msg => ofString α msg
+  | _ => .mangled data
+
 @[simp]
 theorem toExcept_inj : ∀ r : Except DecryptError α, toExcept (ofExcept r) = r := by
   intro

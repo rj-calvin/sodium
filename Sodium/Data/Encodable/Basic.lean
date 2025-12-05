@@ -364,4 +364,10 @@ instance _root_.Subtype.encodable : Encodable {a : α // P a} where
 
 end Subtype
 
+instance _root_.Char.encodable : Encodable Char :=
+  Encodable.ofEquiv {x : UInt32 // x.isValidChar} {
+    push | ⟨x, h⟩ => ⟨x, h⟩
+    pull | ⟨x, h⟩ => ⟨x, h⟩
+  }
+
 end Encodable

@@ -107,3 +107,6 @@ lean_lib «Sodium» where
     "-lsodium"
   ]
 
+lean_exe «shell» where
+  root := `Shell
+  supportInterpreter := true

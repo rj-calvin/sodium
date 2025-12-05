@@ -1,11 +1,8 @@
 import Aesop
-import Sodium.Ethos.Probability
+import Lean.Data.Lsp
+import Sodium.Ethos.Weight
 import Sodium.Server.Monad
 import Sodium.Crypto.Stream
-
-/-
-Ethos is a mechanism for translating semantics between universes.
--/
 
 universe u
 
@@ -13,9 +10,9 @@ open Lean Sodium Crypto Meta
 
 namespace Aesop
 
-export Ethos (Probability)
+export Ethos (Weight)
 
-def Percent.ofProbability (p : Probability) : Percent := ⟨p⟩
+def Percent.ofWeight (p : Weight) : Percent := ⟨p⟩
 
 instance _root_.Lean.Meta.TransparencyMode.encodable : Encodable TransparencyMode :=
   Encodable.ofEquiv (Fin 4) {
@@ -134,12 +131,27 @@ end Aesop
 
 namespace Ethos
 
-export Aesop (PhaseName PhaseAngle Percent Percent.ofProbability)
+export Aesop (
+  PhaseName
+  PhaseSpec
+  PhaseAngle
+  Percent
+  Percent.ofWeight
+  LocalRuleSet
+  LocalRuleSetMember
+  RuleName
+  RuleTerm
+  CtorNames
+  BuilderName
+)
+
+declare_aesop_rule_sets [«standard»] (default := false)
+declare_aesop_rule_sets [«cautious»] (default := false)
 
 /--
 A proof-carrying object.
 -/
-structure Observable extends Probability where
+structure Observable extends Weight where
   private mk ::
   phase : PhaseName := default
   carrier : Verified Syntax.Tactic
@@ -166,23 +178,36 @@ protected def renew {σ : Type u} {τ : Sodium σ} (o : Observable) (scope : Sco
   else
     exact pure ⟨Δ(before | after.succ), default, cert⟩
 
-@[simp]
-def toProbability (o : Observable) : Probability := o.toPSigma
+@[coe]
+def toWeight (o : Observable) : Weight := o.toPSigma
 
-def toPercent (o : Observable) : Percent := Percent.ofProbability o.toProbability
+instance : Coe Observable Weight := ⟨toWeight⟩
 
 def pretty (o : Observable) : Format := o.carrier.val.raw.prettyPrint
 def size (o : Observable) : Nat := (toString o.pretty).length
 
-abbrev den (o : Observable) := o.toProbability.den
-abbrev num (o : Observable) := o.toProbability.num
+def phaseSpec (o : Observable) : PhaseSpec :=
+  match o.phase with
+  | .unsafe => .unsafe {successProbability := Percent.ofWeight o}
+  | .safe => .safe {penalty := o.toWeight.quantize .local, safety := .safe}
+  | .norm => .norm {penalty := o.toWeight.quantize .global}
+
+def toRule (o : Observable) (scope : ScopeName := .local) (name : Name := `«standard») : LocalRuleSetMember :=
+  .global <| .base <| o.phaseSpec.toRule name .tactic scope (.tacticStx o.carrier) .unindexed none
+
+def toRuleSet (os : Array Observable) (scope : ScopeName := .global) (name : Name := `«standard») : LocalRuleSet :=
+  os.mapIdx (·, ·) |>.foldl (init := ∅) fun set ⟨i, o⟩ =>
+    set.add <| o.toRule scope (.num name i)
+
+abbrev den (o : Observable) := o.toWeight.den
+abbrev num (o : Observable) := o.toWeight.num
 
 @[simp]
 theorem den_nezero (o : Observable) : o.den ≠ 0 := by
-  simp only [ne_eq, Probability.den_nezero, not_false_eq_true]
+  simp only [ne_eq, Weight.den_nezero, not_false_eq_true]
 
 @[simp]
-theorem num_lt_den (o : Observable) : o.num < o.den := by exact Probability.num_lt_den _
+theorem num_lt_den (o : Observable) : o.num < o.den := by exact Weight.num_lt_den _
 
 instance : ∀ o : Observable, NeZero o.den := fun o => ⟨den_nezero o⟩
 
@@ -191,11 +216,11 @@ protected instance format : ToFormat Observable := ⟨pretty⟩
 protected instance repr : Repr Observable where
   reprPrec o n :=
     have : o.num < o.den := by simp
-    f!"{reprPrec.{0} Δ(o.num | o.den) n}"
+    f!"{reprPrec Δ(o.num | o.den) n}"
 
 abbrev Positive (o : Observable) := o.num ≠ 0
 
-def Shape := Probability × PhaseName × Verified Syntax.Tactic
+def Shape := Weight × PhaseName × Verified Syntax.Tactic
 
 def Shape.push : Observable → Shape
   | ⟨p, x, s⟩ => ⟨p, x, s⟩
@@ -204,7 +229,7 @@ def Shape.pull : Shape → Observable
   | ⟨p, x, s⟩ => ⟨p, x, s⟩
 
 def Shape.part (o : Observable) (scope : ScopeName) : Shape :=
-  ⟨o.toProbability.spin scope, o.phase, o.carrier⟩
+  ⟨o.toWeight.spin scope, o.phase, o.carrier⟩
 
 instance Shape.encodable : Encodable Shape := by unfold Shape; infer_instance
 
@@ -212,31 +237,24 @@ protected instance encodable : Encodable Observable :=
   Encodable.ofEquiv _ { push := Shape.push, pull := Shape.pull }
 
 def rotate : PhaseAngle → Observable → Observable
-  | .top, o@{phase := .norm, ..} => {o with phase := .norm}
-  | .top, o@{phase := .unsafe, ..} => {o with phase := .unsafe}
-  | .top, o@{phase := .safe, ..} => {o with phase := .safe}
-  | .up, o@{phase := .norm, ..} => {o with phase := .safe}
-  | .up, o@{phase := .unsafe, ..} => {o with phase := .norm}
-  | .up, o@{phase := .safe, ..} => {o with phase := .unsafe}
-  | .down, o@{phase := .norm, ..} => {o with phase := .safe}
-  | .down, o@{phase := .unsafe, ..} => {o with phase := .norm}
-  | .down, o@{phase := .safe, ..} => {o with phase := .unsafe}
-  | .left, o@{phase := .norm, ..} => {o with phase := .unsafe}
-  | .left, o@{phase := .unsafe, ..} => {o with phase := .safe}
-  | .left, o@{phase := .safe, ..} => {o with phase := .norm}
-  | .right, o@{phase := .norm, ..} => {o with phase := .unsafe}
-  | .right, o@{phase := .unsafe, ..} => {o with phase := .safe}
-  | .right, o@{phase := .safe, ..} => {o with phase := .norm}
   | .bot, o@{phase := .norm, ..} => {o with phase := .norm}
   | .bot, o@{phase := .unsafe, ..} => {o with phase := .unsafe}
   | .bot, o@{phase := .safe, ..} => {o with phase := .safe}
-
-@[simp]
-theorem rotate_top : ∀ p : PhaseAngle, ∀ o : Observable, p = .top → (o.rotate p).phase = o.phase := by
-  intro p o _
-  unfold rotate
-  induction p <;> try contradiction
-  cases h : o.phase <;> split <;> simp <;> contradiction
+  | .up, o@{phase := .norm, ..} => {o with phase := .safe}
+  | .up, o@{phase := .unsafe, ..} => {o with phase := .norm}
+  | .up, o@{phase := .safe, ..} => {o with phase := .unsafe}
+  | .down, o@{phase := .norm, ..} => {o with phase := .unsafe}
+  | .down, o@{phase := .unsafe, ..} => {o with phase := .safe}
+  | .down, o@{phase := .safe, ..} => {o with phase := .norm}
+  | .left, o@{phase := .norm, ..} => {o with phase := .unsafe}
+  | .left, o@{phase := .unsafe, ..} => {o with phase := .safe}
+  | .left, o@{phase := .safe, ..} => {o with phase := .norm}
+  | .right, o@{phase := .norm, ..} => {o with phase := .safe}
+  | .right, o@{phase := .unsafe, ..} => {o with phase := .norm}
+  | .right, o@{phase := .safe, ..} => {o with phase := .unsafe}
+  | .top, o@{phase := .norm, ..} => {o with phase := .norm}
+  | .top, o@{phase := .unsafe, ..} => {o with phase := .safe}
+  | .top, o@{phase := .safe, ..} => {o with phase := .unsafe}
 
 @[simp]
 theorem rotate_bot : ∀ p : PhaseAngle, ∀ o : Observable, p = .bot → (o.rotate p).phase = o.phase := by
@@ -245,34 +263,54 @@ theorem rotate_bot : ∀ p : PhaseAngle, ∀ o : Observable, p = .bot → (o.rot
   induction p <;> try contradiction
   cases h : o.phase <;> split <;> simp <;> contradiction
 
+def emit (io : IO.FS.Stream) (o : Observable) (method : String := "$/tactic") : MetaM PUnit :=
+  io.writeLspNotification {method, param := encode o}
+
 end Observable
 
-abbrev Suggestion := Probability × String
+abbrev Suggestion := String × Float
 
 def Observable.toSuggestion (o : Observable) : Suggestion :=
-  (o.toProbability, toString o.carrier.val.raw.prettyPrint)
+  (toString o.carrier.val.raw.prettyPrint, o.toWeight)
 
 /--
-Mechanism for associating semantics to instances of `Observable`.
+A `Universal` is a mechanism for associating semantics to instances of `Observable`.
 -/
 def Universal : PFunctor where
   A := Prop
   B := fun h => (_ : h) → Observable
 
+namespace Universal
+
 instance : Coe Universal.A Prop := ⟨id⟩
 instance : Coe Prop Universal.A := ⟨id⟩
 
-protected instance Universal.prompt : Inhabited Universal.A where
+/--
+The default proposition that JSON encodings of `Observable` round-trip correctly.
+-/
+protected instance prompt : Inhabited Universal.A where
   default :=
-      ∀ x : Probability.{0}, decode? (encode x) = some x
+      ∀ x : Weight, decode? (encode x) = some x
     ∧ ∀ y : PhaseName, decode? (encode y) = some y
     ∧ ∀ z : Verified Syntax.Tactic, decode? (encode z) = some z
-    ∧ ∀ o : Observable.{1}, decode? (encode o) = some o
+    ∧ ∀ o : Observable, decode? (encode o) = some o
 
 instance {α} [Inhabited α] : Inhabited (Universal α) where
   default := ⟨default, fun _ => default⟩
 
-protected def Universal.map {α β} := @PFunctor.map α β Universal
+/--
+The level-matrix representing all inhabitation clauses of the `Universal` functor.
+-/
+@[reducible]
+protected def Prompt (u : Level := levelZero) (v : Level := levelOne) : Expr :=
+  mkApp (mkConst ``«Inhabited») (mkApp (mkConst ``«PFunctor».«A» [u, v]) (mkConst ``«Universal» [u]))
+
+protected def map {α β} := @PFunctor.map α β Universal
+
+end Universal
+
+def mkFreshDelta (u : Level := levelZero) (v : Level := levelZero) : MetaM Expr :=
+  Meta.mkFreshExprMVar (Universal.Prompt u v)
 
 protected def Observable.observe {α} (o : Observable) (u : Universal α) := u.2 fun _ => o
 
@@ -282,137 +320,45 @@ protected def Observable.pointer (scope : ScopeName) : CryptoM τ Observable := 
   Observable.new (← `(tactic|rfl)) scope
 
 open PrettyPrinter in
-protected def Observable.quantize (o : Observable) (p : PhaseAngle := .up) : CryptoM τ Observable :=
+protected def Observable.quantize (o : Observable) (p : PhaseAngle := .top) : CryptoM τ Observable :=
   Meta.withNewMCtxDepth do
     let json := encode (← o.renew)
-    Observable.rotate .left <$> Observable.rotate p <$> Observable.new (← `(tactic|exact ⟨$(← delab (mkStrLit json.compress))⟩))
+    let term ← delab <| mkStrLit json.compress
+    Observable.rotate p <$> Observable.new (← `(tactic|exact ⟨$term⟩))
+
+protected def Universal.observe (u : Universal (CryptoM τ Observable)) (f : Observable → CryptoM τ Observable) : Universal (CryptoM τ Observable) := by
+  refine Universal.map (fun m => ?_) u
+  refine bind m fun o => ?_
+  exact do (← f o).observe u
 
 open PrettyPrinter in
-protected def Universal.print {α : Type} [Encodable α] (ε : Universal (MetaM α)) : Universal (CryptoM τ Observable) := by
-  refine Universal.map (fun m => ?_) ε
+protected def Universal.print {α : Type} [Encodable α] (ma : Universal (MetaM α)) : Universal (CryptoM τ Observable) := by
+  refine Universal.map (fun m => ?_) ma
   refine bind m fun a => ?_
   have e : Expr := mkStrLit (encode a).compress
   refine bind (delab e) fun x => ?_
-  refine bind `(tactic|exact ⟨$x⟩) fun stx => ?_
-  refine bind (Observable.new stx) fun o => ?_
-  exact pure o
-
--- noncomputable def Universal.quantize? (α : Type) [Encodable α] (ε₀ : Universal Observable) : Universal (MetaM (Decrypt α)) := by
---   sorry
+  exact bind `(tactic|exact ⟨$x⟩) Observable.new
 
 instance : Functor Universal where
   map := Universal.map
 
-end Ethos
-
-def Ethos := MVarId → Server (Array Ethos.Observable)
-
-def EthosT {σ : Type u} (τ : Sodium σ) (m : {σ : Type u} → Sodium σ → Type → Type) (α : Type) := MVarId → ServerT τ m α
-
-def EthosM {σ : Type u} (τ : Sodium σ) (α : Type) := MVarId → Ethos.Universal (ServerM τ α)
-
-namespace Ethos
-
-export Aesop (ScopeName)
-
-variable {α β : Type} {σ : Type u} {τ : Sodium σ}
-
-open Lean.Server.ServerTask in
-protected def turn (ε : EthosM τ Observable) (scope : ScopeName := .global) : MVarId → Universal (CryptoM τ (ServerTask Observable)) := by
-  intro δ
-  refine Universal.map (fun k => ?_) (ε δ)
-  exact δ.withContext do
-    let o ← Observable.new (← `(tactic|aesop (add norm 0 unfold Ethos.Universal.prompt)
-                                             (add norm 1 unfold Ethos.Universal.map)
-                                             (add norm 2 unfold Ethos.Observable.encodable)
-                                             (add safe 3 apply Ethos.Observable.renew)
-                                             (add unsafe forward 34% Ethos.Observable.observe)))
-    let keys ← mkStaleKeys
-    match k {session := ← newSession? keys.pkey (client := scope = .local)} with
-    | ⟨.ephemeral, k⟩ => return pure (← k ())
-    | ⟨.addressed, k⟩ => do
-      let o ← k (← encrypt o)
-      return pure o
-    | ⟨.anonymous, k⟩ => do
-      let some o ← encryptAnon? keys.pkey o | default
-      let o ← k o
-      return pure o
-    | ⟨.terminal, _⟩ => throwError m!"{(0 : Fin 1)}"
-    | _ => return pure o
-
-open Lean.Server.ServerTask in
-protected def magic : MVarId → Universal (MetaM (ServerTask Observable)) := by
-  intro δ
-  refine ⟨default, fun k => ?_⟩
-  refine δ.withContext do return pure (k ?_)
-  unfold Ethos.Universal.prompt
-  unfold Ethos.Observable.encodable
-  simp only [Encodable.encodek, Encodable.ofEquiv, Option.map_some, Option.some.injEq, true_and, forall_const]
-  intro _ o
-  rfl
-
-open Lean.Server.ServerTask in
-protected def main (u : {σ : Type u} → (τ : Sodium σ) → EthosM τ Observable) : MVarId → MetaM (ServerTask Observable) := by
-  intro δ
-  refine δ.withContext <| CryptoM.toMetaM fun (τ : Sodium _) => ?_
-  obtain ⟨_, k⟩ := Ethos.magic δ
-  refine bind `(tactic|aesop (add norm 0 unfold Ethos.Universal.prompt)
-                             (add norm 1 unfold Ethos.Universal.map)
-                             (add safe 2 unfold Ethos.Observable.encodable)
-                             (add unsafe 100% forward Ethos.Observable.observe))
-    fun stx => ?_
-  refine bind (Observable.new stx) fun o => ?_
-  refine bind (k (fun _ => o)) fun o? => ?_
-  have pull := o?.mapCostly fun o => o.observe <| Ethos.turn (scope := if o.phase = .safe then .local else .global) (u τ) δ
-  exact pull.get
-
 /--
-The expression representing the proposition that all semantics can be encoded into Json.
+A `Witness` is a universe-polymorphic computation over proof-carrying objects.
+
+See `Sodium.Typography.Emulator` for example usage.
 -/
-protected def Prompt : Expr := mkConst ``Ethos.Universal.prompt [levelZero]
+@[reducible]
+def Witness.{«x», «y»} {σ : Type «x»} (τ : Sodium σ) := Universal.{«y»} (CryptoM τ Observable)
 
-def mkFreshDelta (name : Name := .anonymous) : MetaM Expr := Meta.mkFreshExprMVar (type? := Ethos.Prompt) .natural name
+namespace Witness
 
-variable {σ : Type u}
+variable {τ : Sodium σ}
 
-#eval show MetaM Json from do
-  let ε : {σ : Type} → (τ : Sodium.{0} σ) → EthosM τ Observable := fun _ _ => by
-    refine ⟨default, fun k _ => ServerT.ephemeral ?_⟩
-    let o := k (by aesop (add norm unfold Ethos.Universal.prompt))
-    exact o.quantize
+def mk (o : Observable) : Witness τ := ⟨default, fun _ => pure o⟩
 
-  let δ ← mkFreshDelta
-  let o? ← Ethos.main (fun _ δ => ε _ δ) δ.mvarId!
-  let o := o?.get
+def emit (io : IO.FS.Stream) (o : Observable) (method : String := "$/witness") (α : Witness τ) : CryptoM τ PUnit := do
+  (← o.observe α).emit io method
 
-  return json% {
-    "Δ" : $(toString (repr o)),
-    "Δt" : $(toString (repr o.toProbability.quantize)),
-    "ΔP" : $(o.toPercent.toFloat),
-    phase : $(toString o.phase),
-    format : $(toString o.pretty)
-  }
-
-#eval show MetaM Json from do
-  let ε : {σ : Type} → (τ : Sodium.{0} σ) → EthosM τ Observable := fun _ δ => by
-    refine ⟨default, fun k _ => ServerT.addressed ?_⟩
-    exact fun msg => δ.withContext do
-      let mo := k (by aesop (add norm unfold Ethos.Universal.prompt))
-      println! f!"I can see a tactic worth {mo.toPercent}: {mo}"
-      let .accepted o ← decrypt? (α := Observable) msg | default
-      if mo.phase = o.phase then o.quantize
-      else default
-
-  let δ ← mkFreshDelta
-  let o? ← Ethos.main (fun _ δ => ε _ δ) δ.mvarId!
-  let o := o?.get
-
-  return json% {
-    "Δ" : $(toString (repr o)),
-    "Δt" : $(toString (repr o.toProbability.quantize)),
-    "ΔP" : $(o.toProbability.toFloat),
-    phase : $(toString o.phase),
-    format : $(toString o.pretty)
-  }
+end Witness
 
 end Ethos
