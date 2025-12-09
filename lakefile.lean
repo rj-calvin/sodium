@@ -102,10 +102,7 @@ lean_lib «Sodium» where
   weakLeancArgs := #[
     "-I.lake/build/libsodium-build/install/include"
   ]
-  moreLinkArgs := #[
-    "-L.lake/build/lib",
-    "-lsodium"
-  ]
+  moreLinkArgs := #["-L.lake/build/lib", "-lsodium"]
 
 lean_exe «shell» where
   root := `Shell

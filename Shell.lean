@@ -1,13 +1,16 @@
-import Sodium.Typography.Latin
+import Sodium.Shell.Terminal
+import Sodium.Typo.Latin
 
-open Lean Meta Server Sodium Crypto Typography
+open Lean Server Sodium Crypto Ethos Typo
+
+declare_aesop_rule_sets [«temporal»] (default := false)
 
 def shell : List String := [
-  "import «Sodium».«Typography».«Frontend».«Qwerty»",
-  "open Lean Elab Command Tactic Typography",
+  "import «Sodium»",
+  "open Lean Ethos Typo",
   "declare_syntax_cat shell",
-  "@[reducible] def Shell := MetaM (ULift String)",
-  "example : (default : Ethos.Universal.A) := by aesop (rule_sets := [«standard», «cautious»])",
+  "example : Universal Universal.Destruct.{0} := by",
+  "  aesop (rule_sets := [«standard», «cautious», «external», «temporal»])",
 ]
 
 def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (delay : Nat := 31) : IO Unit := do
@@ -28,7 +31,6 @@ def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (dela
     : DocumentMeta
   }
 
-  IO.FS.writeFile shell doc.text.source
   let _ ← FileWorker.setupFile doc #[] default
 
   let config := {
@@ -65,17 +67,19 @@ def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (dela
     let hLog := (← read).hLog
 
     let bridge : Syntax.Tactic → MetaM _
-    | `(tactic|aesop $config*) => Emulator.bridge (σ := by simp only [Encodable.encodek, implies_true, and_self]) hLog
+    | `(tactic|aesop $config*) => Emulator.bridge (σ := Universal.Destruct.{0}) hLog config
     | _ => Elab.throwUnsupportedSyntax
 
     repeat match ← (← get).doc.cmdSnaps.getFinishedPrefixWithConsistentLatency latency with
-    | (snap :: _, _, true) => discard <| EIO.toBaseIO <| snap.runTermElabM (← get).doc.meta do bridge <| ← `(tactic|aesop (rule_sets := [«standard»]))
+    | (snap :: _, _, false) =>
+      discard <| EIO.toBaseIO <| snap.runTermElabM (← get).doc.meta do
+        bridge <| ← `(tactic|aesop (rule_sets := [«external»]))
     | (_, some e, _) => throw e
-    | ([], _, _) | (_, _, false) => continue
+    | (_, _, _) => continue
 
 def main (args : List String) : IO UInt32 := do
+  /- enableRawMode -/
   let uri := (← IO.appDir) / ".." / ".."
-  run uri <| if args.length > 0 ∧ args.tail.length > 0 then args.tail else shell
+  try run uri <| if args.length > 0 ∧ args.tail.length > 0 then args.tail else shell
+  finally disableRawMode
   return 0
-
-example : (default : Ethos.Universal.A) := by aesop (rule_sets := [«standard»])

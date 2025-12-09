@@ -8,6 +8,8 @@ universe u
 
 open Lean Sodium Crypto Meta
 
+declare_aesop_rule_sets [«standard», «cautious»] (default := false)
+
 namespace Aesop
 
 export Ethos (Weight)
@@ -145,9 +147,6 @@ export Aesop (
   BuilderName
 )
 
-declare_aesop_rule_sets [«standard»] (default := false)
-declare_aesop_rule_sets [«cautious»] (default := false)
-
 /--
 A proof-carrying object.
 -/
@@ -192,12 +191,11 @@ def phaseSpec (o : Observable) : PhaseSpec :=
   | .safe => .safe {penalty := o.toWeight.quantize .local, safety := .safe}
   | .norm => .norm {penalty := o.toWeight.quantize .global}
 
-def toRule (o : Observable) (scope : ScopeName := .local) (name : Name := `«standard») : LocalRuleSetMember :=
+def toRule (o : Observable) (name : Name) (scope : ScopeName) : LocalRuleSetMember :=
   .global <| .base <| o.phaseSpec.toRule name .tactic scope (.tacticStx o.carrier) .unindexed none
 
-def toRuleSet (os : Array Observable) (scope : ScopeName := .global) (name : Name := `«standard») : LocalRuleSet :=
-  os.mapIdx (·, ·) |>.foldl (init := ∅) fun set ⟨i, o⟩ =>
-    set.add <| o.toRule scope (.num name i)
+def toRuleSet (os : Array Observable) (name : Name) (scope : ScopeName) : LocalRuleSet :=
+  os.mapIdx (·, ·) |>.foldl (init := ∅) fun set ⟨i, o⟩ => set.add <| o.toRule (.num name i) scope
 
 abbrev den (o : Observable) := o.toWeight.den
 abbrev num (o : Observable) := o.toWeight.num
@@ -282,9 +280,6 @@ def Universal : PFunctor where
 
 namespace Universal
 
-instance : Coe Universal.A Prop := ⟨id⟩
-instance : Coe Prop Universal.A := ⟨id⟩
-
 /--
 The default proposition that JSON encodings of `Observable` round-trip correctly.
 -/
@@ -298,12 +293,38 @@ protected instance prompt : Inhabited Universal.A where
 instance {α} [Inhabited α] : Inhabited (Universal α) where
   default := ⟨default, fun _ => default⟩
 
+@[simp] theorem universal_idx : Universal.A = Prop := rfl
+
+@[simp] theorem universal_default_idx : Universal.B default = (@default Universal.A Universal.prompt → Observable) := by
+  unfold Universal
+  simp only [Encodable.encodek, implies_true, and_self]
+
 /--
 The level-matrix representing all inhabitation clauses of the `Universal` functor.
 -/
 @[reducible]
 protected def Prompt (u : Level := levelZero) (v : Level := levelOne) : Expr :=
   mkApp (mkConst ``«Inhabited») (mkApp (mkConst ``«PFunctor».«A» [u, v]) (mkConst ``«Universal» [u]))
+
+/--
+`Forward` represents the fixpoint of `Universal.prompt`. It can be thought of as a postponed
+inhabitation clause for `Verified Syntax.Tactic`.
+
+Usually, this proposition emerges spontaneously when using `aesop`, thus making it a convenient
+argument for declaring `forward` rules.
+-/
+@[reducible]
+protected def Forward : Prop :=
+  ∀ (_ : Verified Syntax.Tactic) (o : Observable.{u}), (Observable.Shape.push o).pull = o
+
+/--
+`Destruct` is the terminal type of `Universal.prompt`.
+
+The choice of proposition is motivated by the form of `Universal.Forward`, making it easy to
+terminate proof search through the use of an `apply` rule.
+-/
+@[reducible]
+protected def Destruct := PLift (∀ (o : Observable.{u}), (Observable.Shape.push o).pull = o)
 
 protected def map {α β} := @PFunctor.map α β Universal
 
@@ -326,9 +347,8 @@ protected def Observable.quantize (o : Observable) (p : PhaseAngle := .top) : Cr
     let term ← delab <| mkStrLit json.compress
     Observable.rotate p <$> Observable.new (← `(tactic|exact ⟨$term⟩))
 
-protected def Universal.observe (u : Universal (CryptoM τ Observable)) (f : Observable → CryptoM τ Observable) : Universal (CryptoM τ Observable) := by
-  refine Universal.map (fun m => ?_) u
-  refine bind m fun o => ?_
+protected def Universal.bind (u : Universal (CryptoM τ Observable)) (f : Observable → CryptoM τ Observable) : Universal (CryptoM τ Observable) := by
+  refine Universal.map (bind · fun o => ?_) u
   exact do (← f o).observe u
 
 open PrettyPrinter in
@@ -345,7 +365,7 @@ instance : Functor Universal where
 /--
 A `Witness` is a universe-polymorphic computation over proof-carrying objects.
 
-See `Sodium.Typography.Emulator` for example usage.
+See `Sodium.Typo.Emulator` for example usage.
 -/
 @[reducible]
 def Witness.{«x», «y»} {σ : Type «x»} (τ : Sodium σ) := Universal.{«y»} (CryptoM τ Observable)

@@ -2,10 +2,12 @@ import Sodium.Ethos.Basic
 
 open Lean Elab Tactic Sodium Crypto Ethos
 
-attribute [aesop norm 1 unfold (rule_sets := [«standard»])]
+declare_aesop_rule_sets [«external»] (default := false)
+
+attribute [aesop norm 0 unfold (rule_sets := [«standard»])]
   Universal.prompt
 
-attribute [aesop norm 2 apply (rule_sets := [«standard»])]
+attribute [aesop norm 1 unfold (rule_sets := [«standard»])]
   Universal.map
 
 attribute [aesop [unsafe 29% constructors (rule_sets := [«standard»]), safe cases (rule_sets := [«cautious»])]]
@@ -14,13 +16,13 @@ attribute [aesop [unsafe 29% constructors (rule_sets := [«standard»]), safe ca
 attribute [aesop safe 0 cases (rule_sets := [«standard», «cautious»])]
   Decrypt
 
-attribute [aesop safe 1 apply (rule_sets := [«cautious»])]
-  Observable.observe
-
-attribute [aesop unsafe 31% unfold (rule_sets := [«cautious»])]
+attribute [aesop safe 1 unfold (rule_sets := [«cautious»])]
   Observable.encodable
 
-namespace Typography
+attribute [aesop unsafe 31% unfold (rule_sets := [«cautious»])]
+  Observable.observe
+
+namespace Typo
 
 variable {σ}
 
@@ -44,7 +46,7 @@ def quantize {τ : Sodium σ} (scope : ScopeName := .local) : Shape → CryptoM 
 | _ => Observable.pointer scope
 
 structure _root_.IO.RealWorld.Shape (τ : Sodium σ) where
-  shape : Typography.Shape
+  shape : Typo.Shape
   witness : Witness τ := ⟨default, fun _ => shape.quantize⟩
 
 end Shape
@@ -69,7 +71,7 @@ def quantize {τ : Sodium σ} (scope : ScopeName := .global) : Point → CryptoM
 | _ => Observable.pointer (if scope = .local then .global else .local)
 
 structure _root_.IO.RealWorld.Point (τ : Sodium σ) where
-  point : Typography.Point
+  point : Typo.Point
   witness : Witness τ := ⟨default, fun _ => point.quantize⟩
 
 end Point
@@ -78,15 +80,15 @@ end Point
 An `Emulator` simulates the operations of a `Typewriter`.
 
 Here "simulates" means that it is defined using only the default syntax
-categories (.e.g. the ones used to elaborate this file). This is relevant since
-a `Typewriter` can only be meaningfully defined relative to the standard of the
-user's keyboard. As a consequence, we're compelled to declare `Emulator`
+categories (.e.g. the ones used to elaborate this declaration). This is relevant
+since a `Typewriter` can only be meaningfully defined relative to the standard
+of the user's keyboard. As a consequence, we're compelled to declare `Emulator`
 _before_ we define the thing it exists to emulate.
 
 In layman's terms, `Emulator` lets you build tools with typewriters without
 needing to import the file that declares the letter `x` as a keyword.
 
-See `Sodium.Typography.Frontend.Qwerty` for an example `Typewriter`.
+See `Sodium.Typo.Frontend.Qwerty` for an example `Typewriter`.
 -/
 @[reducible]
 def Emulator (σ : Type) : PFunctor where
@@ -118,8 +120,21 @@ notation "commit% " τ ", " α ", " β =>
 
 end quotPrecheckFalse
 
-@[aesop norm]
+@[aesop norm unfold (rule_sets := [«standard»])]
 protected def map {α β} := @PFunctor.map α β (Emulator σ)
+
+instance : Functor (Emulator σ) where
+  map := Emulator.map
+
+variable {τ : Sodium σ}
+
+@[simp] theorem emulator_idx :
+  (Emulator.{0,0} σ).A = Σ' τ : Sodium σ, IO.RealWorld.Shape τ × IO.RealWorld.Point τ := rfl
+
+@[simp] theorem emulator_stop_idx : (Emulator σ).B (stop% τ) = PUnit := rfl
+@[simp] theorem emulator_start_idx : ∀ β, (Emulator σ).B (start% τ, β) = TermElabM Shape := by intro; rfl
+@[simp] theorem emulator_stage_idx : ∀ α, (Emulator σ).B (stage% τ, α) = Tactic := by intro; rfl
+@[simp] theorem emulator_commit_idx : ∀ α β, (Emulator σ).B (commit% τ, α, β) = TermElabM Shape := by intros; rfl
 
 /--
 Produce a stream of bytes on `log` using magic.
@@ -130,12 +145,12 @@ def bridge
   (scope : ScopeName := .global)
   (u : Level := levelZero)
   (v : Level := levelOne)
-  : MetaM (Emulator Syntax.Tactic (TermElabM Shape)) :=
-do CryptoM.toMetaM fun τ : Sodium.{0} _ => do
-  let γ ← `(tactic|aesop (rule_sets := [«standard»]) $config*)
+  : MetaM (Emulator σ (TermElabM Shape)) :=
+do CryptoM.toMetaM (ctx := Context.ofString "cautious") fun τ : Sodium _ => do
+  let γ ← `(tactic|aesop (rule_sets := [«standard», «cautious»]) $config*)
   let o ← Observable.new γ scope
   let log ← (if scope = .global then IO.setStdout else IO.setStderr) log
-  let ε : (Emulator.{0,0} _).A := start% τ, γ
+  let ε : (Emulator.{0,0} σ).A := start% τ, γ
   let δ : (Emulator.{0,0} _).B ε → Witness τ := fun α => by
     refine ⟨default, fun β => ?_⟩
     unfold Emulator at α
@@ -160,4 +175,4 @@ do CryptoM.toMetaM fun τ : Sodium.{0} _ => do
 
 end Emulator
 
-end Typography
+end Typo

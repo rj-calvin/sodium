@@ -72,8 +72,8 @@ register_option crypto.entropyBytes : Nat := {
 }
 
 open FFI KeyDeriv in
-def toMetaM (x : (τ : Sodium Syntax.Tactic) → CryptoM τ α) (ctx : Context Blake2b := default) : MetaM α := do
-  let τ ← init Syntax.Tactic
+def toMetaM (x : (τ : Sodium σ) → CryptoM τ α) (ctx : Context Blake2b := default) : MetaM α := do
+  let τ ← init σ
   let entropy ← EntropyVector.new (τ := τ) (crypto.entropyBytes.get (← getOptions)).toUSize
   let mkey ← keygen (τ := τ)
   let mtx ← Mutex.new {entropy}

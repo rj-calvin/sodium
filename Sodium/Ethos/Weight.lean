@@ -111,10 +111,10 @@ instance : Encodable Weight :=
     push_pull_eq := by simp
   }
 
-protected def spin (x : Weight) (scope : ScopeName := .local) : Weight :=
+protected def spin (x : Weight) (scope : ScopeName) : Weight :=
   Shape.pull <| if h : scope = .global ∧ x.num ≠ 0 then Shape.part x h.2 else Shape.push x
 
-protected def quantize (x : Weight) (scope : ScopeName := .global) : Nat :=
+protected def quantize (x : Weight) (scope : ScopeName) : Nat :=
   let x : Weight := x.spin scope
   x.den - x.num
 

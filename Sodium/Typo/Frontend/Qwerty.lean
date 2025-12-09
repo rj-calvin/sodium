@@ -1,8 +1,8 @@
-import Sodium.Typography.Emulator
+import Sodium.Typo.Emulator
 
 open Lean Parser Elab Meta Term Tactic PrettyPrinter
 
-namespace Typography
+namespace Typo
 
 variable {σ}
 
@@ -366,8 +366,7 @@ notation "turn% " γ => some (Sum.inl («α» := «Grapheme») («β» := «Term
 @[simp] theorem spin_rfl : spin% = some (Sum.inr Carriage) := by rfl
 @[simp] theorem turn_rfl : ∀ γ, (turn% γ) = some (Sum.inl γ) := by intro; rfl
 
-@[coe]
-def toPoint : Key → Point
+@[coe] def toPoint : Key → Point
 | turn% γ => point% ⟨γ.raw⟩
 | spin% => bot%
 | _ => none
@@ -786,13 +785,13 @@ def Shape.push : Key → Shape
 | turn% ⟨.node _ ``pipe _⟩ => shape% '|'
 | turn% ⟨.node _ ``rbrace _⟩ => shape% '}'
 | turn% ⟨.node _ ``tilde _⟩ => shape% '~'
-| spin% => some none
-| _ => none
+| spin% => top%
+| _ => default
 
 open Sodium Crypto Ethos
 
 structure _root_.IO.RealWorld.Key (τ : Sodium σ) where
-  key : Typography.Key
+  key : Typo.Key
   witness : Witness τ := ⟨default, fun _ => key.quantize⟩
 
 /--
@@ -808,10 +807,7 @@ namespace Typewriter
 
 variable {τ : Sodium σ}
 
-instance : Coe (IO.RealWorld.Key τ) (Typewriter τ).A := ⟨id⟩
-instance : Coe (Typewriter τ).A (IO.RealWorld.Key τ) := ⟨id⟩
-
-@[simp] theorem typewriter_key_idx : (Typewriter τ).A = IO.RealWorld.Key τ := by rfl
+@[simp] theorem typewriter_idx : (Typewriter τ).A = IO.RealWorld.Key τ := by rfl
 @[simp] theorem typewriter_norm_idx : ∀ α, (Typewriter τ).B ⟨none, α⟩ = PEmpty := by intro; rfl
 @[simp] theorem typewriter_spin_idx : ∀ α (γ : Terminal), (Typewriter τ).B ⟨some (.inr γ), α⟩ = Tactic := by intros; rfl
 @[simp] theorem typewriter_turn_idx : ∀ α (γ : Grapheme), (Typewriter τ).B ⟨turn% γ, α⟩ = TermElabM Shape := by intros; rfl
@@ -834,12 +830,12 @@ def enter (γ : String) (on : String := ";") (action : IO Unit := IO.eprint "\n"
 /--
 Given a `TermElabM Shape`, attempt to resolve ⊢ `ULift Char`.
 -/
-@[aesop unsafe 97% destruct (rule_sets := [«standard»])]
+@[aesop unsafe 97% apply (rule_sets := [«external»])]
 def norm (γ : TermElabM Shape) : TacticM PUnit := do
   match Shape.pull (← runTermElab γ) with
   | turn% γ => evalTactic <| ← `(tactic|leader% $γ)
   | spin% => evalTactic <| ← `(tactic|done%)
-  | _ => throwUnsupportedSyntax
+  | _ => throwAbortTactic
 
 def write (γ : IO.RealWorld.Key τ) (δ : Tactic := enter default) : TacticM ((Typewriter τ).B γ) :=
   match γ with
@@ -915,20 +911,6 @@ do match writer with
     return γ
 | ⟨⟨none, α⟩, _⟩ => pure α
 
-protected def auto
-  (ictx : InputContext)
-  (writer : Typewriter τ Tactic)
-  (δ : String → Tactic := enter)
-  (pre : String := default)
-  (post : String := default)
-  : TacticM (Witness τ) :=
-do
-  let ref ← IO.mkRef ictx.input.data
-  Typewriter.observe writer δ (pre := pre) (post := post) do
-    match ← ref.get with
-    | [] => pure none
-    | ε :: δ => ref.set δ; return some { key := Key.mk ε }
-
 protected def print
   (writer : Typewriter τ Tactic)
   (δ : String → Tactic := enter)
@@ -943,20 +925,37 @@ do
   let γ ← Tactic.elabTermEnsuringType (← delab <| mkApp (mkConst ``ULift.down) γ) (mkConst ``String)
   unsafe evalExpr String (mkConst ``String) γ
 
-@[aesop unsafe 97% forward (rule_sets := [«cautious»])]
+protected def auto
+  (ictx : InputContext)
+  (writer : Typewriter τ Tactic)
+  (δ : String → Tactic := enter)
+  (pre : String := default)
+  (post : String := default)
+  : TacticM (Witness τ) :=
+do
+  let ref ← IO.mkRef ictx.input.data
+  Typewriter.observe writer δ (pre := pre) (post := post) do
+    match ← ref.get with
+    | [] => pure none
+    | ε :: δ => ref.set δ; return some { key := Key.mk ε }
+
+@[aesop unsafe 97% forward (rule_sets := [«external»])]
 protected def forward (ictx : InputContext) (writer : Typewriter τ Tactic) : Tactic :=
   fun _ => discard <| Typewriter.auto ictx writer
 
+@[reducible]
 def _root_.IO.RealWorld.Typist (τ : Sodium σ) := Emulator σ ⊚ Typewriter τ
+
+@[reducible]
 def _root_.IO.RealWorld.Automaton (τ : Sodium σ) := Typewriter τ ⊚ Emulator σ
 
 end Typewriter
 
 export IO.RealWorld (Typist Automaton)
 
-end Typography
+end Typo
 
-export Typography (
+export Typo (
   Typewriter
   Typewriter.map
   Typewriter.observe
