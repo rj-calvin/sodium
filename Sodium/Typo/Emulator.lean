@@ -19,7 +19,7 @@ attribute [aesop safe 0 cases (rule_sets := [«standard», «cautious»])]
 attribute [aesop safe 1 unfold (rule_sets := [«cautious»])]
   Observable.encodable
 
-attribute [aesop unsafe 31% unfold (rule_sets := [«cautious»])]
+attribute [aesop unsafe 31% apply (rule_sets := [«cautious»])]
   Observable.observe
 
 namespace Typo

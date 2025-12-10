@@ -940,8 +940,33 @@ do
     | ε :: δ => ref.set δ; return some { key := Key.mk ε }
 
 @[aesop unsafe 97% forward (rule_sets := [«external»])]
-protected def forward (ictx : InputContext) (writer : Typewriter τ Tactic) : Tactic :=
-  fun _ => discard <| Typewriter.auto ictx writer
+protected def construct (_ : Universal.Forward) : Typewriter τ Tactic := by
+  refine ⟨default, fun α stx => ?_⟩
+  have : FromJson Observable := {
+    fromJson? json :=
+      match decode? (α := Observable) json with
+      | some α => pure α
+      | _ => throw "invalid witness"
+  }
+  exact do
+    match ← (← IO.getStdout).readLspNotificationAs "$/witness" Observable with
+    | {method, param} =>
+      try α stx
+      finally evalTactic param.carrier
+
+@[aesop unsafe 97% forward (rule_sets := [«external»])]
+protected def forward (α : Typewriter τ Tactic) : TacticM Unit := do
+  let type ← mkAppOptM ``CryptoM #[none, mkConst ``Observable [levelOne]]
+  let type := mkApp (mkConst ``TacticM) <| mkApp (mkConst ``Universal [levelZero]) type
+  let δ ← Meta.mkFreshExprMVar type
+  let _ ← Aesop.search δ.mvarId!
+  let δ ← instantiateMVars δ
+  let γ ← unsafe evalExpr (TacticM (Witness τ)) type δ
+  γ.bind fun _ => discard <| Typewriter.observe (pre := "exact ⟨") (post := "⟩") α
+
+@[aesop unsafe 97% apply (rule_sets := [«external»])]
+protected def destruct (ictx : InputContext) (writer : Typewriter τ Tactic) : TacticM (Witness τ) :=
+  Typewriter.auto (pre := "exact ⟨") (post := "⟩") ictx writer
 
 @[reducible]
 def _root_.IO.RealWorld.Typist (τ : Sodium σ) := Emulator σ ⊚ Typewriter τ
@@ -961,7 +986,6 @@ export Typo (
   Typewriter.observe
   Typewriter.auto
   Typewriter.print
-  Typewriter.forward
   Typist
   Automaton
 )
