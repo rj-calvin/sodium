@@ -6,7 +6,8 @@ universe «u»
 
 variable {τ : Sodium Universal.Destruct.{«u»}}
 
-attribute [aesop norm 0] Universal.universal_idx Universal.universal_default_idx
+attribute [aesop norm 0]
+  Universal.universal_idx Universal.universal_default_idx
 
 attribute [aesop safe cases (rule_sets := [«external»])]
   WType
@@ -14,7 +15,7 @@ attribute [aesop safe cases (rule_sets := [«external»])]
 attribute [aesop safe forward (rule_sets := [«external»])]
   PFunctor.W.head
 
-attribute [aesop norm 2 unfold (rule_sets := [«external»])]
+attribute [aesop norm 9973 unfold (rule_sets := [«external»])]
   PFunctor.W.children
 
 attribute [aesop safe apply (rule_sets := [«external»])]
@@ -41,10 +42,10 @@ def framerule : RuleTac := RuleTac.ofTacticSyntax fun δ => do
   match ← δ.goal.getType with
   | .forallE _ (.app (.const ``Sodium [levelZero]) (.const ``Universal.Destruct [levelOne])) body _ =>
     unless ← Meta.isLevelDefEq levelZero levelOne do Meta.throwIsDefEqStuck
-    CryptoM.toMetaM fun τ : Sodium Universal.Destruct.{0} => do
+    CryptoM.toMetaM (ctx := .ofString "external") fun τ : Sodium Universal.Destruct.{0} => do
       let writer : Typewriter.{0,0} τ Tactic := ⟨default, fun next stx => try evalExact stx; catch _ => next stx⟩
       let (witness, _) ← runTacticMAsMetaM (Typewriter.print writer) δ.mvars.toArray.toList
-      match Parser.runParserCategory (← getEnv) `tactic witness "«standard»" with
+      match Parser.runParserCategory (← getEnv) `tactic witness "external" with
       | .ok stx => return ⟨← `(tactic|intro _; $(⟨stx⟩))⟩
       | .error err => throwErrorAt (← delab body) err
   | _ => throwPostpone

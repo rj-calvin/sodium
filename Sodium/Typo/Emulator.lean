@@ -13,7 +13,7 @@ attribute [aesop [unsafe 29% constructors (rule_sets := [«standard»]), safe ca
 attribute [aesop safe 0 cases (rule_sets := [«standard», «cautious»])]
   Decrypt
 
-attribute [aesop safe 1 unfold (rule_sets := [«cautious»])]
+attribute [aesop norm unfold (rule_sets := [«cautious»])]
   Observable.encodable
 
 attribute [aesop unsafe 31% apply (rule_sets := [«cautious»]) (pattern := CryptoM _ Observable)]
@@ -154,7 +154,7 @@ def bridge
   (u : Level := levelZero)
   (v : Level := levelOne)
   : MetaM (Emulator σ (TermElabM Shape)) :=
-do CryptoM.toMetaM (ctx := Context.ofString "cautious") fun τ : Sodium _ => do
+do CryptoM.toMetaM (ctx := .ofString "cautious") fun τ : Sodium _ => do
   let γ ← `(tactic|aesop (rule_sets := [«standard», «cautious»]) $config*)
   let o ← Observable.new γ scope
   let log ← (if scope = .global then IO.setStdout else IO.setStderr) log
@@ -170,7 +170,8 @@ do CryptoM.toMetaM (ctx := Context.ofString "cautious") fun τ : Sodium _ => do
       let (x, _) ← Aesop.runTacticMAsMetaM α x
       return β (by aesop (add norm unfold Universal.prompt))
     catch _ => o.renew scope
-  (δ (pure (default : Shape))).emit log o
+  let δ := δ <| pure (default : Shape)
+  δ.emit log o
   return by
     refine Emulator.map o.observe ⟨ε, fun δ => ?_⟩
     refine ⟨default, fun _ => ?_⟩

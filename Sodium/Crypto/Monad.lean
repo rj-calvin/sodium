@@ -93,7 +93,7 @@ def mkFreshNonce [h : spec.HasValidShape `nonce] : CryptoM τ (Nonce spec) := do
     match st.nonces.find? spec.name with
     | some ⟨spec', stale⟩ =>
       if eq_shape : spec'.shapeOf `nonce = spec[`nonce] then
-        haveI : spec'.HasValidShape `nonce := by
+        have : spec'.HasValidShape `nonce := by
           rw [Spec.has_valid_shape_iff, eq_shape]
           exact h.shape_is_valid
         let shape := (stale.get this).succ
