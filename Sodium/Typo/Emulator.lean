@@ -7,9 +7,6 @@ declare_aesop_rule_sets [«external»] (default := false)
 attribute [aesop norm 0 unfold (rule_sets := [«standard»])]
   Universal.prompt
 
-attribute [aesop norm 1 unfold (rule_sets := [«standard»])]
-  Universal.map
-
 attribute [aesop [unsafe 29% constructors (rule_sets := [«standard»]), safe cases (rule_sets := [«cautious»])]]
   MessageKind
 
@@ -19,8 +16,18 @@ attribute [aesop safe 0 cases (rule_sets := [«standard», «cautious»])]
 attribute [aesop safe 1 unfold (rule_sets := [«cautious»])]
   Observable.encodable
 
-attribute [aesop unsafe 31% apply (rule_sets := [«cautious»])]
+attribute [aesop unsafe 31% apply (rule_sets := [«cautious»]) (pattern := CryptoM _ Observable)]
   Observable.observe
+
+def mkExactULiftChar (c : Char) : Syntax.Tactic :=
+  ⟨Syntax.node .none ``Lean.Parser.Tactic.exact #[
+    Syntax.atom .none "exact",
+    Syntax.node .none ``Lean.Parser.Term.anonymousCtor #[
+      Syntax.atom .none "⟨",
+      Syntax.mkCharLit c,
+      Syntax.atom .none "⟩"
+    ]
+  ]⟩
 
 namespace Typo
 
@@ -39,6 +46,7 @@ notation "shape% " γ => some (some («α» := «Char») γ)
 
 instance : Inhabited Shape := ⟨Escape⟩
 instance : Encodable Shape := by unfold Shape; infer_instance
+instance : DecidableEq Shape := by unfold Shape; infer_instance
 
 def quantize {τ : Sodium σ} (scope : ScopeName := .local) : Shape → CryptoM τ Observable
 | shape% γ => do Observable.new <| ← `(tactic|exact ⟨$(Syntax.mkCharLit γ)⟩)
@@ -120,7 +128,7 @@ notation "commit% " τ ", " α ", " β =>
 
 end quotPrecheckFalse
 
-@[aesop norm unfold (rule_sets := [«standard»])]
+@[reducible]
 protected def map {α β} := @PFunctor.map α β (Emulator σ)
 
 instance : Functor (Emulator σ) where
@@ -153,10 +161,8 @@ do CryptoM.toMetaM (ctx := Context.ofString "cautious") fun τ : Sodium _ => do
   let ε : (Emulator.{0,0} σ).A := start% τ, γ
   let δ : (Emulator.{0,0} _).B ε → Witness τ := fun α => by
     refine ⟨default, fun β => ?_⟩
-    unfold Emulator at α
-    unfold Universal at β
     subst ε
-    simp only at α β
+    simp only at α
     exact try
       let ζ ← mkFreshDelta u v
       let ⟨x, _⟩ ← runTactic ζ.mvarId! γ
@@ -168,11 +174,23 @@ do CryptoM.toMetaM (ctx := Context.ofString "cautious") fun τ : Sodium _ => do
   return by
     refine Emulator.map o.observe ⟨ε, fun δ => ?_⟩
     refine ⟨default, fun _ => ?_⟩
-    unfold Emulator at δ
     subst ε
     simp only at δ
     exact δ
 
 end Emulator
+
+@[reducible]
+def Destructor := PFunctor.W <| Emulator.{0,1} Universal.Destruct.{0}
+
+namespace Destructor
+
+abbrev mk := @PFunctor.W.mk (Emulator.{0,1} Universal.Destruct.{0})
+abbrev next := @PFunctor.W.next (Emulator.{0,1} Universal.Destruct.{0})
+abbrev head := @PFunctor.W.head (Emulator.{0,1} Universal.Destruct.{0})
+abbrev children := @PFunctor.W.children (Emulator.{0,1} Universal.Destruct.{0})
+abbrev cases := @PFunctor.W.cases (Emulator.{0,1} Universal.Destruct.{0})
+
+end Destructor
 
 end Typo

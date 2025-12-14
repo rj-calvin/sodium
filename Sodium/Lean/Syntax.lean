@@ -17,27 +17,27 @@ def Shape.arity : Shape → Nat
   | str% _ => 1
   | num% _ => 1
 
-local instance : ∀ s, NeZero (Shape.arity (str% s)) := fun _ => ⟨Nat.one_ne_zero⟩
-local instance : ∀ n, NeZero (Shape.arity (num% n)) := fun _ => ⟨Nat.one_ne_zero⟩
+instance : ∀ s, NeZero (Shape.arity (str% s)) := fun _ => ⟨Nat.one_ne_zero⟩
+instance : ∀ n, NeZero (Shape.arity (num% n)) := fun _ => ⟨Nat.one_ne_zero⟩
 
-private def f : Name → WType fun i : Shape => Fin i.arity
+def Shape.push : Name → WType fun i : Shape => Fin i.arity
   | .anonymous => ⟨anonymous%, Fin.elim0⟩
-  | .str k s => ⟨str% s, fun _ => f k⟩
-  | .num k n => ⟨num% n, fun _ => f k⟩
+  | .str k s => ⟨str% s, fun _ => push k⟩
+  | .num k n => ⟨num% n, fun _ => push k⟩
 
-private def finv : WType (fun i : Shape => Fin i.arity) → Name
+def Shape.pull : WType (fun i : Shape => Fin i.arity) → Name
   | ⟨anonymous%, _⟩ => .anonymous
-  | ⟨str% s, fn⟩ => .str (finv (fn 0)) s
-  | ⟨num% n, fn⟩ => .num (finv (fn 0)) n
+  | ⟨str% s, fn⟩ => .str (pull (fn 0)) s
+  | ⟨num% n, fn⟩ => .num (pull (fn 0)) n
 
 instance encodable.equiv : Encodable.Equiv Name (WType (fun i : Shape => Fin i.arity)) where
-  push := f
-  pull := finv
+  push := Shape.push
+  pull := Shape.pull
   push_pull_eq n := by
     induction n with
-    | anonymous => simp only [f, finv]
-    | str k s ih => simp only [f, finv, ih]
-    | num k n ih => simp only [f, finv, ih]
+    | anonymous => simp only [Shape.push, Shape.pull]
+    | str k s ih => simp only [Shape.push, Shape.pull, ih]
+    | num k n ih => simp only [Shape.push, Shape.pull, ih]
 
 instance encodable : Encodable Name :=
   have : Encodable Shape := by unfold Shape; infer_instance
@@ -50,11 +50,12 @@ instance SyntaxNodeKind.encodable : Encodable SyntaxNodeKind :=
 
 namespace SourceInfo
 
+def Shape :=
+  Unit
+  ⊕ Substring × String.Pos × Substring × String.Pos
+  ⊕ String.Pos × String.Pos × Bool
+
 instance encodable : Encodable SourceInfo :=
-  let Shape :=
-    Unit
-    ⊕ Substring × String.Pos × Substring × String.Pos
-    ⊕ String.Pos × String.Pos × Bool
   have : Encodable Shape := by unfold Shape; infer_instance
   have : Encodable.Equiv SourceInfo Shape := {
     push
@@ -72,8 +73,9 @@ end SourceInfo
 
 namespace Syntax.Preresolved
 
+def Shape := Name ⊕ Name × List String
+
 instance encodable : Encodable Syntax.Preresolved :=
-  let Shape := Name ⊕ Name × List String
   have : Encodable Shape := by unfold Shape; infer_instance
   have : Encodable.Equiv Syntax.Preresolved Shape := {
     push
@@ -124,7 +126,7 @@ def Shape.pull : WType (fun i : Shape => Fin i.arity) → Syntax
   | ⟨ident% info, s, n, pre, _⟩ => .ident info s n pre
   | ⟨node% info, kind, k, fn⟩ => .node info kind <| (Array.ofFn (n := k) id).map fun i => Shape.pull (fn i)
 
-instance encodable_equiv : Encodable.Equiv Syntax (WType fun i : Shape => Fin i.arity) where
+instance encodable.equiv : Encodable.Equiv Syntax (WType fun i : Shape => Fin i.arity) where
   push := Shape.push
   pull := Shape.pull
   push_pull_eq stx := by
@@ -143,18 +145,18 @@ instance encodable_equiv : Encodable.Equiv Syntax (WType fun i : Shape => Fin i.
           congr
           ext i
           . simp only [Array.size_map, Array.size_ofFn]
-          . rename_i h₁ h₂
+          . rename_i h
             simp only [Array.getElem_map, Array.getElem_ofFn, id_eq]
-            have h_lt : sizeOf args[i] < n := by
+            have : sizeOf args[i] < n := by
               simp only [Syntax.node.sizeOf_spec] at hs
-              have : sizeOf args[i] < sizeOf args := Array.sizeOf_getElem _ i h₂
+              have : sizeOf args[i] < sizeOf args := Array.sizeOf_getElem _ i h
               omega
-            exact ih args[i] h_lt
+            exact ih args[i] this
     exact this (sizeOf stx + 1) stx (Nat.lt_succ_self _)
 
 instance encodable : Encodable Syntax :=
   have : Encodable Shape := by unfold Shape; infer_instance
-  Encodable.ofEquiv _ encodable_equiv
+  Encodable.ofEquiv _ encodable.equiv
 
 end Syntax
 
@@ -171,7 +173,7 @@ instance encodable {kind : SyntaxNodeKind} : Encodable (TSyntax kind) :=
       | some a => some ⟨a⟩
   Encodable.ofLeftInj f finv fun _ => by simp only [Json.mkObj_getObjVal?_eq_ok, Encodable.encodek, f, finv]
 
-def encodable_syntax (kind : SyntaxNodeKind) : TSyntax ``Lean.Parser.Tactic.tacticSeq :=
+def encodable.syntax (kind : SyntaxNodeKind) : TSyntax ``Lean.Parser.Tactic.tacticSeq :=
   Unhygienic.run `(tacticSeq|
     let f (stx : TSyntax $(Syntax.mkNameLit kind.toString)) : Json := Json.mkObj [($(Syntax.mkStrLit kind.toString), encode stx.raw)];
     let finv (json : Json) : Option (TSyntax $(Syntax.mkNameLit kind.toString)) :=

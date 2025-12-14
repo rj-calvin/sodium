@@ -1,16 +1,17 @@
 import Sodium.Shell.Terminal
 import Sodium.Typo.Latin
 
-open Lean Server Sodium Crypto Ethos Typo
+open Lean Elab Tactic Server Sodium Crypto Ethos Typo
 
 declare_aesop_rule_sets [«temporal»] (default := false)
 
 def shell : List String := [
   "import «Sodium»",
-  "open Lean Ethos Typo",
+  "open Lean Elab Tactic Ethos Typo",
   "declare_syntax_cat shell",
-  "example : Universal Universal.Destruct.{0} := by",
-  "  aesop (rule_sets := [«standard», «cautious», «external», «temporal»])",
+  "attribute [aesop unsafe 97% (rule_sets := [«temporal»]) (pattern := ∀ _ : Sodium Universal.Destruct.{_}, _)] framerule",
+  "example : ∀ τ : Sodium Universal.Destruct.{0}, Destructor := by",
+  "  aesop? (rule_sets := [«standard», «cautious», «external», «temporal»]) (config := {warnOnNonterminal := false})",
 ]
 
 def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (delay : Nat := 31) : IO Unit := do
@@ -31,7 +32,7 @@ def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (dela
     : DocumentMeta
   }
 
-  let _ ← FileWorker.setupFile doc #[] default
+  let _ ← FileWorker.setupFile doc #[{module := `«Sodium», importAll := true}] default
 
   let config := {
     processId? := some (Int.ofNat tid.toNat)
@@ -73,13 +74,14 @@ def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (dela
     repeat match ← (← get).doc.cmdSnaps.getFinishedPrefixWithConsistentLatency latency with
     | (snap :: _, _, false) =>
       discard <| EIO.toBaseIO <| snap.runTermElabM (← get).doc.meta do
-        bridge <| ← `(tactic|aesop (rule_sets := [«external»]))
+        bridge <| ← `(tactic|aesop (rule_sets := [«external», «temporal»]))
+    | (_, _, true) => IO.FS.writeFile shell (← get).doc.meta.text.source
     | (_, some e, _) => throw e
     | (_, _, _) => continue
 
 def main (args : List String) : IO UInt32 := do
   /- enableRawMode -/
-  let uri := (← IO.appDir) / ".." / ".."
+  let uri := (← IO.appDir) / ".." / ".." / "shell"
   try run uri <| if args.length > 0 ∧ args.tail.length > 0 then args.tail else shell
   finally disableRawMode
   return 0

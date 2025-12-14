@@ -234,11 +234,11 @@ instance _root_.ByteArray.encodable : Encodable ByteArray where
 instance _root_.Option.encodable : Encodable (Option α) where
   encode
     | none => json% null
-    | some x => json% { some: $(encode x) }
+    | some x => json% { "@": $(encode x) }
   decode?
     | json% null => some none
     | json =>
-      match json.getObjVal? "some" with
+      match json.getObjVal? "@" with
       | .error _ => none
       | .ok json =>
         match decode? (α := α) json with
@@ -246,8 +246,8 @@ instance _root_.Option.encodable : Encodable (Option α) where
         | some a => some (some a)
   encodek o := by
     cases o with
+    | none => rfl
     | some a =>
-      simp
       split
       . contradiction
       . simp_all only [imp_false]
@@ -257,17 +257,16 @@ instance _root_.Option.encodable : Encodable (Option α) where
           simp [toJson] at heq
           subst heq
           simp only [encodek]
-    | none => rfl
 
 instance _root_.Sum.encodable [Encodable β] : Encodable (α ⊕ β) where
   encode
-    | .inl a => json% { inl: $(encode a) }
-    | .inr b => json% { inr: $(encode b) }
+    | .inl a => json% { "0": $(encode a) }
+    | .inr b => json% { "1": $(encode b) }
   decode? json :=
-    match json.getObjVal? "inl" with
+    match json.getObjVal? "0" with
     | .ok json => decode? (α := α) json |>.map .inl
     | .error _ =>
-      match json.getObjVal? "inr" with
+      match json.getObjVal? "1" with
       | .ok json => decode? (α := β) json |>.map .inr
       | .error _ => none
   encodek a := by

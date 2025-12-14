@@ -1,4 +1,3 @@
-import Aesop
 import Lean.Data.Lsp
 import Sodium.Ethos.Weight
 import Sodium.Server.Monad
@@ -293,9 +292,15 @@ protected instance prompt : Inhabited Universal.A where
 instance {α} [Inhabited α] : Inhabited (Universal α) where
   default := ⟨default, fun _ => default⟩
 
-@[simp] theorem universal_idx : Universal.A = Prop := rfl
+@[simp] theorem specific_idx : Universal.A.{0} = Prop := rfl
 
-@[simp] theorem universal_default_idx : Universal.B default = (@default Universal.A Universal.prompt → Observable) := by
+@[simp] theorem specific_default_idx : Universal.B default = (@default Universal.A.{0} Universal.prompt → Observable) := by
+  unfold Universal
+  simp only
+
+theorem universal_idx : Universal.A = Prop := rfl
+
+theorem universal_default_idx : Universal.B default = (@default Universal.A Universal.prompt → Observable) := by
   unfold Universal
   simp only [Encodable.encodek, implies_true, and_self]
 
@@ -304,7 +309,7 @@ The level-matrix representing all inhabitation clauses of the `Universal` functo
 -/
 @[reducible]
 protected def Prompt (u : Level := levelZero) (v : Level := levelOne) : Expr :=
-  mkApp (mkConst ``«Inhabited») (mkApp (mkConst ``«PFunctor».«A» [u, v]) (mkConst ``«Universal» [u]))
+  mkApp (mkConst ``Inhabited) (mkApp (mkConst ``PFunctor.A [u, v]) (mkConst ``Universal [u]))
 
 /--
 `Forward` represents the fixpoint of `Universal.prompt`. It can be thought of as a postponed
@@ -326,6 +331,21 @@ terminate proof search through the use of an `apply` rule.
 @[reducible]
 protected def Destruct := PLift (∀ (o : Observable.{u}), (Observable.Shape.push o).pull = o)
 
+namespace Destruct
+
+def Shape.push (_ : Universal.Destruct) : String :=
+  "exact ⟨∀ (o : Sodium.Ethos.Observable.{0}), (Sodium.Ethos.Observable.Shape.push o).pull = o⟩"
+
+def Shape.pull : String → Option Universal.Destruct
+| "exact ⟨∀ (o : Sodium.Ethos.Observable.{0}), (Sodium.Ethos.Observable.Shape.push o).pull = o⟩" => some ⟨by intro; rfl⟩
+| _ => none
+
+instance encodable : Encodable Universal.Destruct.{0} :=
+  Encodable.ofLeftInj Shape.push Shape.pull (by intro; rfl)
+
+end Destruct
+
+@[reducible]
 protected def map {α β} := @PFunctor.map α β Universal
 
 end Universal

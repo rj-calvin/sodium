@@ -58,9 +58,8 @@ theorem ext : ∀ x y : Weight, (x.den = y.den) → (∀ (h : x.den = y.den), h 
   obtain ⟨x_den, ⟨x_num, hx⟩⟩ := x
   obtain ⟨y_den, ⟨y_num, hy⟩⟩ := y
   subst h_den
-  simp [den, num] at h_num hy
-  have : x_num = y_num := h_num
-  subst this
+  simp only [den, num, Fin.mk.injEq, forall_const] at h_num hy
+  subst h_num
   rfl
 
 @[coe]
@@ -78,7 +77,7 @@ abbrev Positive (x : Weight) : Prop := x.num ≠ 0
 instance (x : Weight) : x.Positive → NeZero x.num := fun h => { out := h }
 
 @[simp]
-theorem mk_num_pos : ∀ n m, NeZero n → (h : n < m) → Δ(n | m).Positive := by
+theorem mk_num_pos : ∀ n m, NeZero n → (h : n < m) → Δ(n | m).num ≠ 0 := by
   intro _ _ h _
   unfold mk
   simp only [ne_eq, num, Fin.mk_eq_zero]
@@ -115,7 +114,7 @@ protected def spin (x : Weight) (scope : ScopeName) : Weight :=
   Shape.pull <| if h : scope = .global ∧ x.num ≠ 0 then Shape.part x h.2 else Shape.push x
 
 protected def quantize (x : Weight) (scope : ScopeName) : Nat :=
-  let x : Weight := x.spin scope
+  let x := x.spin scope
   x.den - x.num
 
 @[simp]

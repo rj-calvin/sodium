@@ -112,6 +112,7 @@ syntax (name := space) &" " : grapheme
 syntax (name := leader) "leader% " (grapheme)? : term
 syntax (name := done) "done% " (terminal)? : term
 
+@[reducible]
 def Terminal := TSyntax `terminal
 
 @[reducible]
@@ -830,7 +831,7 @@ def enter (γ : String) (on : String := ";") (action : IO Unit := IO.eprint "\n"
 /--
 Given a `TermElabM Shape`, attempt to resolve ⊢ `ULift Char`.
 -/
-@[aesop unsafe 97% apply (rule_sets := [«external»])]
+@[aesop unsafe 97% apply (rule_sets := [«external»]) (pattern := ULift.{_} Char)]
 def norm (γ : TermElabM Shape) : TacticM PUnit := do
   match Shape.pull (← runTermElab γ) with
   | turn% γ => evalTactic <| ← `(tactic|leader% $γ)
@@ -881,7 +882,7 @@ do match writer with
   try
     repeat match ← ε with
     | some key =>
-      let γ ← mkFreshExprMVar (userName := `«γ») <| mkApp (mkConst ``ULift [levelZero]) (mkConst ``Char)
+      let γ ← mkFreshExprMVar (userName := `«γ») <| mkApp (mkConst ``ULift [levelZero, levelZero]) (mkConst ``Char)
       let _ ← Tactic.run γ.mvarId! <| read <| write key (δ buf)
       let γ ← instantiateMVars γ
       let γ ← Tactic.elabTermEnsuringType (← delab <| mkApp (mkConst ``ULift.down) γ) (mkConst ``Char)
@@ -926,8 +927,8 @@ do
   unsafe evalExpr String (mkConst ``String) γ
 
 protected def auto
-  (ictx : InputContext)
   (writer : Typewriter τ Tactic)
+  (ictx : InputContext)
   (δ : String → Tactic := enter)
   (pre : String := default)
   (post : String := default)
@@ -939,44 +940,43 @@ do
     | [] => pure none
     | ε :: δ => ref.set δ; return some { key := Key.mk ε }
 
-@[aesop unsafe 97% forward (rule_sets := [«external»])]
-protected def construct (_ : Universal.Forward) : Typewriter τ Tactic := by
-  refine ⟨default, fun α stx => ?_⟩
-  have : FromJson Observable := {
-    fromJson? json :=
-      match decode? (α := Observable) json with
-      | some α => pure α
-      | _ => throw "invalid witness"
-  }
-  exact do
-    match ← (← IO.getStdout).readLspNotificationAs "$/witness" Observable with
-    | {method, param} =>
-      try α stx
-      finally evalTactic param.carrier
-
-@[aesop unsafe 97% forward (rule_sets := [«external»])]
-protected def forward (α : Typewriter τ Tactic) : TacticM Unit := do
-  let type ← mkAppOptM ``CryptoM #[none, mkConst ``Observable [levelOne]]
-  let type := mkApp (mkConst ``TacticM) <| mkApp (mkConst ``Universal [levelZero]) type
-  let δ ← Meta.mkFreshExprMVar type
-  let _ ← Aesop.search δ.mvarId!
-  let δ ← instantiateMVars δ
-  let γ ← unsafe evalExpr (TacticM (Witness τ)) type δ
-  γ.bind fun _ => discard <| Typewriter.observe (pre := "exact ⟨") (post := "⟩") α
-
-@[aesop unsafe 97% apply (rule_sets := [«external»])]
-protected def destruct (ictx : InputContext) (writer : Typewriter τ Tactic) : TacticM (Witness τ) :=
-  Typewriter.auto (pre := "exact ⟨") (post := "⟩") ictx writer
-
-@[reducible]
-def _root_.IO.RealWorld.Typist (τ : Sodium σ) := Emulator σ ⊚ Typewriter τ
-
-@[reducible]
-def _root_.IO.RealWorld.Automaton (τ : Sodium σ) := Typewriter τ ⊚ Emulator σ
-
 end Typewriter
 
-export IO.RealWorld (Typist Automaton)
+@[reducible]
+def Typist (τ : Sodium σ) := Emulator σ ⊚ Typewriter τ
+
+namespace Typist
+
+variable {τ : Sodium σ}
+
+@[reducible]
+protected def map {α β} := @PFunctor.map α β (Typist τ)
+
+instance : Functor (Typist τ) where
+  map := Typist.map
+
+abbrev mk := @PFunctor.W.mk (Typist τ)
+abbrev next := @PFunctor.W.next (Typist τ)
+abbrev head := @PFunctor.W.head (Typist τ)
+abbrev children := @PFunctor.W.children (Typist τ)
+abbrev cases := @PFunctor.W.cases (Typist τ)
+
+end Typist
+
+@[reducible]
+def Automaton (τ : Sodium σ) := Typewriter τ ⊚ Emulator σ
+
+namespace Automaton
+
+variable {τ : Sodium σ}
+
+@[reducible]
+protected def map {α β} := @PFunctor.map α β (Automaton τ)
+
+instance : Functor (Automaton τ) where
+  map := Automaton.map
+
+end Automaton
 
 end Typo
 

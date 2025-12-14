@@ -76,13 +76,15 @@ def comp (P₂ : PFunctor.{uγ,uδ}) (P₁ : PFunctor.{uα,uβ}) : PFunctor.{max
   A := Σ a₂ : P₂.A, P₂.B a₂ → P₁.A
   B | ⟨a, k⟩ => Σ u : P₂.B a, P₁.B (k u)
 
-notation a " ⊚ " b => comp a b
-
 def comp.mk (P₂ : PFunctor.{uγ,uδ}) (P₁ : PFunctor.{uα,uβ}) {α : Type u} (x : P₂ (P₁ α)) : comp P₂ P₁ α :=
   ⟨⟨x.1, Sigma.fst ∘ x.2⟩, fun ⟨a, k⟩ => (x.2 a).2 k⟩
 
-def comp.get (P₂ : PFunctor.{uγ,uδ}) (P₁ : PFunctor.{uα,uβ}) {α : Type u} (x : comp P₂ P₁ α) : P₂ (P₁ α) :=
+def comp.get {P₂ : PFunctor.{uγ,uδ}} {P₁ : PFunctor.{uα,uβ}} {α : Type u} (x : comp P₂ P₁ α) : P₂ (P₁ α) :=
   ⟨x.1.1, fun a₂ => ⟨x.1.2 a₂, fun a₁ => x.2 ⟨a₂, a₁⟩⟩⟩
+
+notation a " ⊚ " b => comp a b
+notation "mk% " P₂ ", " P₁ ", " x => comp.mk P₂ P₁ x
+notation "get% " x => comp.get x
 
 protected def W.cases {X : P.W → Sort w} (f : ∀ x : P P.W, X (W.mk x)) (p : P.W) : X p :=
   suffices X (W.mk (W.next p)) by

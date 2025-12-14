@@ -98,16 +98,6 @@ abbrev Latin (σ) := Emulator σ ⊚ Latin.Shape.{0}
 
 namespace Latin.Syntax
 
-private def mkExactULiftChar (c : Char) : Syntax.Tactic :=
-  ⟨Syntax.node .none ``Lean.Parser.Tactic.exact #[
-    Syntax.atom .none "exact",
-    Syntax.node .none ``Lean.Parser.Term.anonymousCtor #[
-      Syntax.atom .none "⟨",
-      Syntax.mkCharLit c,
-      Syntax.atom .none "⟩"
-    ]
-  ]⟩
-
 protected def a : Syntax.Tactic := mkExactULiftChar 'a'
 protected def b : Syntax.Tactic := mkExactULiftChar 'b'
 protected def c : Syntax.Tactic := mkExactULiftChar 'c'
