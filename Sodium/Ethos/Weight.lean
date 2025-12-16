@@ -21,8 +21,8 @@ def Weight.mk (n₁ : Nat) (n₂ : Nat) (h : n₁ < n₂) : Weight.{0} :=
 
 notation "Δ(" n₁ " | " n₂ ")" => Weight.mk n₁ n₂ (by omega)
 
-instance : Inhabited Weight where
-  default := Δ(0 | 1)
+instance : Zero Weight := ⟨Δ(0 | 1)⟩
+instance : Inhabited Weight := ⟨0⟩
 
 instance : Hashable Weight where
   hash x := mixHash 3 (mixHash (hash x.1) (hash x.2.down))
