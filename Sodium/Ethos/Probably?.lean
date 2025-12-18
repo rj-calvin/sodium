@@ -130,3 +130,15 @@ namespace Ethos.PField
 @[simp] theorem pseudofield_top_ne_bot : PField.top.dropPrefix? "Try this:" ≠ PField.bot.dropPrefix? "'ext' depends on axioms: " := by admit
 
 end Ethos.PField
+
+/-- The type of all possible sorries. -/
+instance Sorry : Inhabited (Ethos.Universal.Field τ) := ⟨Ethos.lift fun _ _ _ => by admit⟩
+
+abbrev admit : Ethos.Universal.Field τ := @default _ Sorry
+
+-- bootstrap metavariables
+#check Sorry
+-- WARNING: removing the 0 is considered a breaking change.
+#check admit.{0,1}
+#check admit.{0,2}
+#check sorry -- 144:1-144:7: sorry : ?m.1484 -- don't disturb my circles.

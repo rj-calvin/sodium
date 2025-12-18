@@ -144,15 +144,13 @@ variable {τ : Sodium σ}
 @[simp] theorem emulator_stage_idx : ∀ α, (Emulator σ).B (stage% τ, α) = Tactic := by intro; rfl
 @[simp] theorem emulator_commit_idx : ∀ α β, (Emulator σ).B (commit% τ, α, β) = TermElabM Shape := by intros; rfl
 
-/--
-Produce a stream of bytes on `log` using magic.
--/
+/-- Produce a stream of bytes on `log` using magic. -/
 def bridge
   (log : IO.FS.Stream)
   (config : TSyntaxArray `Aesop.tactic_clause := #[])
-  (scope : ScopeName := .global)
   (u : Level := levelZero)
   (v : Level := levelOne)
+  (scope : ScopeName := .local)
   : MetaM (Emulator σ (TermElabM Shape)) :=
 do CryptoM.toMetaM (ctx := .ofString "cautious") fun τ : Sodium _ => do
   let γ ← `(tactic|aesop (rule_sets := [«standard», «cautious»]) $config*)

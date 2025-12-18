@@ -1,7 +1,7 @@
 import Sodium.Ethos.Basic
 import Sodium.Ethos.Possibly?
 
-open Lean Elab Tactic Sodium Crypto Aesop Ethos Ristretto
+open Lean Sodium Crypto Aesop Ethos Ristretto
 
 @[inherit_doc Ethos.Field] abbrev Ethos.Universal.Field :=
   fun τ : Sodium (PLift (@default Prop Universal.prompt.{0})) =>
@@ -114,7 +114,7 @@ namespace PField
 
 end PField
 
-/-- Round-trip `f` through `unimax` -/
+/-- Round-trip `f` through `unimax`. -/
 def lift (f : ∀ ε, (ψ : some (ε.quantize .global) = unimax.toNat) → δ% unimax, ε : ψ) : Universal.Field τ := by
   refine ⟨default, fun o => ?_⟩
   let o := o (by aesop (add norm unfold Universal.prompt))

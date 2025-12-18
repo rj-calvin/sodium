@@ -29,7 +29,8 @@ notation "Δ% " τ ", " x => @Prob _ τ x
 
 set_option quotPrecheck false in
 notation "δ% " u ", " x " : " o =>
-  ∀ (hδ : @Ethos.Weight.quantize x Aesop.ScopeName.global = (u).toNat := o), Δ% $(mkIdent `τ), x
+  ∀ (hδ : @Ethos.Weight.quantize x Aesop.ScopeName.global = (u).toNat := o),
+  Δ% $(mkIdent `τ), x
 
 def toWeight (_ : Δ% τ, x) : Weight := x
 
