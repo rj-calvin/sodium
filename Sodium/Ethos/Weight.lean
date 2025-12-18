@@ -53,7 +53,7 @@ instance : ∀ x : Weight, NeZero x.den := fun x => ⟨den_nezero x⟩
 theorem num_zero : ∀ x : Weight, x.den = 1 → x.num = 0 := by omega
 
 @[ext, simp]
-theorem ext : ∀ x y : Weight, (x.den = y.den) → (∀ (h : x.den = y.den), h ▸ x.num = y.num) → x = y := by
+theorem ext : ∀ x y : Weight, x.den = y.den → (∀ (h : x.den = y.den), h ▸ x.num = y.num) → x = y := by
   intros x y h_den h_num
   obtain ⟨x_den, ⟨x_num, hx⟩⟩ := x
   obtain ⟨y_den, ⟨y_num, hy⟩⟩ := y

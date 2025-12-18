@@ -199,12 +199,10 @@ def toRuleSet (os : Array Observable) (name : Name) (scope : ScopeName) : LocalR
 abbrev den (o : Observable) := o.toWeight.den
 abbrev num (o : Observable) := o.toWeight.num
 
-@[simp]
-theorem den_nezero (o : Observable) : o.den ≠ 0 := by
+@[simp] theorem den_nezero (o : Observable) : o.den ≠ 0 := by
   simp only [ne_eq, Weight.den_nezero, not_false_eq_true]
 
-@[simp]
-theorem num_lt_den (o : Observable) : o.num < o.den := by exact Weight.num_lt_den _
+@[simp] theorem num_lt_den (o : Observable) : o.num < o.den := by exact Weight.num_lt_den _
 
 instance : ∀ o : Observable, NeZero o.den := fun o => ⟨den_nezero o⟩
 
