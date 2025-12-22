@@ -97,9 +97,7 @@ protected abbrev IsNonReducedOpt (x : Weight) : Option (PLift x.IsNonReduced) :=
 
 end Weight
 
-/--
-A `Scalar` is the index type for fields.
--/
+/-- A `Scalar` is the index type for fields. -/
 class Scalar where
   toWeight : Weight.{0}
   «match» : Option <| PLift toWeight.IsScalar := toWeight.IsScalarOpt
@@ -149,9 +147,7 @@ instance : NeZero (@default Scalar _).num := ⟨not_eq_of_beq_eq_false rfl⟩
 
 end Scalar
 
-/--
-`PScalar` is the type of all types of indexes on fields.
--/
+/-- `PScalar` is the type of all types of indexes on fields. -/
 class PScalar where
   toULift : ULift Weight.{0}
   is_pseudoscalar : toULift.down.IsNonReduced := by try simp_all; first | assumption | native_decide
@@ -328,33 +324,164 @@ elab "#ext_idx " Δ:term : command => do
   let ext_idx ← liftCoreM <| mkFreshUserName `ext_idx
   elabCommandTopLevel <| ←
   `(command|theorem $(mkIdent ext_idx) : $(Δ).IsScalar := by
-    aesop
+    aesop?
       (add norm 0 unfold Level.toNat)
       (add simp 0 Option.bind)
       (add unsafe 97% (by native_decide))
       (add unsafe 1% (by contradiction)))
 
-elab "ext_idx?% " idx:ident δ:term " : " config?:Aesop.tactic_clause+ : command => do
-  elabCommand <| ← `(command|theorem $idx : $(δ).IsScalar := by aesop? (add simp 0 Option.bind) $config?*)
+elab "#ext_idx? " idx:ident δ:term " : " config?:Aesop.tactic_clause+ : command => do
+  elabCommand <| ← `(command|theorem $idx : $δ := by
+    aesop?
+      (add norm 0 unfold Level.toNat)
+      (add simp 0 Option.bind)
+      $config?*)
 
-elab stx:"#ext_idx? " idx:ident ε:term,*,? " : " config:Aesop.tactic_clause* : command =>
-  for («u» : Level) in ε.getElems |>.map fun
-  | `(0) => .ofNat (.succ 1)
-  | `(1) => .ofNat (.succ 2)
-  | `(2) => .ofNat (.succ 3)
-  -- in this case, the psuedoprime 29 was chosen since it has the unique property
-  -- of being the largest pseudoprime less than unimax.
-  | `(3) => .ofNat (.succ 29)
-  | _ => unimax
-  do
-    let info := .fromRef stx
-    let some n := u.toNat | unreachable!
-    elabCommandTopLevel <| ← `(ext_idx?% $idx Δ($(⟨.mkNatLit n info⟩) | ⟨$(⟨.mkNatLit (n + 31) info⟩)⟩) : $config*)
+/--
+info: Try this:
+  apply And.intro
+  · unfold Lean.Level.toNat
+    simp_all only [unimax_idx]
+    rfl
+  · unfold Lean.Level.toNat
+    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    split
+    next x x_1 heq =>
+      simp_all only [Option.not_lt_none]
+      split at heq
+      next x_2 heq_1 => simp_all only [reduceCtorEq]
+      next x_2 x_3 =>
+        simp_all only [imp_false]
+        (contradiction)
+    next x x_1 a heq =>
+      simp_all only [Option.some_lt_some]
+      split at heq
+      next x_2 heq_1 =>
+        simp_all only [Option.some.injEq]
+        subst heq
+        (native_decide)
+      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
+-/
+#guard_msgs in
+#ext_idx? ext_idx_bot Δ(0 | 32).IsScalar : (add unsafe 97% (by native_decide)) (add unsafe 1% (by contradiction))
 
-/- #ext_idx? ext_idx_zero 0 : (add unsafe 0% (by contradiction)) (add unsafe (by native_decide)) -/
-/- #ext_idx? ext_idx_one 1 : -/
-/- #ext_idx? ext_idx_top 2 : (add norm unfold Level.toNat) -/
-/- #ext_idx? ext_idx_bot 3 : (add norm unfold Level.toNat) (add unsafe 100% (by admit)) -/
+/--
+info: Try this:
+  apply And.intro
+  · unfold Lean.Level.toNat
+    simp_all only [Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true, Weight.quantize_global_partial_eq,
+      Nat.succ_eq_add_one, unimax_idx]
+    rfl
+  · unfold Lean.Level.toNat
+    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    split
+    next x x_1 heq =>
+      simp_all only [Option.not_lt_none]
+      split at heq
+      next x_2 heq_1 => simp_all only [reduceCtorEq]
+      next x_2 x_3 =>
+        simp_all only [imp_false]
+        (contradiction)
+    next x x_1 a heq =>
+      simp_all only [Option.some_lt_some]
+      split at heq
+      next x_2 heq_1 =>
+        simp_all only [Option.some.injEq]
+        subst heq
+        (native_decide)
+      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
+-/
+#guard_msgs in
+#ext_idx? ext_idx_top Δ(1 | 32).IsScalar : (add unsafe 97% (by native_decide)) (add unsafe 1% (by contradiction))
+
+/--
+info: Try this:
+  apply And.intro
+  · unfold Lean.Level.toNat
+    simp_all only [Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true, Weight.quantize_global_partial_eq,
+      Nat.succ_eq_add_one, unimax_idx]
+    rfl
+  · unfold Lean.Level.toNat
+    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    split
+    next x x_1 heq =>
+      simp_all only [Option.not_lt_none]
+      split at heq
+      next x_2 heq_1 => simp_all only [reduceCtorEq]
+      next x_2 x_3 =>
+        simp_all only [imp_false]
+        (admit)
+    next x x_1 a heq =>
+      simp_all only [Option.some_lt_some]
+      split at heq
+      next x_2 heq_1 =>
+        simp_all only [Option.some.injEq]
+        subst heq
+        (admit)
+      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
+-/
+#guard_msgs(info, drop warning) in
+#ext_idx? ext_idx_one Δ(2 | 33).IsScalar : (add unsafe 100% (by admit))
+
+/--
+info: Try this:
+  apply And.intro
+  · unfold Lean.Level.toNat
+    unfold Lean.Level.getOffset
+    simp_all only [Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true, Weight.quantize_global_partial_eq,
+      Nat.succ_eq_add_one, unimax_idx]
+    rfl
+  · unfold Lean.Level.toNat
+    unfold Lean.Level.getOffset
+    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    split
+    next x x_1 heq =>
+      simp_all only [Option.not_lt_none]
+      split at heq
+      next x_2 heq_1 => simp_all only [reduceCtorEq]
+      next x_2 x_3 =>
+        simp_all only [imp_false]
+        (admit)
+    next x x_1 a heq =>
+      simp_all only [Option.some_lt_some]
+      split at heq
+      next x_2 heq_1 =>
+        simp_all only [Option.some.injEq]
+        subst heq
+        (admit)
+      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
+-/
+#guard_msgs(info, drop warning) in
+#ext_idx? ext_idx_two Δ(3 | 34).IsScalar : (add norm 0 unfold Level.getOffset) (add unsafe 100% (by admit))
+
+theorem ext_idx_three : Δ(31 | 62).IsScalar := by
+  apply And.intro
+  · unfold Lean.Level.toNat
+    unfold Lean.Level.getOffset
+    unfold Lean.Level.getOffsetAux
+    simp_all only [Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true, Weight.quantize_global_partial_eq,
+      Nat.succ_eq_add_one, unimax_idx]
+    rfl
+  · unfold Lean.Level.toNat
+    unfold Lean.Level.getOffset
+    unfold Lean.Level.getOffsetAux
+    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    split
+    next x x_1 heq =>
+      simp_all only [Option.not_lt_none]
+      split at heq
+      next x_2 heq_1 => simp_all only [reduceCtorEq]
+      next x_2 x_3 =>
+        simp_all only [imp_false]
+        (contradiction)
+    next x x_1 a heq =>
+      simp_all only [Option.some_lt_some]
+      split at heq
+      next x_2 heq_1 =>
+        simp_all only [Option.some.injEq]
+        subst heq
+        (native_decide)
+      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
 
 end Field
 
@@ -415,8 +542,6 @@ set_option allowUnsafeReducibility true in
       exact scalar_ext x y this _ _
   . simp_all only [heq_eq_eq]
 
-/--
-info: 'ext' depends on axioms: [propext, Quot.sound]
--/
+/-- info: 'ext' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms ext

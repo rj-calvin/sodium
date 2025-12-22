@@ -4,8 +4,6 @@ import Sodium.Ethos.Probably
 
 open Lean Elab Term Meta Server Sodium Ethos Typo
 
-namespace Admit
-
 syntax (name := «admit%») "admit% " term : term
 
 @[term_elab «admit%»]
@@ -16,7 +14,7 @@ unsafe def elabAdmit : TermElab
   evalExpr Expr (mkConst ``Expr) γ (safety := .unsafe)
 | _ => fun _ => throwUnsupportedSyntax
 
-def run (uri : System.FilePath) (args : List String) (name : Name) (latency : Nat := 29) (delay : Nat := 31) : IO Unit := do
+def runAdmitAt (uri : System.FilePath) (code : List String) (name : Name) (latency : Nat := 29) (delay : Nat := 31) : IO Unit := do
   let tid ← IO.getTID
   let shell := uri / name.toStringWithSep "/" true default |>.addExtension "lean"
   let workspace := {uri := uri.toString, name := "«shell»" : Lsp.WorkspaceFolder}
@@ -29,7 +27,7 @@ def run (uri : System.FilePath) (args : List String) (name : Name) (latency : Na
     uri := shell.toString
     mod := `«Shell»
     version := 1
-    text := FileMap.ofString <| String.intercalate "\n" args ++ "\n\n"
+    text := FileMap.ofString <| String.intercalate "\n" code ++ "\n\n"
     dependencyBuildMode := .once
     : DocumentMeta
   }
@@ -81,11 +79,9 @@ def run (uri : System.FilePath) (args : List String) (name : Name) (latency : Na
     | (_, _, true) => IO.FS.writeFile shell (← get).doc.meta.text.source
     | (_, _, _) => continue
 
-def core (name : Name) (code : List String) (scope : ScopeName := .local) : MetaM Unit :=
+protected def Admit.core (name : Name) (code : List String) (scope : ScopeName := .local) : MetaM Unit :=
   Meta.withNewMCtxDepth do
     if scope = .global then
-      try enableRawMode; run ((← IO.appDir) / ".." / "..") code name
+      try enableRawMode; runAdmitAt ((← IO.appDir) / ".." / "..") code name
       finally disableRawMode
-    else run ((← IO.appDir) / ".." / "..") code name
-
-end Admit
+    else runAdmitAt ((← IO.appDir) / ".." / "..") code name

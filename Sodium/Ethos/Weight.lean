@@ -191,7 +191,7 @@ theorem quantize_global_reduced_eq : ∀ x : Weight, x.num = 0 → x.quantize .g
   simp_all only [ne_eq, not_true_eq_false, and_false, ↓reduceDIte, Fin.val_zero, Nat.sub_zero]
 
 @[simp]
-theorem quantize_global_partial_eq : ∀ x : Weight, x.num ≠ 0 → x.quantize .global = x.den - x.num + 1 := by
+theorem quantize_global_partial_eq : ∀ x : Weight, x.num ≠ 0 → x.quantize .global = x.den.succ - x.num := by
   intro x h
   unfold Weight.quantize Weight.spin
   have h_den : (Shape.part x h).pull.den = x.den.succ := by simp only [Shape.part_pull_succ]; rfl
@@ -218,17 +218,16 @@ theorem quantize_global_partial_eq : ∀ x : Weight, x.num ≠ 0 → x.quantize 
   simp_all only [Shape.part_pull_succ, Nat.succ_eq_add_one, ne_eq, not_false_eq_true, and_self, ↓reduceDIte]
   omega
 
+/-- Given any global weight `x` in universe `u`, there exists a local weight `y` in universe `v`. -/
 theorem quantize_relativity : ∀ x : Weight, ∃ y : Weight, Weight.quantize.{u} x .global = Weight.quantize.{v} y .local := by
   intro x
   by_cases h : x.num = 0
   . simp_all only [quantize_global_reduced_eq, quantize_local_eq]
-    refine ⟨⟨x.den, ⟨0⟩⟩, ?_⟩
-    rfl
+    exact ⟨⟨x.den, ⟨0⟩⟩, rfl⟩
   . simp_all only [ne_eq, not_false_eq_true, quantize_global_partial_eq, quantize_local_eq]
     refine ⟨⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩, ?_⟩
     have h_den : den.{v} ⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩ = x.den + 1 := by rfl
     have h_num : num.{v} ⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩ = x.num.castLT (by omega) := by rfl
     simp_all only [Fin.coe_castLT]
-    omega
 
 end Ethos.Weight

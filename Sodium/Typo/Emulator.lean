@@ -19,16 +19,6 @@ attribute [aesop norm unfold (rule_sets := [«cautious»])]
 attribute [aesop unsafe 31% apply (rule_sets := [«cautious»]) (pattern := CryptoM _ Observable)]
   Observable.observe
 
-def mkExactULiftChar (c : Char) : Syntax.Tactic :=
-  ⟨Syntax.node .none ``Lean.Parser.Tactic.exact #[
-    Syntax.atom .none "exact",
-    Syntax.node .none ``Lean.Parser.Term.anonymousCtor #[
-      Syntax.atom .none "⟨",
-      Syntax.mkCharLit c,
-      Syntax.atom .none "⟩"
-    ]
-  ]⟩
-
 namespace Typo
 
 variable {σ}
@@ -63,14 +53,14 @@ end Shape
 def Point := Option (Syntax.Tactic ⊕ Syntax)
 
 @[reducible]
-def Null : Point := some (.inr default)
+def Origin : Point := some (.inr default)
 
 namespace Point
 
 notation "point% " γ => some (Sum.inl («α» := «Syntax».«Tactic») («β» := «Syntax») γ)
 notation "bot%" => some (Sum.inr («α» := «Syntax».«Tactic») default)
 
-instance : Inhabited Point := ⟨Null⟩
+instance : Inhabited Point := ⟨Origin⟩
 instance : Encodable Point := by unfold Point; infer_instance
 
 def quantize {τ : Sodium σ} (scope : ScopeName := .global) : Point → CryptoM τ Observable

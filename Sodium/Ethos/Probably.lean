@@ -25,10 +25,28 @@ def Universal.lift (f : ∀ ε, (ψ : some (ε.quantize .global) = unimax.toNat)
     simp only [unimax_idx] at w? -- what to do with `Bool.rec`?
     match w? with | _ => exact ⟨some ⟨0, 1⟩, fun _ => o.carrier.val⟩
 
-/--
-info: 'Ethos.Universal.lift' depends on axioms: [propext, Classical.choice, Lean.ofReduceBool, Quot.sound]
--/
+/-- info: 'Ethos.Universal.lift' depends on axioms: [propext, Classical.choice, Lean.ofReduceBool, Quot.sound] -/
 #guard_msgs in
 #print axioms Universal.lift
+
+/-- info: Try this: exact Field.ext_idx_top -/
+#guard_msgs in
+@[simp] theorem idx_top : Δ(1 | 32).IsScalar := by exact?
+
+/-- info: Try this: exact Field.ext_idx_bot -/
+#guard_msgs in
+@[simp] theorem idx_bot : Δ(0 | 32).IsScalar := by exact?
+
+/-- info: Try this: exact Field.ext_idx_one -/
+#guard_msgs in
+@[simp] theorem idx_one : Δ(2 | 33).IsScalar := by exact?
+
+/-- info: Try this: exact Field.ext_idx_two -/
+#guard_msgs in
+@[simp] theorem idx_two : Δ(3 | 34).IsScalar := by exact?
+
+/-- info: Try this: exact Field.ext_idx_three -/
+#guard_msgs in
+theorem idx_three : Δ(31 | 62).IsScalar := by exact?
 
 end Ethos
