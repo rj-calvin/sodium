@@ -1,7 +1,6 @@
 import Lean.Data.Lsp
 import Sodium.Ethos.Weight
 import Sodium.Server.Monad
-import Sodium.Crypto.Stream
 
 universe u
 
@@ -149,7 +148,7 @@ export Aesop (
 /--
 A proof-carrying object.
 -/
-structure Observable extends Weight where
+structure Observable extends Weight.{0} where
   private mk ::
   phase : PhaseName := default
   carrier : Verified Syntax.Tactic
@@ -210,8 +209,8 @@ protected instance format : ToFormat Observable := ⟨pretty⟩
 
 protected instance repr : Repr Observable where
   reprPrec o n :=
-    have : o.num < o.den := by simp
-    f!"{reprPrec Δ(o.num | o.den) n}"
+    have : o.num < o.den := by simp only [Fin.is_lt]
+    f!"{reprPrec.{0} Δ(o.num | o.den) n}"
 
 abbrev Positive (o : Observable) := o.num ≠ 0
 
@@ -280,26 +279,23 @@ namespace Universal
 /--
 The default proposition that JSON encodings of `Observable` round-trip correctly.
 -/
-protected instance prompt : Inhabited Universal.A where
+protected instance prompt.{u_1} : Inhabited Universal.A where
   default :=
-      ∀ x : Weight, decode? (encode x) = some x
+      ∀ x : Weight.{u_1}, decode? (encode x) = some x
     ∧ ∀ y : PhaseName, decode? (encode y) = some y
     ∧ ∀ z : Verified Syntax.Tactic, decode? (encode z) = some z
     ∧ ∀ o : Observable, decode? (encode o) = some o
 
 instance {α} [Inhabited α] : Inhabited (Universal α) where
-  default := ⟨default, fun _ => default⟩
-
-@[simp] theorem specific_idx : Universal.A.{0} = Prop := rfl
-
-@[simp] theorem specific_default_idx : Universal.B default = (@default Universal.A.{0} Universal.prompt → Observable) := by
-  unfold Universal
-  simp only
+  default := ⟨show Prop from default, fun _ => default⟩
 
 theorem universal_idx : Universal.A = Prop := rfl
 
 theorem universal_default_idx : Universal.B default = (@default Universal.A Universal.prompt → Observable) := by
   unfold Universal
+  simp only
+  congr
+  unfold Universal.prompt
   simp only [Encodable.encodek, implies_true, and_self]
 
 /--
@@ -318,7 +314,7 @@ argument for declaring `forward` rules.
 -/
 @[reducible]
 protected def Forward : Prop :=
-  ∀ (_ : Verified Syntax.Tactic) (o : Observable.{u}), (Observable.Shape.push o).pull = o
+  ∀ (_ : Verified Syntax.Tactic) (o : Observable), (Observable.Shape.push o).pull = o
 
 /--
 `Destruct` is the terminal type of `Universal.prompt`.
@@ -327,7 +323,7 @@ The choice of proposition is motivated by the form of `Universal.Forward`, makin
 terminate proof search through the use of an `apply` rule.
 -/
 @[reducible]
-protected def Destruct := PLift (∀ (o : Observable.{u}), (Observable.Shape.push o).pull = o)
+protected def Destruct := PLift (∀ (o : Observable), (Observable.Shape.push o).pull = o)
 
 namespace Destruct
 
@@ -338,7 +334,7 @@ def Shape.pull : String → Option Universal.Destruct
 | "exact ⟨∀ (o : Sodium.Ethos.Observable.{0}), (Sodium.Ethos.Observable.Shape.push o).pull = o⟩" => some ⟨by intro; rfl⟩
 | _ => none
 
-instance encodable : Encodable Universal.Destruct.{0} :=
+instance encodable : Encodable Universal.Destruct :=
   Encodable.ofLeftInj Shape.push Shape.pull (by intro; rfl)
 
 end Destruct
@@ -386,13 +382,14 @@ A `Witness` is a universe-polymorphic computation over proof-carrying objects.
 See `Sodium.Typo.Emulator` for example usage.
 -/
 @[reducible]
-def Witness.{«x», «y»} {σ : Type «x»} (τ : Sodium σ) := Universal.{«y»} (CryptoM τ Observable)
+def Witness {σ} (τ : Sodium σ) := Universal (CryptoM τ Observable)
 
 namespace Witness
 
 variable {τ : Sodium σ}
 
-def mk (o : Observable) : Witness τ := ⟨default, fun _ => pure o⟩
+def mk (o : Observable) : Witness τ :=
+  ⟨default, fun _ : Universal.B (@default.{1} _ Universal.prompt.{0}) => pure o⟩
 
 def emit (io : IO.FS.Stream) (o : Observable) (method : String := "$/witness") (α : Witness τ) : CryptoM τ PUnit := do
   (← o.observe α).emit io method

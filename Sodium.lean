@@ -4,7 +4,7 @@ open Lean Elab Tactic PrettyPrinter Sodium Crypto Ethos Typo Aesop
 
 universe «u»
 
-variable {τ : Sodium Universal.Destruct.{«u»}}
+variable {τ : Sodium Universal.Destruct}
 
 attribute [aesop norm 0]
   Universal.universal_idx Universal.universal_default_idx
@@ -33,17 +33,17 @@ def construct : @default Prop prompt := by
   simp only [Encodable.encodek, implies_true, and_self]
 
 @[aesop unsafe apply (rule_sets := [«external»])]
-def destruct (fwd : Universal.Forward.{«u»}) : Universal Universal.Destruct.{«u»} := by
+def destruct (fwd : Universal.Forward) : Universal Universal.Destruct := by
   refine ⟨default, fun α => ?_⟩
   have : Observable := α construct
   exact ⟨fwd this.carrier⟩
 
 def framerule : RuleTac := RuleTac.ofTacticSyntax fun δ => do
   match ← δ.goal.getType with
-  | .forallE _ (.app (.const ``Sodium [levelZero]) (.const ``Universal.Destruct [levelOne])) body _ =>
+  | .forallE _ (.app (.const ``Sodium [levelZero]) (.const ``Universal.Destruct [])) body _ =>
     unless ← Meta.isLevelDefEq levelZero levelOne do Meta.throwIsDefEqStuck
-    CryptoM.toMetaM (ctx := .ofString "external") fun τ : Sodium Universal.Destruct.{0} => do
-      let writer : Typewriter.{0,0} τ Tactic := ⟨default, fun next stx => try evalExact stx; catch _ => next stx⟩
+    CryptoM.toMetaM (ctx := .ofString "external") fun τ : Sodium Universal.Destruct => do
+      let writer : Typewriter τ Tactic := ⟨default, fun next stx => try evalExact stx; catch _ => next stx⟩
       let (witness, _) ← runTacticMAsMetaM (Typewriter.print writer) δ.mvars.toArray.toList
       match Parser.runParserCategory (← getEnv) `tactic witness "external" with
       | .ok stx => return ⟨← `(tactic|intro _; $(⟨stx⟩))⟩

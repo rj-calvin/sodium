@@ -793,7 +793,7 @@ open Sodium Crypto Ethos
 
 structure _root_.IO.RealWorld.Key (τ : Sodium σ) where
   key : Typo.Key
-  witness : Witness τ := ⟨default, fun _ => key.quantize⟩
+  witness : Witness τ := ⟨@default.{1} _ Universal.prompt.{0}, fun _ => key.quantize⟩
 
 /--
 Mechanism for elaborating keypresses.

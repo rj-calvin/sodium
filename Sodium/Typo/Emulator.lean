@@ -1,4 +1,4 @@
-import Sodium.Ethos.Basic
+import Sodium.Ethos.Probably
 
 open Lean Elab Tactic Sodium Crypto Ethos
 
@@ -55,7 +55,7 @@ def quantize {τ : Sodium σ} (scope : ScopeName := .local) : Shape → CryptoM 
 
 structure _root_.IO.RealWorld.Shape (τ : Sodium σ) where
   shape : Typo.Shape
-  witness : Witness τ := ⟨default, fun _ => shape.quantize⟩
+  witness : Witness τ := ⟨@default.{1} _ Universal.prompt.{0}, fun _ => shape.quantize⟩
 
 end Shape
 
@@ -80,7 +80,7 @@ def quantize {τ : Sodium σ} (scope : ScopeName := .global) : Point → CryptoM
 
 structure _root_.IO.RealWorld.Point (τ : Sodium σ) where
   point : Typo.Point
-  witness : Witness τ := ⟨default, fun _ => point.quantize⟩
+  witness : Witness τ := ⟨@default.{1} _ Universal.prompt.{0}, fun _ => point.quantize⟩
 
 end Point
 
@@ -137,7 +137,7 @@ instance : Functor (Emulator σ) where
 variable {τ : Sodium σ}
 
 @[simp] theorem emulator_idx :
-  (Emulator.{0,0} σ).A = Σ' τ : Sodium σ, IO.RealWorld.Shape τ × IO.RealWorld.Point τ := rfl
+  (Emulator σ).A = Σ' τ : Sodium σ, IO.RealWorld.Shape τ × IO.RealWorld.Point τ := rfl
 
 @[simp] theorem emulator_stop_idx : (Emulator σ).B (stop% τ) = PUnit := rfl
 @[simp] theorem emulator_start_idx : ∀ β, (Emulator σ).B (start% τ, β) = TermElabM Shape := by intro; rfl
@@ -156,9 +156,9 @@ do CryptoM.toMetaM (ctx := .ofString "cautious") fun τ : Sodium _ => do
   let γ ← `(tactic|aesop (rule_sets := [«standard», «cautious»]) $config*)
   let o ← Observable.new γ scope
   let log ← (if scope = .global then IO.setStdout else IO.setStderr) log
-  let ε : (Emulator.{0,0} σ).A := start% τ, γ
-  let δ : (Emulator.{0,0} _).B ε → Witness τ := fun α => by
-    refine ⟨default, fun β => ?_⟩
+  let ε : (Emulator σ).A := start% τ, γ
+  let δ : (Emulator _).B ε → Witness τ := fun α => by
+    refine ⟨@default.{1} _ Universal.prompt.{0}, fun β => ?_⟩
     subst ε
     simp only at α
     exact try
@@ -172,7 +172,7 @@ do CryptoM.toMetaM (ctx := .ofString "cautious") fun τ : Sodium _ => do
   δ.emit log o
   return by
     refine Emulator.map o.observe ⟨ε, fun δ => ?_⟩
-    refine ⟨default, fun _ => ?_⟩
+    refine ⟨@default.{1} _ Universal.prompt.{0}, fun _ => ?_⟩
     subst ε
     simp only at δ
     exact δ
@@ -180,15 +180,15 @@ do CryptoM.toMetaM (ctx := .ofString "cautious") fun τ : Sodium _ => do
 end Emulator
 
 @[reducible]
-def Destructor := PFunctor.W <| Emulator.{0,1} Universal.Destruct.{0}
+def Destructor := PFunctor.W <| Emulator Universal.Destruct
 
 namespace Destructor
 
-abbrev mk := @PFunctor.W.mk (Emulator.{0,1} Universal.Destruct.{0})
-abbrev next := @PFunctor.W.next (Emulator.{0,1} Universal.Destruct.{0})
-abbrev head := @PFunctor.W.head (Emulator.{0,1} Universal.Destruct.{0})
-abbrev children := @PFunctor.W.children (Emulator.{0,1} Universal.Destruct.{0})
-abbrev cases := @PFunctor.W.cases (Emulator.{0,1} Universal.Destruct.{0})
+abbrev mk := @PFunctor.W.mk (Emulator Universal.Destruct)
+abbrev next := @PFunctor.W.next (Emulator Universal.Destruct)
+abbrev head := @PFunctor.W.head (Emulator Universal.Destruct)
+abbrev children := @PFunctor.W.children (Emulator Universal.Destruct)
+abbrev cases := @PFunctor.W.cases (Emulator Universal.Destruct)
 
 end Destructor
 

@@ -1,7 +1,7 @@
 import Aesop
 import Sodium.Data.Encodable.Basic
 
-universe u
+universe u v
 
 namespace Ethos
 
@@ -16,7 +16,7 @@ An abstract, universe-polymorphic quantization of units.
 -/
 def Weight := Σ' n, ULift (Fin n)
 
-def Weight.mk (n₁ : Nat) (n₂ : Nat) (h : n₁ < n₂) : Weight.{0} :=
+def Weight.mk (n₁ : Nat) (n₂ : Nat) (h : n₁ < n₂) : Weight :=
   ⟨n₂, ⟨n₁, h⟩⟩
 
 notation "Δ(" n₁ " | " n₂ ")" => Weight.mk n₁ n₂ (by omega)
@@ -30,7 +30,7 @@ instance : Hashable Weight where
 namespace Weight
 
 def den (x : Weight) : Nat := x.1
-def num (x : Weight) : Fin x.den := x.2.down
+def num (x : Weight) : Fin x.den := ULift.down x.2
 
 @[simp]
 theorem mk_num_den : ∀ x : Weight, Δ(x.num | x.den) = x := by intro; rfl
@@ -97,24 +97,41 @@ def Shape.pull (x : Shape) : Weight :=
   else Δ(n₂ | n₁.succ)
 
 @[simp]
-theorem Shape.push_pull_eq : ∀ x, Shape.pull (Shape.push x) = x := by
+theorem Shape.push_pull_eq.{u_1} : ∀ x : Weight.{u_1}, Shape.pull (Shape.push x) = ⟨x.den, ⟨x.num⟩⟩ := by
   intro x
   unfold push pull
   simp only [Fin.is_lt, reduceDIte, mk_num_den]
+  rfl
+
+@[simp]
+theorem Shape.part_pull_succ : ∀ x, (h : x.num ≠ 0) → Shape.pull (Shape.part x h) = ⟨x.den.succ, x.num, by omega⟩ := by
+  intro x h
+  unfold part pull
+  simp_all only [Nat.succ_eq_add_one]
+  simp_all only [ne_eq]
+  split
+  omega
+  rfl
 
 instance : Encodable Weight :=
   have : Encodable Shape := by unfold Shape; infer_instance
   Encodable.ofEquiv _ {
     push := Shape.push
     pull := Shape.pull
-    push_pull_eq := by simp
+    push_pull_eq := by intro x; simp only [Shape.push_pull_eq]; rfl
   }
 
 protected def spin (x : Weight) (scope : ScopeName) : Weight :=
   Shape.pull <| if h : scope = .global ∧ x.num ≠ 0 then Shape.part x h.2 else Shape.push x
 
-protected def quantize (x : Weight) (scope : ScopeName) : Nat :=
-  let x := x.spin scope
+@[simp]
+theorem weight_spin_zero : ∀ x : Weight, (h : x.num = 0) → x.spin .local = x.spin .global := by
+  intro x h
+  unfold Weight.spin
+  simp_all only [reduceCtorEq, ne_eq, false_and, ↓reduceDIte, true_and, dite_not]
+
+protected def quantize (x : Weight.{u}) (scope : ScopeName) : Nat :=
+  let x : Weight.{u} := x.spin scope
   x.den - x.num
 
 @[simp]
@@ -123,5 +140,95 @@ theorem quantize_nezero : ∀ (x : Weight) (s : ScopeName), x.quantize s ≠ 0 :
   unfold Weight.quantize Weight.spin
   simp only [ne_eq]
   omega
+
+@[simp]
+theorem quantize_local_eq : ∀ x : Weight, x.quantize .local = x.den - x.num := by
+  intro x
+  unfold Weight.quantize Weight.spin
+  have h_den : (Shape.push x).pull.den = x.den := by simp only [Shape.push_pull_eq]; congr
+  have h_num : (Shape.push x).pull.num = @Fin.val x.den x.num := by
+    unfold Shape.push Shape.pull
+    split
+    rename_i heq
+    simp_all only [ne_eq, Shape.push_pull_eq, Subtype.mk.injEq, Prod.mk.injEq, Nat.succ_eq_add_one]
+    simp_all only [ne_eq]
+    obtain ⟨left, right⟩ := heq
+    subst left right
+    simp_all only [den_nezero, not_false_eq_true, Fin.is_lt]
+    have : @Fin.val (if x_1 : @Fin.val x.den x.num < x.den then mk (@Fin.val x.den x.num) x.den x_1 else mk x.den (@Fin.val x.den x.num + 1) (by omega)).den (if x_1 : @Fin.val x.den x.num < x.den then mk (@Fin.val x.den x.num) x.den x_1 else mk x.den (@Fin.val x.den x.num + 1) (by omega)).num = @Fin.val (mk (@Fin.val x.den x.num) x.den (by omega)).den (mk (@Fin.val x.den x.num) x.den (by omega)).num := by
+      congr <;> split
+      . simp only
+      . omega
+      . rfl
+      . have : @Fin.val x.den x.num < x.den := by simp only [Fin.is_lt]
+        contradiction
+    exact this
+  simp_all only [Shape.push_pull_eq, reduceCtorEq, ne_eq, false_and, ↓reduceDIte, ↓dreduceDIte]
+
+@[simp]
+theorem quantize_global_reduced_eq : ∀ x : Weight, x.num = 0 → x.quantize .global = x.den := by
+  intro x h
+  unfold Weight.quantize Weight.spin
+  have h_den : (Shape.push x).pull.den = x.den := by simp only [Shape.push_pull_eq]; congr
+  have h_num : (Shape.push x).pull.num = @Fin.val x.den 0 := by
+    unfold Shape.push Shape.pull
+    simp_all only [Shape.push_pull_eq, ne_eq, Nat.succ_eq_add_one, Fin.val_zero,
+      Fin.val_eq_zero_iff]
+    have : (if x_1 : @Fin.val x.den x.num < x.den then mk (@Fin.val x.den x.num) x.den x_1 else mk x.den (@Fin.val x.den x.num + 1) (by omega)) = mk (@Fin.val x.den x.num) x.den (by omega) := by
+      simp_all only [Fin.val_zero, Nat.zero_add]
+      split
+      next _ => simp_all only
+      next h' =>
+        have : 0 < x.den := by exact Nat.pos_of_neZero x.den
+        contradiction
+    rw [this]
+    simp_all only [Fin.val_zero, Nat.zero_add]
+    exact h
+  simp_all only [ne_eq, not_true_eq_false, and_false, ↓reduceDIte, Shape.push_pull_eq]
+  have : (if _ : Aesop.ScopeName.global = Aesop.ScopeName.global ∧ x.num ≠ 0 then Shape.part x (by omega) else Shape.push x) = Shape.push x := by
+    simp_all only [ne_eq, not_true_eq_false, and_false, ↓reduceDIte]
+  rw [this]
+  simp_all only [ne_eq, not_true_eq_false, and_false, ↓reduceDIte, Fin.val_zero, Nat.sub_zero]
+
+@[simp]
+theorem quantize_global_partial_eq : ∀ x : Weight, x.num ≠ 0 → x.quantize .global = x.den - x.num + 1 := by
+  intro x h
+  unfold Weight.quantize Weight.spin
+  have h_den : (Shape.part x h).pull.den = x.den.succ := by simp only [Shape.part_pull_succ]; rfl
+  have h_num : (Shape.part x h).pull.num = @Fin.val x.den x.num := by
+    unfold Shape.part Shape.pull
+    split
+    rename_i heq
+    simp_all only [Shape.part_pull_succ, ne_eq, Subtype.mk.injEq, Prod.mk.injEq]
+    obtain ⟨left, right⟩ := heq
+    subst left right
+    have h_bound : ¬x.den < @Fin.val x.den x.num := by simp only [Nat.not_lt, Fin.is_le']
+    have : @Fin.val (if x_1 : x.den < @Fin.val x.den x.num then mk x.den (@Fin.val x.den x.num) x_1 else mk (@Fin.val x.den x.num) x.den.succ (by omega)).den (if x_1 : x.den < @Fin.val x.den x.num then mk x.den (@Fin.val x.den x.num) x_1 else mk (@Fin.val x.den x.num) x.den.succ (by omega)).num = @Fin.val x.den.succ (x.num.castLT (by omega)) := by
+      congr
+      . split
+        . contradiction
+        . rfl
+      . rw [dif_neg h_bound]
+        rfl
+    exact this
+  have : (if _ : Aesop.ScopeName.global = Aesop.ScopeName.global ∧ x.num ≠ 0 then Shape.part x (by omega) else Shape.push x) = Shape.part x (by omega) := by
+    simp only [ne_eq, true_and, dite_eq_ite, ite_not, ite_eq_right_iff]
+    exact fun a => False.elim (h a)
+  rw [this]
+  simp_all only [Shape.part_pull_succ, Nat.succ_eq_add_one, ne_eq, not_false_eq_true, and_self, ↓reduceDIte]
+  omega
+
+theorem quantize_relativity : ∀ x : Weight, ∃ y : Weight, Weight.quantize.{u} x .global = Weight.quantize.{v} y .local := by
+  intro x
+  by_cases h : x.num = 0
+  . simp_all only [quantize_global_reduced_eq, quantize_local_eq]
+    refine ⟨⟨x.den, ⟨0⟩⟩, ?_⟩
+    rfl
+  . simp_all only [ne_eq, not_false_eq_true, quantize_global_partial_eq, quantize_local_eq]
+    refine ⟨⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩, ?_⟩
+    have h_den : den.{v} ⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩ = x.den + 1 := by rfl
+    have h_num : num.{v} ⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩ = x.num.castLT (by omega) := by rfl
+    simp_all only [Fin.coe_castLT]
+    omega
 
 end Ethos.Weight

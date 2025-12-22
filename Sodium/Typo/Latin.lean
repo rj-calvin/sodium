@@ -8,7 +8,8 @@ namespace Typo
 
 protected def Latin.Shape : PFunctor where
   A := Shape
-  B | shape% 'a' | shape% 'A'
+  B | shape% ' ' => ULift Unit
+    | shape% 'a' | shape% 'A'
     | shape% 'b' | shape% 'B'
     | shape% 'c' | shape% 'C'
     | shape% 'd' | shape% 'D'
@@ -36,9 +37,13 @@ protected def Latin.Shape : PFunctor where
     | shape% 'z' | shape% 'Z' => PUnit
     | _ => PEmpty
 
-abbrev Latin (σ) := Emulator σ ⊚ Latin.Shape.{0}
+instance : Inhabited Latin.Shape.A := ⟨Escape⟩
+
+abbrev Latin (σ) := Emulator σ ⊚ Latin.Shape
 
 @[simp] theorem latin_idx : Latin.Shape.A = Shape := rfl
+
+@[simp] theorem latin_idx_space : Latin.Shape.B (shape% ' ') = ULift Unit := rfl
 
 @[simp] theorem latin_idx_alpha : Latin.Shape.B (shape% 'a') = PUnit := rfl
 @[simp] theorem latin_idx_beta : Latin.Shape.B (shape% 'b') = PUnit := rfl
@@ -225,6 +230,11 @@ open Sodium Crypto Ethos in
 def quantize (γ : (Latin σ) (TermElabM Shape)) (scope : ScopeName) : (Latin σ) (CryptoM τ Observable) := by
   refine Latin.map (fun γ => ?_) γ
   exact do let γ ← Aesop.runTermElabMAsCoreM γ; γ.quantize scope
+
+def write (s : String) : Latin.Shape.W := Id.run do
+  let mut w : Latin.Shape.W := ⟨Escape, PEmpty.elim⟩
+  for c in s.toList.reverse do w := ⟨shape% c, fun _ => w⟩
+  return w
 
 end Latin
 

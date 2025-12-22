@@ -3,44 +3,34 @@ import Sodium.Data.PFunctor
 import Sodium.Ethos.Weight
 import Sodium.FFI.Ristretto
 
-open Lean Sodium Aesop Ethos
+open Lean Elab Term Sodium Aesop Ethos
 set_option linter.unreachableTactic false
 
 variable ⦃γ : Inhabited Prop⦄ {τ : Sodium (PLift (@default Prop γ))}
 
-/--
-A point on Curve25519 relative to `x : Weight`.
--/
-structure Prob (x : Weight) extends Weight where
-  fpt : SecretVector τ (@Weight.quantize toPSigma .global)
-  tbf : fpt.isZero = false := by
-        try contradiction
-    <;> try assumption
-    <;> try native_decide
-    <;> exfalso
-    <;> try contradiction
-    <;> run_tac throwPostpone (α := ULift String)
+/-- A point on Curve25519 relative to `x : Weight`. -/
+structure Prob (x : Weight.{0}) extends Weight where
+  fpt : SecretVector τ (@Weight.quantize toPSigma .local)
+  fpt_shape : x.quantize .global = @Weight.quantize toPSigma .local := by
+    first | assumption | simp_all | contradiction | omega | native_decide
 
 namespace Prob
+set_option quotPrecheck false
 
 open FFI.Ristretto
 
 notation "Δ% " τ ", " x => @Prob _ τ x
 
-set_option quotPrecheck false in
 notation "δ% " u ", " x " : " o =>
   ∀ (hδ : @Ethos.Weight.quantize x Aesop.ScopeName.global = (u).toNat := o),
   Δ% $(mkIdent `τ), x
 
 def toWeight (_ : Δ% τ, x) : Weight := x
 
-def toSecret (γ : Δ% τ, x)
-  (h : x.quantize .global = @Weight.quantize γ.toPSigma .global := by
-    try assumption <;> try simp_all <;> try contradiction <;> native_decide)
-  : SecretVector τ <| x.quantize .global := h ▸ γ.fpt
+def toSecret (γ : Δ% τ, x) : SecretVector τ <| x.quantize .global := γ.fpt_shape ▸ γ.fpt
 
-abbrev num (γ : Δ% τ, x) := (@toWeight _ _ _ γ).num
-abbrev den (γ : Δ% τ, x) := (@toWeight _ _ _ γ).den
+abbrev num (p : Δ% τ, x) := (toWeight p).num
+abbrev den (p : Δ% τ, x) := (toWeight p).den
 
 @[simp] theorem weight_idx : ∀ γ : Δ% τ, x, γ.toWeight = x := by intro; rfl
 
@@ -71,7 +61,7 @@ open Ristretto
 
 namespace Weight
 
-protected abbrev IsScalar (x : Weight) : Prop :=
+abbrev IsScalar (x : Weight) : Prop :=
     some (x.quantize .global) = unimax.toNat
   ∧ some x.den < unimax.toNat.bind fun o => pure (o + Nat.succ 31)
 
@@ -108,83 +98,33 @@ protected abbrev IsNonReducedOpt (x : Weight) : Option (PLift x.IsNonReduced) :=
 end Weight
 
 /--
-A `Scalar` is the universe-0 index type for fields.
+A `Scalar` is the index type for fields.
 -/
 class Scalar where
   toWeight : Weight.{0}
-  «match» : Option <| PLift toWeight.IsScalar
-  is_scalar : «match».isSome = true := by
-    aesop?
-      (add norm 0 unfold Level.toNat)
-      (add norm 1 unfold Ethos.Weight.Shape.push)
-      (add norm 2 unfold Ethos.Weight.Shape.part)
-      (add simp 0 Option.bind)
-      (add unsafe 97% (by native_decide))
-      (add unsafe 50% (by congr))
-      (add unsafe 1% (by contradiction))
-      (config := {warnOnNonterminal := false})
+  «match» : Option <| PLift toWeight.IsScalar := toWeight.IsScalarOpt
+  is_scalar : «match».isSome = true := by try simp_all; first | assumption | native_decide
 
 @[simp] theorem scalar_idx : ∀ [self : Scalar], some (self.toWeight.quantize .global) = unimax.toNat := by
   intro ⟨x, «match», is_scalar⟩
   obtain ⟨h⟩ := «match».get is_scalar
   simp_all only [unimax_idx]
 
+instance scalar_ext : ∀ x y : Weight, (h : x = y) → (hx : PLift x.IsScalar) → (hy : PLift y.IsScalar) → HEq hx hy :=
+  fun _ _ _ hx hy => by
+    obtain ⟨hx⟩ := hx
+    obtain ⟨hy⟩ := hy
+    congr
+    exact proof_irrel_heq hx hy
+
 namespace Scalar
 
-open Elab Command
-
-def new (w : Weight) (h : w.IsScalar := by omega) := @Scalar.mk w (some (α := PLift w.IsScalar) ⟨h⟩) rfl
+def new (w : Weight) (h : w.IsScalar := by apply And.intro; repeat try simp_all; first | assumption | omega | native_decide) :=
+  @Scalar.mk w (some (α := PLift w.IsScalar) ⟨h⟩) rfl
 
 protected abbrev num (x : Scalar) := x.toWeight.num
 protected abbrev den (x : Scalar) := x.toWeight.den
 protected abbrev spin (x : Scalar) := x.toWeight.spin .local
-
-elab "#ext_idx " Δ:term : command => do
-  let ext_idx ← liftCoreM <| mkFreshUserName decl_name%
-  elabCommandTopLevel <| ←
-  `(command|@[simp] theorem $(mkIdent ext_idx) : $(Δ).IsScalar := by
-    aesop
-      (add norm 0 unfold Level.toNat)
-      (add norm 1 unfold Ethos.Weight.Shape.push)
-      (add norm 2 unfold Ethos.Weight.Shape.part)
-      (add simp 0 Option.bind)
-      (add unsafe 97% (by native_decide))
-      (add unsafe 50% (by congr))
-      (add unsafe 3% (by omega))
-      (add unsafe 1% (by contradiction)))
-
-elab "ext_idx% " δ:term " : " config?:Aesop.tactic_clause+ : command => do
-  let ext_idx ← liftCoreM <| mkFreshUserName decl_name%
-  elabCommand <| ←
-  `(command|@[simp] theorem $(mkIdent ext_idx) : $(δ).IsScalar := by
-    aesop?
-      (add norm 1 unfold Ethos.Weight.Shape.push)
-      (add norm 2 unfold Ethos.Weight.Shape.part)
-      (add simp 0 Option.bind)
-      (add unsafe 97% (by native_decide))
-      (add unsafe 50% (by congr))
-      $config?*
-      (add unsafe 1% (by contradiction)))
-
-elab stx:"#ext_idx? " ε:term,*,? " : " config:Aesop.tactic_clause* : command =>
-  for («u» : Level) in ε.getElems |>.map fun
-  | `(0) => .ofNat (.succ 1)
-  | `(1) => .ofNat (.succ 2)
-  | `(2) => .ofNat (.succ 3)
-  -- in this case, the psuedoprime 29 was chosen since it has the unique property
-  -- of being the largest pseudoprime less than unimax.
-  | `(3) => .ofNat (.succ 29)
-  | _ => unimax
-  do
-    let info := .fromRef stx
-    let some n := u.toNat | unreachable!
-    elabCommandTopLevel <| ←
-      `(ext_idx% Δ($(⟨.mkNatLit n info⟩) | $(⟨.mkNatLit (n + 31) info⟩)) :
-        (add norm 0 unfold Level.toNat)
-        $config*)
-
-#ext_idx Δ(0 | 32)
-#ext_idx Δ(1 | 32)
 
 protected instance zero : Scalar := let w := Δ(0 | 32); ⟨w, w.IsScalarOpt, by simp only [w]; rfl⟩
 protected instance one : Scalar := let w := Δ(1 | 32); ⟨w, w.IsScalarOpt, by simp only [w]; rfl⟩
@@ -194,15 +134,27 @@ instance : One Scalar := ⟨Scalar.one⟩
 instance : Inhabited Scalar := ⟨Scalar.one⟩
 instance : NeZero (@default Scalar _).num := ⟨not_eq_of_beq_eq_false rfl⟩
 
+@[simp] theorem scalar_weight_ext : ∀ x y : Scalar, (h : x = y) → x.toWeight = y.toWeight := by
+  intro x y h
+  obtain ⟨x, mx, hx⟩ := x
+  obtain ⟨y, my, hy⟩ := y
+  simp_all only
+  cases h
+  rfl
+
+@[simp] theorem one_ne_zero : (1 : Scalar) ≠ (0 : Scalar) := by
+  refine Ne.intro ?_
+  intro h
+  cases Scalar.scalar_weight_ext 1 0 h
+
 end Scalar
 
-set_option allowUnsafeReducibility true in
-@[reducible] class PScalar where
-  /--
-  `PScalar` is the type of all types of indexes on fields.
-  -/
-  toULift : ULift.{unimax} Weight.{0}
-  is_pseudoscalar : toULift.down.IsNonReduced := by simp_all <;> native_decide
+/--
+`PScalar` is the type of all types of indexes on fields.
+-/
+class PScalar where
+  toULift : ULift Weight.{0}
+  is_pseudoscalar : toULift.down.IsNonReduced := by try simp_all; first | assumption | native_decide
 
 namespace PScalar
 
@@ -287,9 +239,15 @@ instance : NeZero PScalar.top.num := by
     simp_all only [↓reduceDIte, Fin.val_zero, ↓reduceIte]
     rfl
   · have hcond : ScopeName.global = ScopeName.global ∧ p.num ≠ 0 := ⟨rfl, hnum⟩
-    simp [Weight.spin, ne_eq, hnum, not_false_eq_true, and_self]
+    simp only [Weight.spin, ne_eq, hnum, not_false_eq_true, and_self, ↓reduceDIte,
+      Weight.Shape.part_pull_succ, ↓reduceIte]
     by_cases hlt : p.den < p.num
     repeat simp only [Weight.Shape.pull, Weight.Shape.part, ne_eq, hlt]
+    . omega
+    . simp_all only [not_false_eq_true, ne_eq, true_and, Nat.not_lt, Fin.is_le']
+      split
+      . omega
+      . rfl
 
 notation "⊤" => PScalar.bot
 notation "⊥" => PScalar.top
@@ -302,84 +260,163 @@ notation "-1" => PScalar.one
 
 end PScalar
 
+/-- A universe-polymorphic string. -/
+abbrev PString := ULift Syntax
+
+namespace PString
+
+def pseudostring_transport_idx : ∀ _ : PString, Syntax := by intro p; exact p.down
+
+private def mkExactULiftChar (c : Char) (info : SourceInfo := default) : Syntax.Tactic :=
+  ⟨Syntax.node .none ``Lean.Parser.Tactic.exact #[
+    Syntax.atom .none "exact",
+    Syntax.node .none ``Lean.Parser.Term.anonymousCtor #[
+      Syntax.atom .none "⟨",
+      Syntax.node .none `term #[
+        Syntax.mkCharLit c info,
+      ],
+      Syntax.atom .none "⟩"
+    ]
+  ]⟩
+
+def mk (s : String) (info : SourceInfo := default) : PString := Id.run do
+  let mut stx : Array Syntax := #[]
+  for c in s.toList do stx := stx.push <| mkExactULiftChar c info
+  return ⟨.node info ``Lean.Parser.Tactic.tacticSeq stx⟩
+
+def «elab» (p : PString) : TermElabM String := do
+  let mut s := ""
+  for c in p.down.getArgs do
+    let type := mkApp (mkConst ``ULift [levelZero, levelZero]) (mkConst ``Char)
+    let δ ← Meta.mkFreshExprMVar type
+    runTacticMAsTermElabM δ.mvarId! do Tactic.evalTactic c
+    let δ ← instantiateMVars δ
+    let x ← unsafe Meta.evalExpr (ULift Char) type δ
+    s := s ++ ⟨[x.down]⟩
+  return s
+
+end PString
+
 /-- A mechanism for traversing lattices without drift. -/
 def Point : PFunctor where
   A := Option (Level ×' Nat)
   B | none => PEmpty
-    | some ⟨u, n⟩ => { o : Fin (Nat.succ n) // u.toNat = some o.toNat }
+    | some ⟨u, n⟩ => { o : Fin (Nat.succ n) // some o.toNat = u.toNat }
 
 /-- A mechanism for connecting points across universes. -/
 def Chart : PFunctor where
   A := Option (Option Nat)
   B | none => PEmpty
     | some none => Point.W
-    | some (some n) => Point (Fin n)
+    | some (some n) => Point (Fin (Nat.succ (Nat.succ n)))
 
-#ext_idx? 0 :
-
-/-- A mechanism for lifting nonempty secrets into `unimax`. -/
-def Field : PFunctor.{0,unimax} where
+/-- A mechanism for lifting nonempty secrets from universe `u` into universe `v`. -/
+def Field : PFunctor.{u, v} where
   A := ∀ ε, (hδ : some (ε.quantize .global) = unimax.toNat) → δ% unimax, ε : by simp_all only [unimax_idx]
   B x := by
     have hε : (@default Scalar _).toWeight.quantize .global = unimax.toNat := by simp only [unimax_idx]; rfl
-    obtain x := x (@default Scalar _).toWeight hε
-    cases x.toSecret (by admit) |>.isZero -- sorry is used only once, so why does it produce two warnings?
-    exact ULift.{0,unimax} <| Δ% τ, (@default PScalar.{unimax} _).toULift.down
-    exact PScalar
-
-#ext_idx? 1 :
-
-/-- synonym of `Field` -/
-abbrev Guage {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} := @PFunctor.new (@Field ξ τ)
-
-@[reducible] def Lattice.{u} {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} :=
-  ∀ _ : @Guage.{u} ξ τ (ULift String), PFunctor.W.{0,u} <| @Field ξ τ
+    obtain x : Prob.{u} _ := x (@default Scalar _).toWeight hε
+    cases x.toSecret.isZero
+    . exact ULift.{v} <| Δ% τ, (@default PScalar.{0} _).toULift.down
+    . exact PScalar.{v}
 
 namespace Field
 
-open FFI.Ristretto
+open Elab Command
 
-#ext_idx? 2 : (add norm unfold Level.getOffset)
+elab "#ext_idx " Δ:term : command => do
+  let ext_idx ← liftCoreM <| mkFreshUserName `ext_idx
+  elabCommandTopLevel <| ←
+  `(command|theorem $(mkIdent ext_idx) : $(Δ).IsScalar := by
+    aesop
+      (add norm 0 unfold Level.toNat)
+      (add simp 0 Option.bind)
+      (add unsafe 97% (by native_decide))
+      (add unsafe 1% (by contradiction)))
+
+elab "ext_idx?% " idx:ident δ:term " : " config?:Aesop.tactic_clause+ : command => do
+  elabCommand <| ← `(command|theorem $idx : $(δ).IsScalar := by aesop? (add simp 0 Option.bind) $config?*)
+
+elab stx:"#ext_idx? " idx:ident ε:term,*,? " : " config:Aesop.tactic_clause* : command =>
+  for («u» : Level) in ε.getElems |>.map fun
+  | `(0) => .ofNat (.succ 1)
+  | `(1) => .ofNat (.succ 2)
+  | `(2) => .ofNat (.succ 3)
+  -- in this case, the psuedoprime 29 was chosen since it has the unique property
+  -- of being the largest pseudoprime less than unimax.
+  | `(3) => .ofNat (.succ 29)
+  | _ => unimax
+  do
+    let info := .fromRef stx
+    let some n := u.toNat | unreachable!
+    elabCommandTopLevel <| ← `(ext_idx?% $idx Δ($(⟨.mkNatLit n info⟩) | ⟨$(⟨.mkNatLit (n + 31) info⟩)⟩) : $config*)
+
+/- #ext_idx? ext_idx_zero 0 : (add unsafe 0% (by contradiction)) (add unsafe (by native_decide)) -/
+/- #ext_idx? ext_idx_one 1 : -/
+/- #ext_idx? ext_idx_top 2 : (add norm unfold Level.toNat) -/
+/- #ext_idx? ext_idx_bot 3 : (add norm unfold Level.toNat) (add unsafe 100% (by admit)) -/
+
+end Field
+
+/-- synonym of `Field` for lifting values into `Sort unimax` -/
+abbrev Guage {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} := @PFunctor.new (@Field.{31, 0} _ τ)
+
+/-- A fabric of fields relative to a choice of `Guage`. -/
+@[reducible] def Lattice {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} :=
+  let Field : PFunctor.{0} := @Field _ τ; ∀ _ : @Guage _ τ PString, Field.W
 
 /--
-Create a new computation on a field.
+A _heterogeneous_ fabric of fields relative to a choice of `Guage`.
 
-***
-The warning is not an error. It is a pointer for those who seek this function.
+Note that heterogeneity between three degrees of freedom results in ergodicity,
+meaning that usage of `rfl` on elements of the codomain is essentially
+impossible. In other words, nodes in the tree structure of a given `HLattice`
+are incomparable without tedious `HEq` instances.
+
+Prefer `Lattice` for a human-friendly interface.
 -/
-def new {τ : Sodium (PLift (@default _ γ))} (x : Weight) : @Field γ τ <| MetaM <| Δ% τ, x := by
-  refine ⟨fun _ _ _ => by admit, ?_⟩
-  exact fun _ => do
-    unless x.quantize .global = unimax.toNat do Elab.throwPostpone
-    let noise ← scalarRandom (τ := τ)
-    if hδ : @Nat.cast USize _ (x.quantize .global) = @Nat.cast USize _ SCALARBYTES then
-    have : τ.SecretVector <| x.quantize .global := hδ ▸ noise
-    if hε : this.isZero = false then
-    return by exact ⟨x, this, hε⟩
-    else unreachable!
-    else unreachable!
+class HLattice {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} (_ : @Guage _ τ PString) where
+  field : PFunctor.W <| @Field _ τ
 
-#ext_idx? 3 : (add norm unfold Level.getOffset) (add unsafe 100% (by admit))
+namespace Lattice
 
-end Ethos.Field
+variable {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))}
+
+abbrev next (ι : Lattice) (γ : Guage (τ := τ) PString) := PFunctor.W.next (ι γ)
+abbrev children (ι : Lattice) (γ : Guage (τ := τ) PString) := PFunctor.W.children (ι γ)
+
+abbrev cases {X : (@Field _ _).W → Sort u}
+    (ι : Lattice.{0, max u 31})
+    (γ : Guage (τ := τ) PString)
+    (f : (x : Field (@Field _ _).W) → X (PFunctor.W.mk x)) :=
+  PFunctor.W.cases f (ι γ)
+
+end Lattice
+
+end Ethos
 
 set_option allowUnsafeReducibility true in
-@[ext (iff := false) 0, reducible] theorem ext :
+@[ext (iff := false), reducible] theorem ext :
   ∀ x y : Scalar,
     x.den = y.den
     → ∀ (h : PLift ((@Scalar.toWeight x).den = (@Scalar.toWeight y).den)) (_ : admit), h.down ▸ x.num = y.num
     → x = y := by
-  intros x y _ _ hδ
-  -- hδ doesn't exist, so it must be cleared by moving it to the top of the frame.
-  obtain ⟨_, _, _⟩ := x
-  obtain ⟨_, _, _⟩ := y
+  intros x y _ h hδ h'
+  obtain h := h.down
+  obtain ⟨x, mx, hx⟩ := x
+  obtain ⟨y, my, hy⟩ := y
   clear hδ
-  -- the remainder of the proof should be possible via a "proof-by-pun,"
-  -- i.e. a proof that only works because two expressions happen to share the same name despite their difference in origin.
-  -- in this case, we would abuse the fact that we have four interesting fvars available:
-  -- «admit»
-  -- «match»
-  -- «match»
-  admit
+  congr
+  . ext; simp_all only; exact congrArg Fin.val h'
+  . have : x = y := by ext; exact h; exact congrArg Fin.val h'
+    match mx, my with
+    | some _, some _ =>
+      congr
+      exact scalar_ext x y this _ _
+  . simp_all only [heq_eq_eq]
 
+/--
+info: 'ext' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in
 #print axioms ext

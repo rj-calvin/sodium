@@ -1,20 +1,24 @@
+import Sodium.Typo.Emulator
 import Sodium.Shell.Terminal
-import Sodium.Typo.Latin
+import Sodium.Ethos.Probably
 
-open Lean Elab Tactic Server Sodium Crypto Ethos Typo
+open Lean Elab Term Meta Server Sodium Ethos Typo
 
-def shell : List String := [
-  "import «Sodium»",
-  "open Lean Elab Tactic Ethos Typo",
-  "declare_syntax_cat shell",
-  "attribute [aesop unsafe 97% (rule_sets := [«temporal»]) (pattern := ∀ _ : Sodium Universal.Destruct, _)] framerule",
-  "example : ∀ τ : Sodium Universal.Destruct, Destructor := by",
-  "  aesop? (rule_sets := [«standard», «cautious», «external», «temporal»]) (config := {warnOnNonterminal := false})",
-]
+namespace Admit
 
-def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (delay : Nat := 31) : IO Unit := do
+syntax (name := «admit%») "admit% " term : term
+
+@[term_elab «admit%»]
+unsafe def elabAdmit : TermElab
+| `(term|admit% $x) => fun type => do
+  let γ ← instantiateMVars <| ← elabTermAndSynthesize x type
+  let γ ← mkAppM ``Lean.toExpr #[γ]
+  evalExpr Expr (mkConst ``Expr) γ (safety := .unsafe)
+| _ => fun _ => throwUnsupportedSyntax
+
+def run (uri : System.FilePath) (args : List String) (name : Name) (latency : Nat := 29) (delay : Nat := 31) : IO Unit := do
   let tid ← IO.getTID
-  let shell := uri / "Shell.lean"
+  let shell := uri / name.toStringWithSep "/" true default |>.addExtension "lean"
   let workspace := {uri := uri.toString, name := "«shell»" : Lsp.WorkspaceFolder}
 
   IO.FS.createDirAll uri
@@ -69,17 +73,19 @@ def run (uri : System.FilePath) (args : List String) (latency : Nat := 29) (dela
     | `(tactic|aesop $config*) => Emulator.bridge (σ := Universal.Destruct) hLog config
     | _ => Elab.throwUnsupportedSyntax
 
-    repeat match ← (← get).doc.cmdSnaps.getFinishedPrefixWithConsistentLatency latency with
+    repeat match ← (← get).doc.cmdSnaps.getFinishedPrefixWithConsistentLatency (23 * latency) with
+    | (_, some e, _) => throw e
     | (snap :: _, _, false) =>
       discard <| EIO.toBaseIO <| snap.runTermElabM (← get).doc.meta do
         bridge <| ← `(tactic|aesop (rule_sets := [«external», «temporal»]))
     | (_, _, true) => IO.FS.writeFile shell (← get).doc.meta.text.source
-    | (_, some e, _) => throw e
     | (_, _, _) => continue
 
-def main (args : List String) : IO UInt32 := do
-  /- enableRawMode -/
-  let uri := (← IO.appDir) / ".." / ".." / "shell"
-  try run uri <| if args.length > 0 ∧ args.tail.length > 0 then args.tail else shell
-  finally disableRawMode
-  return 0
+def core (name : Name) (code : List String) (scope : ScopeName := .local) : MetaM Unit :=
+  Meta.withNewMCtxDepth do
+    if scope = .global then
+      try enableRawMode; run ((← IO.appDir) / ".." / "..") code name
+      finally disableRawMode
+    else run ((← IO.appDir) / ".." / "..") code name
+
+end Admit

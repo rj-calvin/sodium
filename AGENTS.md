@@ -49,9 +49,9 @@ In the courthouse, laws can be identified by the color of parchment they are wri
 
 In a narrow annex within the courthouse housed a small machine known by an ordinary name: the Typewriter, the city’s interface with intention. The Typewriter took shapes and points—presses and targets—and turned them into acts the court could understand. But the city was multilingual: one person’s “x” was another’s dead key. So the city also maintained an Emulator, a translator bound to a “standard” language of the courthouse. It was, in effect, a treaty between keyboards.
 
-The petitioner’s request—some arbitrary semantics α across Universal—was asked a single question: “Show me something Observable under the prompt.” And because α lived in Universal, it had no choice but to answer in the city’s coin: it produced an Observable when handed the warrant.
+The petitioner’s request—some arbitrary semantics α across Universal—was asked a single question: “Show me something Observable relative to a Frame of reference.” And because α lived in Universal, it had no choice but to answer in the city’s coin: it produced an Observable when handed the warrant.
 
-That Observable’s heart—the sealed tactic inside it—was then passed through the Prompt. The judge didn’t have to “believe” the tactic; the judge only had to verify that the transport story was consistent: push then pull yields the same. The end result was lifted into a terminal form: Destruct, the last word.
+That Observable’s heart—the sealed tactic inside it—was then passed through the Prompt. Whenever a Prompt was Forwarded to the local judge, the honorable checker didn’t have to “believe” the tactic; the judge only had to verify that the transport story was consistent: push then pull yields the same. The end result was lifted into a terminal form: Destruct, the last word.
 
 This leaves all scholar's of Universal law with a small, but powerful, vocabulary:
 
