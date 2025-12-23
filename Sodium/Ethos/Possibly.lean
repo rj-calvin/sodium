@@ -11,13 +11,10 @@ variable ⦃γ : Inhabited Prop⦄ {τ : Sodium (PLift (@default Prop γ))}
 /-- A point on Curve25519 relative to `x : Weight`. -/
 structure Prob (x : Weight.{0}) extends Weight where
   fpt : SecretVector τ (@Weight.quantize toPSigma .local)
-  fpt_shape : x.quantize .global = @Weight.quantize toPSigma .local := by
-    first | assumption | simp_all | contradiction | omega | native_decide
+  fpt_shape : x.quantize .global = @Weight.quantize toPSigma .local
 
 namespace Prob
 set_option quotPrecheck false
-
-open FFI.Ristretto
 
 notation "Δ% " τ ", " x => @Prob _ τ x
 
@@ -49,6 +46,7 @@ def unimax : Level := .ofNat BYTES
 @[simp] theorem unimax_idx : unimax = 32 := rfl
 @[simp] theorem unimax_pseudo_idx : @some Nat (Nat.succ 31) = unimax.toNat := rfl
 @[simp] theorem unimax_partial_idx : @some Nat 64 = unimax.toNat.bind fun o => pure <| o + Nat.succ 31 := rfl
+@[simp] theorem unimax_match_idx : unimax.toNat.isSome = true := by unfold Level.toNat; rfl
 
 @[simp] theorem bytes_lvl : BYTES = SCALARBYTES := rfl
 @[simp] theorem scalarbytes_lvl : SCALARBYTES = unimax.toNat := rfl
@@ -62,8 +60,7 @@ open Ristretto
 namespace Weight
 
 abbrev IsScalar (x : Weight) : Prop :=
-    some (x.quantize .global) = unimax.toNat
-  ∧ some x.den < unimax.toNat.bind fun o => pure (o + Nat.succ 31)
+  some (x.quantize .global) = unimax.toNat ∧ some x.den < unimax.toNat.bind fun o => pure <| o + Nat.succ 31
 
 @[reducible] protected def IsScalarOpt (x : Weight) : Option (PLift x.IsScalar) :=
   if u : some (x.quantize .global) = unimax.toNat then
@@ -101,7 +98,7 @@ end Weight
 class Scalar where
   toWeight : Weight.{0}
   «match» : Option <| PLift toWeight.IsScalar := toWeight.IsScalarOpt
-  is_scalar : «match».isSome = true := by try simp_all; first | assumption | native_decide
+  is_scalar : «match».isSome = true := by unfold Weight.IsScalarOpt; try simp_all; first | assumption | native_decide
 
 @[simp] theorem scalar_idx : ∀ [self : Scalar], some (self.toWeight.quantize .global) = unimax.toNat := by
   intro ⟨x, «match», is_scalar⟩
@@ -117,7 +114,7 @@ instance scalar_ext : ∀ x y : Weight, (h : x = y) → (hx : PLift x.IsScalar) 
 
 namespace Scalar
 
-def new (w : Weight) (h : w.IsScalar := by apply And.intro; repeat try simp_all; first | assumption | omega | native_decide) :=
+def new (w : Weight) (h : w.IsScalar := by aesop) :=
   @Scalar.mk w (some (α := PLift w.IsScalar) ⟨h⟩) rfl
 
 protected abbrev num (x : Scalar) := x.toWeight.num
@@ -154,9 +151,9 @@ class PScalar where
 
 namespace PScalar
 
+protected instance bot : PScalar := {toULift := ⟨64, ⟨Nat.succ 29, by omega⟩⟩}
 protected instance zero : PScalar := {toULift := ⟨64, ⟨Nat.succ 1, by omega⟩⟩}
 protected instance one : PScalar := {toULift := ⟨64, ⟨Nat.succ 0, by omega⟩⟩}
-protected instance bot : PScalar := {toULift := ⟨64, ⟨Nat.succ 29, by omega⟩⟩}
 protected instance top : PScalar := {toULift := ⟨64, ⟨Nat.succ 31, by omega⟩⟩}
 
 protected abbrev num (p : PScalar) := p.toULift.down.num
@@ -230,16 +227,13 @@ instance : NeZero PScalar.top.num := by
   simp only [Nat.succ_eq_add_one]
   by_cases hnum : p.num = 0
   · have hpos : 0 < p.den := Nat.pos_of_neZero _
-    simp only [Weight.spin, Weight.Shape.pull, ne_eq, true_and, Weight.Shape.push, dite_not,
-      Nat.succ_eq_add_one]
+    simp only [Weight.spin, Weight.Shape.pull, ne_eq, true_and, Weight.Shape.push, dite_not, Nat.succ_eq_add_one]
     simp_all only [↓reduceDIte, Fin.val_zero, ↓reduceIte]
     rfl
-  · have hcond : ScopeName.global = ScopeName.global ∧ p.num ≠ 0 := ⟨rfl, hnum⟩
-    simp only [Weight.spin, ne_eq, hnum, not_false_eq_true, and_self, ↓reduceDIte,
-      Weight.Shape.part_pull_succ, ↓reduceIte]
+  · simp only [Weight.spin, ne_eq, hnum, not_false_eq_true, and_self, ↓reduceDIte, Weight.Shape.part_pull_succ, ↓reduceIte]
     by_cases hlt : p.den < p.num
-    repeat simp only [Weight.Shape.pull, Weight.Shape.part, ne_eq, hlt]
-    . omega
+    . simp only [Weight.Shape.pull, Weight.Shape.part, ne_eq, hlt]
+      omega
     . simp_all only [not_false_eq_true, ne_eq, true_and, Nat.not_lt, Fin.is_le']
       split
       . omega
@@ -320,22 +314,13 @@ namespace Field
 
 open Elab Command
 
-elab "#ext_idx " Δ:term : command => do
-  let ext_idx ← liftCoreM <| mkFreshUserName `ext_idx
-  elabCommandTopLevel <| ←
-  `(command|theorem $(mkIdent ext_idx) : $(Δ).IsScalar := by
-    aesop?
-      (add norm 0 unfold Level.toNat)
-      (add simp 0 Option.bind)
-      (add unsafe 97% (by native_decide))
-      (add unsafe 1% (by contradiction)))
-
-elab "#ext_idx? " idx:ident δ:term " : " config?:Aesop.tactic_clause+ : command => do
+elab "#ext_idx? " idx:ident δ:term " : " config:Aesop.tactic_clause+ : command => do
   elabCommand <| ← `(command|theorem $idx : $δ := by
     aesop?
       (add norm 0 unfold Level.toNat)
       (add simp 0 Option.bind)
-      $config?*)
+      (add unsafe 0% (pattern := False) (by contradiction))
+      $config*)
 
 /--
 info: Try this:
@@ -363,7 +348,7 @@ info: Try this:
       next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
 -/
 #guard_msgs in
-#ext_idx? ext_idx_bot Δ(0 | 32).IsScalar : (add unsafe 97% (by native_decide)) (add unsafe 1% (by contradiction))
+#ext_idx? ext_idx_bot Δ(0 | 32).IsScalar : (add unsafe (by native_decide))
 
 /--
 info: Try this:
@@ -392,7 +377,7 @@ info: Try this:
       next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
 -/
 #guard_msgs in
-#ext_idx? ext_idx_top Δ(1 | 32).IsScalar : (add unsafe 97% (by native_decide)) (add unsafe 1% (by contradiction))
+#ext_idx? ext_idx_top Δ(1 | 32).IsScalar : (add unsafe (by native_decide))
 
 /--
 info: Try this:
@@ -454,7 +439,14 @@ info: Try this:
 #guard_msgs(info, drop warning) in
 #ext_idx? ext_idx_two Δ(3 | 34).IsScalar : (add norm 0 unfold Level.getOffset) (add unsafe 100% (by admit))
 
-theorem ext_idx_three : Δ(31 | 62).IsScalar := by
+/--
+An example index. Specifically, the index corresponding to the largest universe
+less than `unimax`.
+
+Included for pedagogical reasons; namely, to provide the opportunity to step
+through the index to understand the flow of information through it.
+-/
+theorem ext_idx_three : Δ(32 | 63).IsScalar := by
   apply And.intro
   · unfold Lean.Level.toNat
     unfold Lean.Level.getOffset
@@ -496,9 +488,8 @@ abbrev Guage {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} := @PFu
 A _heterogeneous_ fabric of fields relative to a choice of `Guage`.
 
 Note that heterogeneity between three degrees of freedom results in ergodicity,
-meaning that usage of `rfl` on elements of the codomain is essentially
-impossible. In other words, nodes in the tree structure of a given `HLattice`
-are incomparable without tedious `HEq` instances.
+meaning that proof termination requires tedious (and perhaps an explosive
+number of) `HEq` instances.
 
 Prefer `Lattice` for a human-friendly interface.
 -/

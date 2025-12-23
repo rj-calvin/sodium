@@ -1,8 +1,6 @@
 import Aesop
 import Sodium.Data.Encodable.Basic
 
-universe u v
-
 namespace Ethos
 
 export Aesop (ScopeName)
@@ -11,9 +9,7 @@ deriving instance DecidableEq for ScopeName
 
 attribute [aesop unsafe 50% cases constructors] ScopeName
 
-/--
-An abstract, universe-polymorphic quantization of units.
--/
+/-- An abstract, universe-polymorphic quantization of units. -/
 def Weight := Σ' n, ULift (Fin n)
 
 def Weight.mk (n₁ : Nat) (n₂ : Nat) (h : n₁ < n₂) : Weight :=
@@ -97,7 +93,7 @@ def Shape.pull (x : Shape) : Weight :=
   else Δ(n₂ | n₁.succ)
 
 @[simp]
-theorem Shape.push_pull_eq.{u_1} : ∀ x : Weight.{u_1}, Shape.pull (Shape.push x) = ⟨x.den, ⟨x.num⟩⟩ := by
+theorem Shape.push_pull_eq : ∀ x : Weight, Shape.pull (Shape.push x) = ⟨x.den, ⟨x.num⟩⟩ := by
   intro x
   unfold push pull
   simp only [Fin.is_lt, reduceDIte, mk_num_den]
@@ -219,7 +215,7 @@ theorem quantize_global_partial_eq : ∀ x : Weight, x.num ≠ 0 → x.quantize 
   omega
 
 /-- Given any global weight `x` in universe `u`, there exists a local weight `y` in universe `v`. -/
-theorem quantize_relativity : ∀ x : Weight, ∃ y : Weight, Weight.quantize.{u} x .global = Weight.quantize.{v} y .local := by
+theorem quantize_relativity.{v, u} : ∀ x : Weight, ∃ y : Weight, Weight.quantize.{u} x .global = Weight.quantize.{v} y .local := by
   intro x
   by_cases h : x.num = 0
   . simp_all only [quantize_global_reduced_eq, quantize_local_eq]

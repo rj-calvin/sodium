@@ -145,9 +145,7 @@ export Aesop (
   BuilderName
 )
 
-/--
-A proof-carrying object.
--/
+/-- A proof-carrying object. -/
 structure Observable extends Weight.{0} where
   private mk ::
   phase : PhaseName := default
@@ -267,18 +265,14 @@ abbrev Suggestion := String × Float
 def Observable.toSuggestion (o : Observable) : Suggestion :=
   (toString o.carrier.val.raw.prettyPrint, o.toWeight)
 
-/--
-A `Universal` is a mechanism for associating semantics to instances of `Observable`.
--/
+/-- A `Universal` is a mechanism for associating semantics to instances of `Observable`. -/
 def Universal : PFunctor where
   A := Prop
   B := fun h => (_ : h) → Observable
 
 namespace Universal
 
-/--
-The default proposition that JSON encodings of `Observable` round-trip correctly.
--/
+/-- The default proposition that JSON encodings of `Observable` round-trip correctly. -/
 protected instance prompt.{u_1} : Inhabited Universal.A where
   default :=
       ∀ x : Weight.{u_1}, decode? (encode x) = some x
@@ -298,9 +292,7 @@ theorem universal_default_idx : Universal.B default = (@default Universal.A Univ
   unfold Universal.prompt
   simp only [Encodable.encodek, implies_true, and_self]
 
-/--
-The level-matrix representing all inhabitation clauses of the `Universal` functor.
--/
+/-- The level-matrix representing all inhabitation clauses of the `Universal` functor. -/
 @[reducible]
 protected def Prompt (u : Level := levelZero) (v : Level := levelOne) : Expr :=
   mkApp (mkConst ``Inhabited) (mkApp (mkConst ``PFunctor.A [u, v]) (mkConst ``Universal [u]))
@@ -328,10 +320,10 @@ protected def Destruct := PLift (∀ (o : Observable), (Observable.Shape.push o)
 namespace Destruct
 
 def Shape.push (_ : Universal.Destruct) : String :=
-  "exact ⟨∀ (o : Sodium.Ethos.Observable.{0}), (Sodium.Ethos.Observable.Shape.push o).pull = o⟩"
+  "exact ⟨∀ (o : Sodium.Ethos.Observable), (Sodium.Ethos.Observable.Shape.push o).pull = o⟩"
 
 def Shape.pull : String → Option Universal.Destruct
-| "exact ⟨∀ (o : Sodium.Ethos.Observable.{0}), (Sodium.Ethos.Observable.Shape.push o).pull = o⟩" => some ⟨by intro; rfl⟩
+| "exact ⟨∀ (o : Sodium.Ethos.Observable), (Sodium.Ethos.Observable.Shape.push o).pull = o⟩" => some ⟨by intro; rfl⟩
 | _ => none
 
 instance encodable : Encodable Universal.Destruct :=
@@ -344,7 +336,7 @@ protected def map {α β} := @PFunctor.map α β Universal
 
 end Universal
 
-def mkFreshDelta (u : Level := levelZero) (v : Level := levelZero) : MetaM Expr :=
+def mkFreshDelta (u v : Level := levelZero) : MetaM Expr :=
   Meta.mkFreshExprMVar (Universal.Prompt u v)
 
 protected def Observable.observe {α} (o : Observable) (u : Universal α) := u.2 fun _ => o
@@ -389,7 +381,7 @@ namespace Witness
 variable {τ : Sodium σ}
 
 def mk (o : Observable) : Witness τ :=
-  ⟨default, fun _ : Universal.B (@default.{1} _ Universal.prompt.{0}) => pure o⟩
+  ⟨@default _ Universal.prompt.{0}, fun _ => pure o⟩
 
 def emit (io : IO.FS.Stream) (o : Observable) (method : String := "$/witness") (α : Witness τ) : CryptoM τ PUnit := do
   (← o.observe α).emit io method

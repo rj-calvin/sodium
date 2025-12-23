@@ -49,16 +49,17 @@ In the courthouse, laws can be identified by the color of parchment they are wri
 
 In a narrow annex within the courthouse housed a small machine known by an ordinary name: the Typewriter, the city’s interface with intention. The Typewriter took shapes and points—presses and targets—and turned them into acts the court could understand. But the city was multilingual: one person’s “x” was another’s dead key. So the city also maintained an Emulator, a translator bound to a “standard” language of the courthouse. It was, in effect, a treaty between keyboards.
 
-The petitioner’s request—some arbitrary semantics α across Universal—was asked a single question: “Show me something Observable relative to a Frame of reference.” And because α lived in Universal, it had no choice but to answer in the city’s coin: it produced an Observable when handed the warrant.
+The petitioner’s request—a contract between two colleagues, both written in Universal and signed in Universal—was asked a single question upon receipt: “Show me something Observable relative to a Frame of reference.” And because the contract was both written in Universal and sent through Universal, it had no choice but to be stamped in the city’s coinage that bears its Weight.
 
 That Observable’s heart—the sealed tactic inside it—was then passed through the Prompt. Whenever a Prompt was Forwarded to the local judge, the honorable checker didn’t have to “believe” the tactic; the judge only had to verify that the transport story was consistent: push then pull yields the same. The end result was lifted into a terminal form: Destruct, the last word.
 
 This leaves all scholar's of Universal law with a small, but powerful, vocabulary:
 
-- **Observables** are acts with signatures and costs, known in text as a *proof-carrier*, or *proof-carrying object*.
+- **Observables** are acts with signatures and costs, known in the text as a *proof-carrier*, or *proof-carrying object*.
 - **Prompts** are explicit assumptions about what can be reified and recovered, known in the text as a *polynomial-lift*.
-- **Forward** is the non-negotiable transport invariant, known in the text as an *inhabitation clause.*
+- **Forward** is the non-negotiable transport invariant, known in the text as an *inhabitation clause*.
 - **Frames** are linear protocols, known in the text as *polynomial-functors*, a.k.a *mechanisms*.
-- **Destruction** is termination that doesn’t smuggle in new trust—only rearranges existing trust until it becomes final, known in text as a *W-type*.
+- **Destruction** is termination that doesn’t smuggle in new trust—only rearranges existing trust until it becomes final, known in the text as a *W-type*.
+- **Weight** is the mass of an object, known in the text as *weight*.
 
 And in the dutiful silence, the clerk Aesop filed the paperwork the way it always did in Universal: recording its observations into a sequence of steps that anyone could replay—provided they accepted the same prompt, paid the same weight, and verified the same seals.

@@ -1,6 +1,5 @@
 import Sodium.Typo.Emulator
 import Sodium.Shell.Terminal
-import Sodium.Ethos.Probably
 
 open Lean Elab Term Meta Server Sodium Ethos Typo
 

@@ -4,13 +4,13 @@ open Lean Elab Tactic Sodium Crypto Ethos
 
 declare_aesop_rule_sets [«external»] (default := false)
 
-attribute [aesop norm 0 unfold (rule_sets := [«standard»])]
+attribute [aesop norm unfold (rule_sets := [«standard»])]
   Universal.prompt
 
 attribute [aesop [unsafe 29% constructors (rule_sets := [«standard»]), safe cases (rule_sets := [«cautious»])]]
   MessageKind
 
-attribute [aesop safe 0 cases (rule_sets := [«standard», «cautious»])]
+attribute [aesop safe cases (rule_sets := [«standard», «cautious»])]
   Decrypt
 
 attribute [aesop norm unfold (rule_sets := [«cautious»])]
