@@ -121,7 +121,7 @@ def hashFinal (stream : @& HashStream) : ByteVector BYTES :=
   return output;
 
 alloy c extern "lean_crypto_generichash_blake2b_salt_personal"
-def hashCustom (n : Nat) (h : n ≥ BYTES_MIN ∧ n ≤ BYTES_MAX := by omega) (input : @& ByteArray)
+def hashCustom (n : Nat) (h : n ≥ BYTES_MIN ∧ n ≤ BYTES_MAX) (input : @& ByteArray)
     (salt : @& ByteVector SALTBYTES) (personal : @& ByteVector PERSONALBYTES)
     (key : Option (ByteVector KEYBYTES) := none) : ByteVector n :=
   size_t outlen_sz = lean_usize_of_nat(n);

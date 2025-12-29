@@ -61,6 +61,8 @@ theorem ext : ∀ x y : Weight, x.den = y.den → (∀ (h : x.den = y.den), h �
 @[coe]
 def toFloat (x : Weight) : Float := x.num.toNat.toFloat / x.den.toFloat
 
+abbrev Positive (x : Weight) : Prop := x.num ≠ 0
+
 instance : Coe Weight Float := ⟨toFloat⟩
 instance : ToString Weight := ⟨(·.toFloat.toString)⟩
 
@@ -68,9 +70,19 @@ instance : Repr Weight where
   reprPrec x
   | _ => f!"Δ({x.num}|{x.den})"
 
-abbrev Positive (x : Weight) : Prop := x.num ≠ 0
-
 instance (x : Weight) : x.Positive → NeZero x.num := fun h => { out := h }
+
+instance : Ord Weight where
+  compare x y := compare (x.num * y.den) (y.num * x.den)
+
+instance : LT Weight where
+  lt x y := compare x y = .lt
+
+instance : DecidableLT Weight := by
+  intro ⟨x_den, ⟨x_num, _⟩⟩ ⟨y_den, ⟨y_num, _⟩⟩
+  by_cases h : compare (x_num * y_den) (y_num * x_den) = .lt
+  . exact isTrue h
+  . exact isFalse h
 
 @[simp]
 theorem mk_num_pos : ∀ n m, NeZero n → (h : n < m) → Δ(n | m).num ≠ 0 := by
@@ -214,16 +226,24 @@ theorem quantize_global_partial_eq : ∀ x : Weight, x.num ≠ 0 → x.quantize 
   simp_all only [Shape.part_pull_succ, Nat.succ_eq_add_one, ne_eq, not_false_eq_true, and_self, ↓reduceDIte]
   omega
 
-/-- Given any global weight `x` in universe `u`, there exists a local weight `y` in universe `v`. -/
+def liftRelative.{v, u} : ∀ x : Weight, {y : Weight // Weight.quantize.{u} x .global = Weight.quantize.{v} y .local} := fun x => by
+  if x.num = 0 then
+    refine ⟨⟨x.den, ⟨0⟩⟩, ?_⟩
+    simp_all only [quantize_global_reduced_eq, quantize_local_eq]
+    rfl
+  else
+    refine ⟨⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩, ?_⟩
+    simp_all only [ne_eq, not_false_eq_true, quantize_global_partial_eq, Nat.succ_eq_add_one, quantize_local_eq]
+    rfl
+
+@[simp] theorem quantize_lift_relative_nonempty.{v, u} :
+    ∀ x : Weight, Nonempty {y : Weight // Weight.quantize.{u} x .global = Weight.quantize.{v} y .local} :=
+  (Nonempty.intro ·.liftRelative)
+
+/-- Given any global weight `x` in universe `u`, there exists a local weight `y` in universe `v` of equal measure. -/
 theorem quantize_relativity.{v, u} : ∀ x : Weight, ∃ y : Weight, Weight.quantize.{u} x .global = Weight.quantize.{v} y .local := by
   intro x
-  by_cases h : x.num = 0
-  . simp_all only [quantize_global_reduced_eq, quantize_local_eq]
-    exact ⟨⟨x.den, ⟨0⟩⟩, rfl⟩
-  . simp_all only [ne_eq, not_false_eq_true, quantize_global_partial_eq, quantize_local_eq]
-    refine ⟨⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩, ?_⟩
-    have h_den : den.{v} ⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩ = x.den + 1 := by rfl
-    have h_num : num.{v} ⟨x.den + 1, ⟨x.num.castLT (by omega)⟩⟩ = x.num.castLT (by omega) := by rfl
-    simp_all only [Fin.coe_castLT]
+  obtain ⟨y, hy⟩ := liftRelative.{v, u} x
+  exact ⟨y, hy⟩
 
 end Ethos.Weight

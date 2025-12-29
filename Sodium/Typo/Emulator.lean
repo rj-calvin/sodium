@@ -70,7 +70,7 @@ def quantize {τ : Sodium σ} (scope : ScopeName := .global) : Point → CryptoM
 
 structure _root_.IO.RealWorld.Point (τ : Sodium σ) where
   point : Typo.Point
-  witness : Witness τ := ⟨@default.{1} _ Universal.prompt.{0}, fun _ => point.quantize⟩
+  witness : Witness τ := ⟨@default _ Universal.prompt.{0}, fun _ => point.quantize⟩
 
 end Point
 

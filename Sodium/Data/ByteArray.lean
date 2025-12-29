@@ -42,7 +42,16 @@ instance : BEq ByteArray where
 
 instance : Ord ByteArray := ⟨compare⟩
 
+instance : LT ByteArray where
+  lt x y := compare x y == .lt
+
 deriving instance DecidableEq for ByteArray
+
+instance : DecidableLT ByteArray := by
+  intro x y
+  by_cases h : compare x y == .lt
+  . exact isTrue h
+  . exact isFalse h
 
 alloy c extern "lean_sodium_bin2base64"
 def toBase64 (buf : @& ByteArray) : String :=

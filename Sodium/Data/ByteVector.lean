@@ -151,6 +151,13 @@ instance : BEq (ByteVector n) where
   beq x y := compare x.toArray y.toArray == .eq
 
 instance : Ord (ByteVector n) := ⟨fun x y => compare x.toArray y.toArray⟩
+instance : LT (ByteVector n) := ⟨fun x y => x.toArray < y.toArray⟩
+
+instance : DecidableLT (ByteVector n) := by
+  intro x y
+  by_cases h : x.toArray < y.toArray
+  . exact isTrue h
+  . exact isFalse h
 
 end ByteVector
 

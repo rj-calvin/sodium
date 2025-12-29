@@ -2,34 +2,30 @@ import Sodium.Data.Encodable.WType
 import Sodium.Data.PFunctor
 import Sodium.Ethos.Weight
 import Sodium.FFI.Ristretto
+import Sodium.FFI.GenericHash
 
 open Lean Elab Term Sodium Aesop Ethos
-set_option linter.unreachableTactic false
 
 variable ⦃γ : Inhabited Prop⦄ {τ : Sodium (PLift (@default Prop γ))}
 
 /-- A point on Curve25519 relative to `x : Weight`. -/
-structure Prob (x : Weight.{0}) extends Weight where
-  fpt : SecretVector τ (@Weight.quantize toPSigma .local)
-  fpt_shape : x.quantize .global = @Weight.quantize toPSigma .local
+structure Prob (x : Weight) extends Weight where
+  fpt : SecretVector τ (@Weight.quantize toPSigma .global)
+  fpt_shape : x.quantize .global = @Weight.quantize toPSigma .global
 
 namespace Prob
 set_option quotPrecheck false
 
 notation "Δ% " τ ", " x => @Prob _ τ x
 
-notation "δ% " u ", " x " : " o =>
-  ∀ (hδ : @Ethos.Weight.quantize x Aesop.ScopeName.global = (u).toNat := o),
-  Δ% $(mkIdent `τ), x
+notation "δ% " u " : " o =>
+  ∀ (hδ : ∃ y, @Ethos.Weight.quantize y Aesop.ScopeName.local = (u).toNat := o), Δ% $(mkIdent `τ), hδ.choose
 
 def toWeight (_ : Δ% τ, x) : Weight := x
-
 def toSecret (γ : Δ% τ, x) : SecretVector τ <| x.quantize .global := γ.fpt_shape ▸ γ.fpt
 
 abbrev num (p : Δ% τ, x) := (toWeight p).num
 abbrev den (p : Δ% τ, x) := (toWeight p).den
-
-@[simp] theorem weight_idx : ∀ γ : Δ% τ, x, γ.toWeight = x := by intro; rfl
 
 end Prob
 
@@ -48,14 +44,67 @@ def unimax : Level := .ofNat BYTES
 @[simp] theorem unimax_partial_idx : @some Nat 64 = unimax.toNat.bind fun o => pure <| o + Nat.succ 31 := rfl
 @[simp] theorem unimax_match_idx : unimax.toNat.isSome = true := by unfold Level.toNat; rfl
 
-@[simp] theorem bytes_lvl : BYTES = SCALARBYTES := rfl
-@[simp] theorem scalarbytes_lvl : SCALARBYTES = unimax.toNat := rfl
-@[simp] theorem pseudoscalarbytes_lvl : NONREDUCEDSCALARBYTES = unimax.toNat.bind fun o => pure <| o + Nat.succ 31 := rfl
-@[simp] theorem hashbytes_lvl : HASHBYTES = unimax.toNat.bind fun o => pure <| o + Nat.succ 31 := rfl
+@[simp] theorem unimax_nat_idx : ∀ x, some x = unimax.toNat → x = 32 := by
+  intro x a
+  cases a
+  rfl
+
+theorem bytes_lvl : BYTES = SCALARBYTES := rfl
+theorem scalarbytes_lvl : SCALARBYTES = unimax.toNat := rfl
+theorem pseudoscalarbytes_lvl : NONREDUCEDSCALARBYTES = unimax.toNat.bind fun o => pure <| o + Nat.succ 31 := rfl
+theorem hashbytes_lvl : HASHBYTES = unimax.toNat.bind fun o => pure <| o + Nat.succ 31 := rfl
+
+abbrev Reduced := ByteVector BYTES
+
+def Reduced.toNat : Reduced → Nat
+| x =>
+  let (_, out) := x.toList.foldl (init := (1, 0))
+    fun | (pow, acc), b => (pow * 256, acc + b.toNat * pow)
+  out
+
+instance : DecidableEq {x : Reduced // isValidPoint x} := by infer_instance
+instance : DecidableEq (Option Reduced) := by infer_instance
+
+instance : Repr (Option {x : Reduced // isValidPoint x}) where
+  reprPrec x _ :=
+    match x with
+    | some ⟨x, _⟩ => repr (some x.toNat)
+    | _ => repr (none (α := PUnit))
+
+abbrev NonReduced := ByteVector NONREDUCEDSCALARBYTES
+
+open FFI.GenericHash in
+def NonReduced.ofEncodable {α} [Encodable α] (a : α) (name? : Option Name := none) : NonReduced :=
+  let bytes := (encode a).compress.toUTF8
+  let salt :=
+    match name? with
+    | some x => hashCustom SALTBYTES (by unfold SALTBYTES BYTES_MIN BYTES_MAX; omega) (toString x).toUTF8 default default
+    | _ => default
+  hashCustom NONREDUCEDSCALARBYTES (by unfold NONREDUCEDSCALARBYTES BYTES_MIN BYTES_MAX; omega) bytes salt default
+
+def NonReduced.ofNat (n : Nat) : NonReduced :=
+  let (_, out) := (List.range NONREDUCEDSCALARBYTES).foldl (init := (n, default))
+    fun | (m, bs), i => (m / 256, bs.set! i <| UInt8.ofNat (m % 256))
+  out
+
+instance {n} : OfNat NonReduced n where
+  ofNat := NonReduced.ofNat n
+
+instance {n} : OfNat (Option Reduced) n where
+  ofNat := pointHash (NonReduced.ofNat n)
+
+instance : Coe NonReduced (Option Reduced) := ⟨pointHash⟩
+instance : Add (Option Reduced) where add | some a, some b => pointAdd a b | _, _ => none
+instance : Sub (Option Reduced) where sub | some a, some b => pointSub a b | _, _ => none
+
+@[simp] theorem reduced_add_idx : ∀ a b : Reduced, some a + some b = pointAdd a b := by intros; rfl
+@[simp] theorem reduced_sub_idx : ∀ a b : Reduced, some a - some b = pointSub a b := by intros; rfl
 
 end Ristretto
 
 open Ristretto
+
+abbrev Ristretto := Option {x : Reduced // FFI.Ristretto.isValidPoint x}
 
 namespace Weight
 
@@ -100,10 +149,18 @@ class Scalar where
   «match» : Option <| PLift toWeight.IsScalar := toWeight.IsScalarOpt
   is_scalar : «match».isSome = true := by unfold Weight.IsScalarOpt; try simp_all; first | assumption | native_decide
 
+namespace Scalar
+
 @[simp] theorem scalar_idx : ∀ [self : Scalar], some (self.toWeight.quantize .global) = unimax.toNat := by
   intro ⟨x, «match», is_scalar⟩
   obtain ⟨h⟩ := «match».get is_scalar
   simp_all only [unimax_idx]
+
+open FFI.Ristretto in
+@[simp] theorem scalar_nat_idx : ∀ [self : Scalar], self.toWeight.quantize .global = SCALARBYTES := by
+  intro
+  simp only [scalar_idx, unimax_idx, unimax_nat_idx, unimax_pseudo_idx]
+  rfl
 
 instance scalar_ext : ∀ x y : Weight, (h : x = y) → (hx : PLift x.IsScalar) → (hy : PLift y.IsScalar) → HEq hx hy :=
   fun _ _ _ hx hy => by
@@ -112,9 +169,7 @@ instance scalar_ext : ∀ x y : Weight, (h : x = y) → (hx : PLift x.IsScalar) 
     congr
     exact proof_irrel_heq hx hy
 
-namespace Scalar
-
-def new (w : Weight) (h : w.IsScalar := by aesop) :=
+def new (w : Weight) (h : w.IsScalar) :=
   @Scalar.mk w (some (α := PLift w.IsScalar) ⟨h⟩) rfl
 
 protected abbrev num (x : Scalar) := x.toWeight.num
@@ -144,37 +199,30 @@ instance : NeZero (@default Scalar _).num := ⟨not_eq_of_beq_eq_false rfl⟩
 
 end Scalar
 
-/-- `PScalar` is the type of all types of indexes on fields. -/
+/-- `PScalar` is the universe-polymorphic index type for fields. -/
 class PScalar where
   toULift : ULift Weight.{0}
   is_pseudoscalar : toULift.down.IsNonReduced := by try simp_all; first | assumption | native_decide
 
 namespace PScalar
 
-protected instance bot : PScalar := {toULift := ⟨64, ⟨Nat.succ 29, by omega⟩⟩}
-protected instance zero : PScalar := {toULift := ⟨64, ⟨Nat.succ 1, by omega⟩⟩}
+protected instance bot : PScalar := {toULift := ⟨64, ⟨0, by omega⟩⟩}
 protected instance one : PScalar := {toULift := ⟨64, ⟨Nat.succ 0, by omega⟩⟩}
+protected instance two : PScalar := {toULift := ⟨64, ⟨Nat.succ 1, by omega⟩⟩}
 protected instance top : PScalar := {toULift := ⟨64, ⟨Nat.succ 31, by omega⟩⟩}
 
 protected abbrev num (p : PScalar) := p.toULift.down.num
 protected abbrev den (p : PScalar) := p.toULift.down.den
 protected abbrev spin (p : PScalar) := p.toULift.down.spin .global
 
-instance : NeZero PScalar.bot.num := by
-  unfold PScalar.bot
-  refine ⟨?_⟩
-  simp_all only [Nat.succ_eq_add_one, Nat.reduceAdd, Fin.reduceFinMk, Fin.isValue, ne_eq]
-  intro _
-  contradiction
-
-instance : NeZero PScalar.zero.num := by
-  unfold PScalar.zero
-  refine ⟨?_⟩
-  intro _
-  contradiction
-
 instance : NeZero PScalar.one.num := by
   unfold PScalar.one
+  refine ⟨?_⟩
+  intro _
+  contradiction
+
+instance : NeZero PScalar.two.num := by
+  unfold PScalar.two
   refine ⟨?_⟩
   simp_all only [Nat.succ_eq_add_one, Nat.reduceAdd, Fin.reduceFinMk, Fin.isValue, ne_eq]
   intro _
@@ -239,14 +287,12 @@ instance : NeZero PScalar.top.num := by
       . omega
       . rfl
 
-notation "⊤" => PScalar.bot
-notation "⊥" => PScalar.top
+notation "⊤" => PScalar.top
+notation "⊥" => PScalar.bot
+notation "-1" => PScalar.two
 
-instance : Zero PScalar := ⟨PScalar.zero⟩
 instance : One PScalar := ⟨PScalar.one⟩
 instance : Inhabited PScalar := ⟨⊤⟩
-
-notation "-1" => PScalar.one
 
 end PScalar
 
@@ -257,24 +303,21 @@ namespace PString
 
 def pseudostring_transport_idx : ∀ _ : PString, Syntax := by intro p; exact p.down
 
-private def mkExactULiftChar (c : Char) (info : SourceInfo := default) : Syntax.Tactic :=
+protected def mk (s : String) (info : SourceInfo := default) : PString := Id.run do
+  let mut stx : Array Syntax := #[]
+  for c in s.toList do stx := stx.push <| ulift c
+  return ⟨.node info ``Lean.Parser.Tactic.tacticSeq stx⟩
+where ulift (c : Char) : Syntax.Tactic :=
   ⟨Syntax.node .none ``Lean.Parser.Tactic.exact #[
     Syntax.atom .none "exact",
     Syntax.node .none ``Lean.Parser.Term.anonymousCtor #[
       Syntax.atom .none "⟨",
-      Syntax.node .none `term #[
-        Syntax.mkCharLit c info,
-      ],
+      Syntax.node .none `term #[Syntax.mkCharLit c],
       Syntax.atom .none "⟩"
     ]
   ]⟩
 
-def mk (s : String) (info : SourceInfo := default) : PString := Id.run do
-  let mut stx : Array Syntax := #[]
-  for c in s.toList do stx := stx.push <| mkExactULiftChar c info
-  return ⟨.node info ``Lean.Parser.Tactic.tacticSeq stx⟩
-
-def «elab» (p : PString) : TermElabM String := do
+protected def «elab» (p : PString) : TermElabM String := do
   let mut s := ""
   for c in p.down.getArgs do
     let type := mkApp (mkConst ``ULift [levelZero, levelZero]) (mkConst ``Char)
@@ -287,38 +330,26 @@ def «elab» (p : PString) : TermElabM String := do
 
 end PString
 
-/-- A mechanism for traversing lattices without drift. -/
-def Point : PFunctor where
-  A := Option (Level ×' Nat)
-  B | none => PEmpty
-    | some ⟨u, n⟩ => { o : Fin (Nat.succ n) // some o.toNat = u.toNat }
-
-/-- A mechanism for connecting points across universes. -/
-def Chart : PFunctor where
-  A := Option (Option Nat)
-  B | none => PEmpty
-    | some none => Point.W
-    | some (some n) => Point (Fin (Nat.succ (Nat.succ n)))
-
 /-- A mechanism for lifting nonempty secrets from universe `u` into universe `v`. -/
 def Field : PFunctor.{u, v} where
-  A := ∀ ε, (hδ : some (ε.quantize .global) = unimax.toNat) → δ% unimax, ε : by simp_all only [unimax_idx]
+  A := ∀ ε : ULift.{u, 0} Weight, (hε : some (ε.down.quantize .global) = unimax.toNat) → δ% unimax :
+    ε.down.quantize_relativity.imp fun _ hδ => by rwa [hδ] at hε
   B x := by
-    have hε : (@default Scalar _).toWeight.quantize .global = unimax.toNat := by simp only [unimax_idx]; rfl
-    obtain x : Prob.{u} _ := x (@default Scalar _).toWeight hε
+    obtain x : Prob.{u} _ := x ⟨(@default Scalar _).toWeight⟩ rfl
     cases x.toSecret.isZero
-    . exact ULift.{v} <| Δ% τ, (@default PScalar.{0} _).toULift.down
-    . exact PScalar.{v}
+    . exact ULift.{v} <| Δ% τ, x.toWeight
+    . exact PString.{v}
 
 namespace Field
 
-open Elab Command
+open Command
+
+set_option linter.unreachableTactic false
 
 elab "#ext_idx? " idx:ident δ:term " : " config:Aesop.tactic_clause+ : command => do
   elabCommand <| ← `(command|theorem $idx : $δ := by
     aesop?
       (add norm 0 unfold Level.toNat)
-      (add simp 0 Option.bind)
       (add unsafe 0% (pattern := False) (by contradiction))
       $config*)
 
@@ -326,26 +357,18 @@ elab "#ext_idx? " idx:ident δ:term " : " config:Aesop.tactic_clause+ : command 
 info: Try this:
   apply And.intro
   · unfold Lean.Level.toNat
-    simp_all only [unimax_idx]
+    simp_all only [unimax_pseudo_idx, unimax_idx]
     rfl
   · unfold Lean.Level.toNat
-    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    simp_all only [unimax_pseudo_idx, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, unimax_nat_idx, Option.pure_def]
     split
-    next x x_1 heq =>
-      simp_all only [Option.not_lt_none]
-      split at heq
-      next x_2 heq_1 => simp_all only [reduceCtorEq]
-      next x_2 x_3 =>
-        simp_all only [imp_false]
-        (contradiction)
-    next x x_1 a heq =>
-      simp_all only [Option.some_lt_some]
-      split at heq
-      next x_2 heq_1 =>
-        simp_all only [Option.some.injEq]
-        subst heq
-        (native_decide)
-      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
+    next x heq =>
+      simp_all only [unimax_pseudo_idx, unimax_idx, Option.bind_some, Option.some_lt_some]
+      (native_decide)
+    next x
+      x_1 =>
+      simp_all only [imp_false, unimax_pseudo_idx, unimax_idx, Option.bind_none, Option.not_lt_none]
+      (contradiction)
 -/
 #guard_msgs in
 #ext_idx? ext_idx_bot Δ(0 | 32).IsScalar : (add unsafe (by native_decide))
@@ -354,27 +377,19 @@ info: Try this:
 info: Try this:
   apply And.intro
   · unfold Lean.Level.toNat
-    simp_all only [Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true, Weight.quantize_global_partial_eq,
-      Nat.succ_eq_add_one, unimax_idx]
+    simp_all only [unimax_pseudo_idx, unimax_idx, Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true,
+      Weight.quantize_global_partial_eq, Nat.succ_eq_add_one]
     rfl
   · unfold Lean.Level.toNat
-    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    simp_all only [unimax_pseudo_idx, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, unimax_nat_idx, Option.pure_def]
     split
-    next x x_1 heq =>
-      simp_all only [Option.not_lt_none]
-      split at heq
-      next x_2 heq_1 => simp_all only [reduceCtorEq]
-      next x_2 x_3 =>
-        simp_all only [imp_false]
-        (contradiction)
-    next x x_1 a heq =>
-      simp_all only [Option.some_lt_some]
-      split at heq
-      next x_2 heq_1 =>
-        simp_all only [Option.some.injEq]
-        subst heq
-        (native_decide)
-      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
+    next x heq =>
+      simp_all only [unimax_pseudo_idx, unimax_idx, Option.bind_some, Option.some_lt_some]
+      (native_decide)
+    next x
+      x_1 =>
+      simp_all only [imp_false, unimax_pseudo_idx, unimax_idx, Option.bind_none, Option.not_lt_none]
+      (contradiction)
 -/
 #guard_msgs in
 #ext_idx? ext_idx_top Δ(1 | 32).IsScalar : (add unsafe (by native_decide))
@@ -387,112 +402,65 @@ info: Try this:
       Nat.succ_eq_add_one, unimax_idx]
     rfl
   · unfold Lean.Level.toNat
-    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    simp_all only [unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, unimax_pseudo_idx, unimax_nat_idx, Option.pure_def]
     split
-    next x x_1 heq =>
-      simp_all only [Option.not_lt_none]
-      split at heq
-      next x_2 heq_1 => simp_all only [reduceCtorEq]
-      next x_2 x_3 =>
-        simp_all only [imp_false]
-        (admit)
-    next x x_1 a heq =>
-      simp_all only [Option.some_lt_some]
-      split at heq
-      next x_2 heq_1 =>
-        simp_all only [Option.some.injEq]
-        subst heq
-        (admit)
-      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
+    next x heq =>
+      simp_all only [unimax_pseudo_idx, unimax_idx, Option.bind_some, Option.some_lt_some]
+      (admit)
+    next x
+      x_1 =>
+      simp_all only [imp_false, unimax_pseudo_idx, unimax_idx, Option.bind_none, Option.not_lt_none]
+      (contradiction)
 -/
 #guard_msgs(info, drop warning) in
-#ext_idx? ext_idx_one Δ(2 | 33).IsScalar : (add unsafe 100% (by admit))
+#ext_idx? ext_idx_one Δ(2 | 33).IsScalar : (add unsafe (by contradiction)) (add unsafe (by admit))
 
 /--
 info: Try this:
   apply And.intro
   · unfold Lean.Level.toNat
-    unfold Lean.Level.getOffset
     simp_all only [Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true, Weight.quantize_global_partial_eq,
       Nat.succ_eq_add_one, unimax_idx]
     rfl
   · unfold Lean.Level.toNat
-    unfold Lean.Level.getOffset
-    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    simp_all only [unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, unimax_pseudo_idx, unimax_nat_idx, Option.pure_def]
     split
-    next x x_1 heq =>
-      simp_all only [Option.not_lt_none]
-      split at heq
-      next x_2 heq_1 => simp_all only [reduceCtorEq]
-      next x_2 x_3 =>
-        simp_all only [imp_false]
-        (admit)
-    next x x_1 a heq =>
-      simp_all only [Option.some_lt_some]
-      split at heq
-      next x_2 heq_1 =>
-        simp_all only [Option.some.injEq]
-        subst heq
-        (admit)
-      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
+    next x heq =>
+      simp_all only [unimax_pseudo_idx, unimax_idx, Option.bind_some, Option.some_lt_some]
+      (admit)
+    next x
+      x_1 =>
+      simp_all only [imp_false, unimax_pseudo_idx, unimax_idx, Option.bind_none, Option.not_lt_none]
+      (admit)
 -/
 #guard_msgs(info, drop warning) in
-#ext_idx? ext_idx_two Δ(3 | 34).IsScalar : (add norm 0 unfold Level.getOffset) (add unsafe 100% (by admit))
+#ext_idx? ext_idx_two Δ(3 | 34).IsScalar : (add unsafe (by admit))
 
-/--
-An example index. Specifically, the index corresponding to the largest universe
-less than `unimax`.
-
-Included for pedagogical reasons; namely, to provide the opportunity to step
-through the index to understand the flow of information through it.
--/
 theorem ext_idx_three : Δ(32 | 63).IsScalar := by
   apply And.intro
   · unfold Lean.Level.toNat
-    unfold Lean.Level.getOffset
-    unfold Lean.Level.getOffsetAux
-    simp_all only [Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true, Weight.quantize_global_partial_eq,
-      Nat.succ_eq_add_one, unimax_idx]
+    simp_all only [unimax_pseudo_idx, unimax_idx, Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true,
+      Weight.quantize_global_partial_eq, Nat.succ_eq_add_one]
     rfl
   · unfold Lean.Level.toNat
-    unfold Lean.Level.getOffset
-    unfold Lean.Level.getOffsetAux
-    simp_all only [Option.bind, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, Option.pure_def]
+    simp_all only [unimax_pseudo_idx, unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, unimax_nat_idx, Option.pure_def]
     split
-    next x x_1 heq =>
-      simp_all only [Option.not_lt_none]
-      split at heq
-      next x_2 heq_1 => simp_all only [reduceCtorEq]
-      next x_2 x_3 =>
-        simp_all only [imp_false]
-        (contradiction)
-    next x x_1 a heq =>
-      simp_all only [Option.some_lt_some]
-      split at heq
-      next x_2 heq_1 =>
-        simp_all only [Option.some.injEq]
-        subst heq
-        (native_decide)
-      next x_2 x_3 => simp_all only [imp_false, reduceCtorEq]
+    next x heq =>
+      simp_all only [unimax_pseudo_idx, unimax_idx, Option.bind_some, Option.some_lt_some]
+      (native_decide)
+    next x x_1 =>
+      simp_all only [imp_false, unimax_pseudo_idx, unimax_idx, Option.bind_none, Option.not_lt_none]
+      (contradiction)
 
 end Field
 
-/-- synonym of `Field` for lifting values into `Sort unimax` -/
+/-- synonym of `Field` -/
 abbrev Guage {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} := @PFunctor.new (@Field.{31, 0} _ τ)
 
 /-- A fabric of fields relative to a choice of `Guage`. -/
 @[reducible] def Lattice {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} :=
   let Field : PFunctor.{0} := @Field _ τ; ∀ _ : @Guage _ τ PString, Field.W
 
-/--
-A _heterogeneous_ fabric of fields relative to a choice of `Guage`.
-
-Note that heterogeneity between three degrees of freedom results in ergodicity,
-meaning that proof termination requires tedious (and perhaps an explosive
-number of) `HEq` instances.
-
-Prefer `Lattice` for a human-friendly interface.
--/
 class HLattice {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} (_ : @Guage _ τ PString) where
   field : PFunctor.W <| @Field _ τ
 
@@ -513,8 +481,7 @@ end Lattice
 
 end Ethos
 
-set_option allowUnsafeReducibility true in
-@[ext (iff := false), reducible] theorem ext :
+@[ext (iff := false)] theorem ext :
   ∀ x y : Scalar,
     x.den = y.den
     → ∀ (h : PLift ((@Scalar.toWeight x).den = (@Scalar.toWeight y).den)) (_ : admit), h.down ▸ x.num = y.num
@@ -530,9 +497,25 @@ set_option allowUnsafeReducibility true in
     match mx, my with
     | some _, some _ =>
       congr
-      exact scalar_ext x y this _ _
+      exact Scalar.scalar_ext x y this _ _
   . simp_all only [heq_eq_eq]
 
 /-- info: 'ext' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms ext
+
+/-- info: 'Ethos.Field.ext_idx_bot' depends on axioms: [propext, Lean.ofReduceBool, Quot.sound] -/
+#guard_msgs in
+#print axioms Field.ext_idx_bot
+
+/-- info: 'Ethos.Field.ext_idx_top' depends on axioms: [propext, Classical.choice, Lean.ofReduceBool, Quot.sound] -/
+#guard_msgs in
+#print axioms Field.ext_idx_top
+
+/-- info: 'Ethos.Field.ext_idx_one' depends on axioms: [propext, sorryAx, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Field.ext_idx_one
+
+/-- info: 'Ethos.Field.ext_idx_two' depends on axioms: [propext, sorryAx, Classical.choice, Quot.sound] -/
+#guard_msgs in
+#print axioms Field.ext_idx_two

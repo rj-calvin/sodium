@@ -30,7 +30,7 @@ def isValidPoint (p : @& ByteVector BYTES) : Bool :=
   return crypto_core_ristretto255_is_valid_point(lean_sarray_cptr(p)) == 1;
 
 alloy c extern "lean_crypto_core_ristretto255_add"
-def add (p q : @& ByteVector BYTES) : Option (ByteVector BYTES) :=
+def pointAdd (p q : @& ByteVector BYTES) : Option (ByteVector BYTES) :=
   size_t len_p = lean_sarray_size(p);
   size_t len_q = lean_sarray_size(q);
 
@@ -58,7 +58,7 @@ def add (p q : @& ByteVector BYTES) : Option (ByteVector BYTES) :=
   return some;
 
 alloy c extern "lean_crypto_core_ristretto255_sub"
-def sub (p q : @& ByteVector BYTES) : Option (ByteVector BYTES) :=
+def pointSub (p q : @& ByteVector BYTES) : Option (ByteVector BYTES) :=
   size_t len_p = lean_sarray_size(p);
   size_t len_q = lean_sarray_size(q);
 
@@ -86,7 +86,7 @@ def sub (p q : @& ByteVector BYTES) : Option (ByteVector BYTES) :=
   return some;
 
 alloy c extern "lean_crypto_core_ristretto255_from_hash"
-def fromHash (h : @& ByteVector HASHBYTES) : Option (ByteVector BYTES) :=
+def pointHash (h : @& ByteVector HASHBYTES) : Option (ByteVector BYTES) :=
   size_t len_h = lean_sarray_size(h);
 
   if (len_h != crypto_core_ristretto255_HASHBYTES) {
@@ -112,7 +112,7 @@ def fromHash (h : @& ByteVector HASHBYTES) : Option (ByteVector BYTES) :=
   return some;
 
 alloy c extern "lean_crypto_core_ristretto255_random"
-def random : IO (ByteVector BYTES) :=
+def pointRandom : IO (ByteVector BYTES) :=
   lean_object* p = lean_alloc_sarray(
     sizeof(uint8_t),
     crypto_core_ristretto255_BYTES,
@@ -376,13 +376,13 @@ alloy c extern "lean_crypto_scalarmult_ristretto255"
 def scalarmult {τ : @& Sodium σ}
     (scalar : @& SecretVector τ SCALARBYTES)
     (point : @& ByteVector BYTES)
-    : IO (Option (ByteVector BYTES)) :=
+    : Option (ByteVector BYTES) :=
   size_t scalar_len = lean_ctor_get_usize(scalar, 1);
   size_t point_len = lean_sarray_size(point);
 
   if (scalar_len != crypto_scalarmult_ristretto255_SCALARBYTES || point_len != crypto_scalarmult_ristretto255_BYTES) {
     lean_object* none = lean_alloc_ctor(0, 0, 0);
-    return lean_io_result_mk_ok(none);
+    return none;
   }
 
   lean_object* out = lean_alloc_sarray(
@@ -403,23 +403,21 @@ def scalarmult {τ : @& Sodium σ}
   if (err != 0) {
     lean_dec(out);
     lean_object* none = lean_alloc_ctor(0, 0, 0);
-    lean_object* ok = lean_io_result_mk_ok(none);
-    return ok;
+    return none;
   }
 
   lean_object* some = lean_alloc_ctor(1, 1, 0);
   lean_ctor_set(some, 0, out);
-  lean_object* ok = lean_io_result_mk_ok(some);
-  return ok;
+  return some;
 
 alloy c extern "lean_crypto_scalarmult_ristretto255_base"
 def scalarbase {τ : @& Sodium σ}
     (scalar : @& SecretVector τ SCALARBYTES)
-    : IO (Option (ByteVector BYTES)) :=
+    : Option (ByteVector BYTES) :=
   size_t scalar_len = lean_ctor_get_usize(scalar, 1);
   if (scalar_len != crypto_scalarmult_ristretto255_SCALARBYTES) {
     lean_object* none = lean_alloc_ctor(0, 0, 0);
-    return lean_io_result_mk_ok(none);
+    return none;
   }
 
   lean_object* out = lean_alloc_sarray(
@@ -439,11 +437,11 @@ def scalarbase {τ : @& Sodium σ}
   if (err != 0) {
     lean_dec(out);
     lean_object* none = lean_alloc_ctor(0, 0, 0);
-    return lean_io_result_mk_ok(none);
+    return none;
   }
 
   lean_object* some = lean_alloc_ctor(1, 1, 0);
   lean_ctor_set(some, 0, out);
-  return lean_io_result_mk_ok(some);
+  return some;
 
 end Sodium.FFI.Ristretto
