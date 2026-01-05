@@ -460,25 +460,25 @@ theorem ext_idx_three : Δ(32 | 63).IsScalar := by
 end Field
 
 /-- synonym of `Field` -/
-abbrev Guage {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} := @PFunctor.new (@Field.{31, 0} _ τ)
+abbrev Gauge {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} := @PFunctor.new (@Field.{31, 0} _ τ)
 
-/-- A fabric of fields relative to a choice of `Guage`. -/
+/-- A fabric of fields relative to a choice of `Gauge`. -/
 @[reducible] def Lattice {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} :=
-  let Field : PFunctor.{0} := @Field _ τ; ∀ _ : @Guage _ τ PString, Field.W
+  let Field : PFunctor.{0} := @Field _ τ; ∀ _ : @Gauge _ τ PString, Field.W
 
-class HLattice {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} (_ : @Guage _ τ PString) where
+class HLattice {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} (_ : @Gauge _ τ PString) where
   field : PFunctor.W <| @Field _ τ
 
 namespace Lattice
 
 variable {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))}
 
-abbrev next (ι : Lattice) (γ : Guage (τ := τ) PString) := PFunctor.W.next (ι γ)
-abbrev children (ι : Lattice) (γ : Guage (τ := τ) PString) := PFunctor.W.children (ι γ)
+abbrev next (ι : Lattice) (γ : Gauge (τ := τ) PString) := PFunctor.W.next (ι γ)
+abbrev children (ι : Lattice) (γ : Gauge (τ := τ) PString) := PFunctor.W.children (ι γ)
 
 abbrev cases {X : (@Field _ _).W → Sort u}
     (ι : Lattice.{0, max u 31})
-    (γ : Guage (τ := τ) PString)
+    (γ : Gauge (τ := τ) PString)
     (f : (x : Field (@Field _ _).W) → X (PFunctor.W.mk x)) :=
   PFunctor.W.cases f (ι γ)
 

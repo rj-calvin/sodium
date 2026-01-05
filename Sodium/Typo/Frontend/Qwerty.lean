@@ -4,8 +4,6 @@ open Lean Parser Elab Meta Term Tactic PrettyPrinter
 
 namespace Typo
 
-variable {σ}
-
 declare_syntax_cat grapheme
 declare_syntax_cat terminal
 
@@ -65,48 +63,48 @@ syntax (name := X) "X" : grapheme
 syntax (name := Y) "Y" : grapheme
 syntax (name := Z) "Z" : grapheme
 
-syntax (name := zero) &"0" : grapheme
-syntax (name := one) &"1" : grapheme
-syntax (name := two) &"2" : grapheme
-syntax (name := three) &"3" : grapheme
-syntax (name := four) &"4" : grapheme
-syntax (name := five) &"5" : grapheme
-syntax (name := six) &"6" : grapheme
-syntax (name := seven) &"7" : grapheme
-syntax (name := eight) &"8" : grapheme
-syntax (name := nine) &"9" : grapheme
-syntax (name := exclamation) &"!" : grapheme
-syntax (name := sign) &"@" : grapheme
-syntax (name := hash) &"#" : grapheme
-syntax (name := dollar) &"$" : grapheme
-syntax (name := percent) &"%" : grapheme
-syntax (name := caret) &"^" : grapheme
-syntax (name := ampersand) &"&" : grapheme
-syntax (name := asterisk) &"*" : grapheme
-syntax (name := lparen) &"(" : grapheme
-syntax (name := rparen) &")" : grapheme
-syntax (name := hyphen) &"-" : grapheme
-syntax (name := underscore) &"_" : grapheme
-syntax (name := equals) &"=" : grapheme
-syntax (name := plus) &"+" : grapheme
-syntax (name := lbracket) &"[" : grapheme
-syntax (name := rbracket) &"]" : grapheme
-syntax (name := lbrace) &"{" : grapheme
-syntax (name := rbrace) &"}" : grapheme
-syntax (name := slash) &"\\" : grapheme
-syntax (name := pipe) &"|" : grapheme
-syntax (name := semicolon) &";" : grapheme
-syntax (name := colon) &":" : grapheme
-syntax (name := apostrophe) &"'" : grapheme
-syntax (name := quote) &"\"" : grapheme
-syntax (name := comma) &"," : grapheme
-syntax (name := period) &"." : grapheme
-syntax (name := langle) &"<" : grapheme
-syntax (name := rangle) &">" : grapheme
-syntax (name := divide) &"/" : grapheme
-syntax (name := question) &"?" : grapheme
-syntax (name := grave) &"`" : grapheme
-syntax (name := tilde) &"~" : grapheme
+syntax (name := «0») &"0" : grapheme
+syntax (name := «1») &"1" : grapheme
+syntax (name := «2») &"2" : grapheme
+syntax (name := «3») &"3" : grapheme
+syntax (name := «4») &"4" : grapheme
+syntax (name := «5») &"5" : grapheme
+syntax (name := «6») &"6" : grapheme
+syntax (name := «7») &"7" : grapheme
+syntax (name := «8») &"8" : grapheme
+syntax (name := «9») &"9" : grapheme
+syntax (name := «!») &"!" : grapheme
+syntax (name := «@») &"@" : grapheme
+syntax (name := «#») &"#" : grapheme
+syntax (name := «$») &"$" : grapheme
+syntax (name := «%») &"%" : grapheme
+syntax (name := «^») &"^" : grapheme
+syntax (name := «&») &"&" : grapheme
+syntax (name := «*») &"*" : grapheme
+syntax (name := «(») &"(" : grapheme
+syntax (name := «)») &")" : grapheme
+syntax (name := «-») &"-" : grapheme
+syntax (name := «_») &"_" : grapheme
+syntax (name := «=») &"=" : grapheme
+syntax (name := «+») &"+" : grapheme
+syntax (name := «[») &"[" : grapheme
+syntax (name := «]») &"]" : grapheme
+syntax (name := «{») &"{" : grapheme
+syntax (name := «}») &"}" : grapheme
+syntax (name := «\») &"\\" : grapheme
+syntax (name := «|») &"|" : grapheme
+syntax (name := «;») &";" : grapheme
+syntax (name := «:») &":" : grapheme
+syntax (name := «'») &"'" : grapheme
+syntax (name := «"») &"\"" : grapheme
+syntax (name := «,») &"," : grapheme
+syntax (name := «.») &"." : grapheme
+syntax (name := «<») &"<" : grapheme
+syntax (name := «>») &">" : grapheme
+syntax (name := «/») &"/" : grapheme
+syntax (name := «?») &"?" : grapheme
+syntax (name := «`») &"`" : grapheme
+syntax (name := «~») &"~" : grapheme
 syntax (name := space) &" " : grapheme
 
 syntax (name := leader) "leader% " (grapheme)? : term
@@ -190,48 +188,48 @@ def parse : Grapheme → TermElabM Char
 | `(grapheme|Z) => pure 'Z'
 | stx => match stx.raw.getKind with
   | ``space => pure ' '
-  | ``zero => pure '0'
-  | ``one => pure '1'
-  | ``two => pure '2'
-  | ``three => pure '3'
-  | ``four => pure '4'
-  | ``five => pure '5'
-  | ``six => pure '6'
-  | ``seven => pure '7'
-  | ``eight => pure '8'
-  | ``nine => pure '9'
-  | ``exclamation => pure '!'
-  | ``sign => pure '@'
-  | ``hash => pure '#'
-  | ``dollar => pure '$'
-  | ``percent => pure '%'
-  | ``caret => pure '^'
-  | ``ampersand => pure '&'
-  | ``asterisk => pure '*'
-  | ``lparen => pure '('
-  | ``rparen => pure ')'
-  | ``hyphen => pure '-'
-  | ``underscore => pure '_'
-  | ``equals => pure '='
-  | ``plus => pure '+'
-  | ``lbracket => pure '['
-  | ``rbracket => pure ']'
-  | ``lbrace => pure '{'
-  | ``rbrace => pure '}'
-  | ``slash => pure '\\'
-  | ``pipe => pure '|'
-  | ``semicolon => pure ';'
-  | ``colon => pure ':'
-  | ``apostrophe => pure '\''
-  | ``quote => pure '"'
-  | ``comma => pure ','
-  | ``period => pure '.'
-  | ``langle => pure '<'
-  | ``rangle => pure '>'
-  | ``divide => pure '/'
-  | ``question => pure '?'
-  | ``grave => pure '`'
-  | ``tilde => pure '~'
+  | ``«0» => pure '0'
+  | ``«1» => pure '1'
+  | ``«2» => pure '2'
+  | ``«3» => pure '3'
+  | ``«4» => pure '4'
+  | ``«5» => pure '5'
+  | ``«6» => pure '6'
+  | ``«7» => pure '7'
+  | ``«8» => pure '8'
+  | ``«9» => pure '9'
+  | ``«!» => pure '!'
+  | ``«@» => pure '@'
+  | ``«#» => pure '#'
+  | ``«$» => pure '$'
+  | ``«%» => pure '%'
+  | ``«^» => pure '^'
+  | ``«&» => pure '&'
+  | ``«*» => pure '*'
+  | ``«(» => pure '('
+  | ``«)» => pure ')'
+  | ``«-» => pure '-'
+  | ``«_» => pure '_'
+  | ``«=» => pure '='
+  | ``«+» => pure '+'
+  | ``«[» => pure '['
+  | ``«]» => pure ']'
+  | ``«{» => pure '{'
+  | ``«}» => pure '}'
+  | ``«\» => pure '\\'
+  | ``«|» => pure '|'
+  | ``«;» => pure ';'
+  | ``«:» => pure ':'
+  | ``«'» => pure '\''
+  | ``«"» => pure '"'
+  | ``«,» => pure ','
+  | ``«.» => pure '.'
+  | ``«<» => pure '<'
+  | ``«>» => pure '>'
+  | ``«/» => pure '/'
+  | ``«?» => pure '?'
+  | ``«`» => pure '`'
+  | ``«~» => pure '~'
   | _ => throwUnsupportedSyntax
 
 elab "leader% " γ:(grapheme)? : tactic => do
@@ -246,53 +244,53 @@ elab "done%" : tactic => do
 
 section Digits
 
-abbrev Zero : Grapheme := ⟨mkNode ``zero #[mkAtom "0"]⟩
-abbrev One : Grapheme := ⟨mkNode ``one #[mkAtom "1"]⟩
-abbrev Two : Grapheme := ⟨mkNode ``two #[mkAtom "2"]⟩
-abbrev Three : Grapheme := ⟨mkNode ``three #[mkAtom "3"]⟩
-abbrev Four : Grapheme := ⟨mkNode ``four #[mkAtom "4"]⟩
-abbrev Five : Grapheme := ⟨mkNode ``five #[mkAtom "5"]⟩
-abbrev Six : Grapheme := ⟨mkNode ``six #[mkAtom "6"]⟩
-abbrev Seven : Grapheme := ⟨mkNode ``seven #[mkAtom "7"]⟩
-abbrev Eight : Grapheme := ⟨mkNode ``eight #[mkAtom "8"]⟩
-abbrev Nine : Grapheme := ⟨mkNode ``nine #[mkAtom "9"]⟩
+abbrev Zero : Grapheme := ⟨mkNode ``«0» #[mkAtom "0"]⟩
+abbrev One : Grapheme := ⟨mkNode ``«1» #[mkAtom "1"]⟩
+abbrev Two : Grapheme := ⟨mkNode ``«2» #[mkAtom "2"]⟩
+abbrev Three : Grapheme := ⟨mkNode ``«3» #[mkAtom "3"]⟩
+abbrev Four : Grapheme := ⟨mkNode ``«4» #[mkAtom "4"]⟩
+abbrev Five : Grapheme := ⟨mkNode ``«5» #[mkAtom "5"]⟩
+abbrev Six : Grapheme := ⟨mkNode ``«6» #[mkAtom "6"]⟩
+abbrev Seven : Grapheme := ⟨mkNode ``«7» #[mkAtom "7"]⟩
+abbrev Eight : Grapheme := ⟨mkNode ``«8» #[mkAtom "8"]⟩
+abbrev Nine : Grapheme := ⟨mkNode ``«9» #[mkAtom "9"]⟩
 
 end Digits
 
 section Symbols
 
-abbrev Exclamation : Grapheme := ⟨mkNode ``exclamation #[mkAtom "!"]⟩
-abbrev Sign : Grapheme := ⟨mkNode ``sign #[mkAtom "@"]⟩
-abbrev Hash : Grapheme := ⟨mkNode ``hash #[mkAtom "#"]⟩
-abbrev Dollar : Grapheme := ⟨mkNode ``dollar #[mkAtom "$"]⟩
-abbrev Percent : Grapheme := ⟨mkNode ``percent #[mkAtom "%"]⟩
-abbrev Caret : Grapheme := ⟨mkNode ``caret #[mkAtom "^"]⟩
-abbrev Ampersand : Grapheme := ⟨mkNode ``ampersand #[mkAtom "&"]⟩
-abbrev Asterisk : Grapheme := ⟨mkNode ``asterisk #[mkAtom "*"]⟩
-abbrev Lparen : Grapheme := ⟨mkNode ``lparen #[mkAtom "("]⟩
-abbrev Rparen : Grapheme := ⟨mkNode ``rparen #[mkAtom ")"]⟩
-abbrev Hyphen : Grapheme := ⟨mkNode ``hyphen #[mkAtom "-"]⟩
-abbrev Underscore : Grapheme := ⟨mkNode ``underscore #[mkAtom "_"]⟩
-abbrev Equals : Grapheme := ⟨mkNode ``equals #[mkAtom "="]⟩
-abbrev Plus : Grapheme := ⟨mkNode ``plus #[mkAtom "+"]⟩
-abbrev Lbracket : Grapheme := ⟨mkNode ``lbracket #[mkAtom "["]⟩
-abbrev Rbracket : Grapheme := ⟨mkNode ``rbracket #[mkAtom "]"]⟩
-abbrev Lbrace : Grapheme := ⟨mkNode ``lbrace #[mkAtom "{"]⟩
-abbrev Rbrace : Grapheme := ⟨mkNode ``rbrace #[mkAtom "}"]⟩
-abbrev Slash : Grapheme := ⟨mkNode ``slash #[mkAtom "\\"]⟩
-abbrev Pipe : Grapheme := ⟨mkNode ``pipe #[mkAtom "|"]⟩
-abbrev Semicolon : Grapheme := ⟨mkNode ``semicolon #[mkAtom ";"]⟩
-abbrev Colon : Grapheme := ⟨mkNode ``colon #[mkAtom ":"]⟩
-abbrev Apostrophe : Grapheme := ⟨mkNode ``apostrophe #[mkAtom "'"]⟩
-abbrev Quote : Grapheme := ⟨mkNode ``quote #[mkAtom "\""]⟩
-abbrev Comma : Grapheme := ⟨mkNode ``comma #[mkAtom ","]⟩
-abbrev Period : Grapheme := ⟨mkNode ``period #[mkAtom "."]⟩
-abbrev Langle : Grapheme := ⟨mkNode ``langle #[mkAtom "<"]⟩
-abbrev Rangle : Grapheme := ⟨mkNode ``rangle #[mkAtom ">"]⟩
-abbrev Divide : Grapheme := ⟨mkNode ``divide #[mkAtom "/"]⟩
-abbrev Question : Grapheme := ⟨mkNode ``question #[mkAtom "?"]⟩
-abbrev Grave : Grapheme := ⟨mkNode ``grave #[mkAtom "`"]⟩
-abbrev Tilde : Grapheme := ⟨mkNode ``tilde #[mkAtom "~"]⟩
+abbrev Exclamation : Grapheme := ⟨mkNode ``«!» #[mkAtom "!"]⟩
+abbrev Sign : Grapheme := ⟨mkNode ``«@» #[mkAtom "@"]⟩
+abbrev Hash : Grapheme := ⟨mkNode ``«#» #[mkAtom "#"]⟩
+abbrev Dollar : Grapheme := ⟨mkNode ``«$» #[mkAtom "$"]⟩
+abbrev Percent : Grapheme := ⟨mkNode ``«%» #[mkAtom "%"]⟩
+abbrev Caret : Grapheme := ⟨mkNode ``«^» #[mkAtom "^"]⟩
+abbrev Ampersand : Grapheme := ⟨mkNode ``«&» #[mkAtom "&"]⟩
+abbrev Asterisk : Grapheme := ⟨mkNode ``«*» #[mkAtom "*"]⟩
+abbrev Lparen : Grapheme := ⟨mkNode ``«(» #[mkAtom "("]⟩
+abbrev Rparen : Grapheme := ⟨mkNode ``«)» #[mkAtom ")"]⟩
+abbrev Hyphen : Grapheme := ⟨mkNode ``«-» #[mkAtom "-"]⟩
+abbrev Underscore : Grapheme := ⟨mkNode ``«_» #[mkAtom "_"]⟩
+abbrev Equals : Grapheme := ⟨mkNode ``«=» #[mkAtom "="]⟩
+abbrev Plus : Grapheme := ⟨mkNode ``«+» #[mkAtom "+"]⟩
+abbrev Lbracket : Grapheme := ⟨mkNode ``«[» #[mkAtom "["]⟩
+abbrev Rbracket : Grapheme := ⟨mkNode ``«]» #[mkAtom "]"]⟩
+abbrev Lbrace : Grapheme := ⟨mkNode ``«{» #[mkAtom "{"]⟩
+abbrev Rbrace : Grapheme := ⟨mkNode ``«}» #[mkAtom "}"]⟩
+abbrev Slash : Grapheme := ⟨mkNode ``«\» #[mkAtom "\\"]⟩
+abbrev Pipe : Grapheme := ⟨mkNode ``«|» #[mkAtom "|"]⟩
+abbrev Semicolon : Grapheme := ⟨mkNode ``«;» #[mkAtom ";"]⟩
+abbrev Colon : Grapheme := ⟨mkNode ``«:» #[mkAtom ":"]⟩
+abbrev Apostrophe : Grapheme := ⟨mkNode ``«'» #[mkAtom "'"]⟩
+abbrev Quote : Grapheme := ⟨mkNode ``«"» #[mkAtom "\""]⟩
+abbrev Comma : Grapheme := ⟨mkNode ``«,» #[mkAtom ","]⟩
+abbrev Period : Grapheme := ⟨mkNode ``«.» #[mkAtom "."]⟩
+abbrev Langle : Grapheme := ⟨mkNode ``«<» #[mkAtom "<"]⟩
+abbrev Rangle : Grapheme := ⟨mkNode ``«>» #[mkAtom ">"]⟩
+abbrev Divide : Grapheme := ⟨mkNode ``«/» #[mkAtom "/"]⟩
+abbrev Question : Grapheme := ⟨mkNode ``«?» #[mkAtom "?"]⟩
+abbrev Grave : Grapheme := ⟨mkNode ``«`» #[mkAtom "`"]⟩
+abbrev Tilde : Grapheme := ⟨mkNode ``«~» #[mkAtom "~"]⟩
 
 end Symbols
 
@@ -580,38 +578,38 @@ def ofFin : Fin 97 → Key
 
 def toFin : Key → Fin 97
 | turn% ⟨.node _ ``space _⟩ => 0
-| turn% ⟨.node _ ``exclamation _⟩ => 1
-| turn% ⟨.node _ ``quote _⟩ => 2
-| turn% ⟨.node _ ``hash _⟩ => 3
-| turn% ⟨.node _ ``dollar _⟩ => 4
-| turn% ⟨.node _ ``percent _⟩ => 5
-| turn% ⟨.node _ ``ampersand _⟩ => 6
-| turn% ⟨.node _ ``apostrophe _⟩ => 7
-| turn% ⟨.node _ ``lparen _⟩ => 8
-| turn% ⟨.node _ ``rparen _⟩ => 9
-| turn% ⟨.node _ ``asterisk _⟩ => 10
-| turn% ⟨.node _ ``plus _⟩ => 11
-| turn% ⟨.node _ ``comma _⟩ => 12
-| turn% ⟨.node _ ``hyphen _⟩ => 13
-| turn% ⟨.node _ ``period _⟩ => 14
-| turn% ⟨.node _ ``divide _⟩ => 15
-| turn% ⟨.node _ ``zero _⟩ => 16
-| turn% ⟨.node _ ``one _⟩ => 17
-| turn% ⟨.node _ ``two _⟩ => 18
-| turn% ⟨.node _ ``three _⟩ => 19
-| turn% ⟨.node _ ``four _⟩ => 20
-| turn% ⟨.node _ ``five _⟩ => 21
-| turn% ⟨.node _ ``six _⟩ => 22
-| turn% ⟨.node _ ``seven _⟩ => 23
-| turn% ⟨.node _ ``eight _⟩ => 24
-| turn% ⟨.node _ ``nine _⟩ => 25
-| turn% ⟨.node _ ``colon _⟩ => 26
-| turn% ⟨.node _ ``semicolon _⟩ => 27
-| turn% ⟨.node _ ``langle _⟩ => 28
-| turn% ⟨.node _ ``equals _⟩ => 29
-| turn% ⟨.node _ ``rangle _⟩ => 30
-| turn% ⟨.node _ ``question _⟩ => 31
-| turn% ⟨.node _ ``sign _⟩ => 32
+| turn% ⟨.node _ ``«!» _⟩ => 1
+| turn% ⟨.node _ ``«"» _⟩ => 2
+| turn% ⟨.node _ ``«#» _⟩ => 3
+| turn% ⟨.node _ ``«$» _⟩ => 4
+| turn% ⟨.node _ ``«%» _⟩ => 5
+| turn% ⟨.node _ ``«&» _⟩ => 6
+| turn% ⟨.node _ ``«'» _⟩ => 7
+| turn% ⟨.node _ ``«(» _⟩ => 8
+| turn% ⟨.node _ ``«)» _⟩ => 9
+| turn% ⟨.node _ ``«*» _⟩ => 10
+| turn% ⟨.node _ ``«+» _⟩ => 11
+| turn% ⟨.node _ ``«,» _⟩ => 12
+| turn% ⟨.node _ ``«-» _⟩ => 13
+| turn% ⟨.node _ ``«.» _⟩ => 14
+| turn% ⟨.node _ ``«/» _⟩ => 15
+| turn% ⟨.node _ ``«0» _⟩ => 16
+| turn% ⟨.node _ ``«1» _⟩ => 17
+| turn% ⟨.node _ ``«2» _⟩ => 18
+| turn% ⟨.node _ ``«3» _⟩ => 19
+| turn% ⟨.node _ ``«4» _⟩ => 20
+| turn% ⟨.node _ ``«5» _⟩ => 21
+| turn% ⟨.node _ ``«6» _⟩ => 22
+| turn% ⟨.node _ ``«7» _⟩ => 23
+| turn% ⟨.node _ ``«8» _⟩ => 24
+| turn% ⟨.node _ ``«9» _⟩ => 25
+| turn% ⟨.node _ ``«:» _⟩ => 26
+| turn% ⟨.node _ ``«;» _⟩ => 27
+| turn% ⟨.node _ ``«<» _⟩ => 28
+| turn% ⟨.node _ ``«=» _⟩ => 29
+| turn% ⟨.node _ ``«>» _⟩ => 30
+| turn% ⟨.node _ ``«?» _⟩ => 31
+| turn% ⟨.node _ ``«@» _⟩ => 32
 | turn% ⟨.node _ ``«A» _⟩ => 33
 | turn% ⟨.node _ ``«B» _⟩ => 34
 | turn% ⟨.node _ ``«C» _⟩ => 35
@@ -638,12 +636,12 @@ def toFin : Key → Fin 97
 | turn% ⟨.node _ ``«X» _⟩ => 56
 | turn% ⟨.node _ ``«Y» _⟩ => 57
 | turn% ⟨.node _ ``«Z» _⟩ => 58
-| turn% ⟨.node _ ``lbracket _⟩ => 59
-| turn% ⟨.node _ ``slash _⟩ => 60
-| turn% ⟨.node _ ``rbracket _⟩ => 61
-| turn% ⟨.node _ ``caret _⟩ => 62
-| turn% ⟨.node _ ``underscore _⟩ => 63
-| turn% ⟨.node _ ``grave _⟩ => 64
+| turn% ⟨.node _ ``«[» _⟩ => 59
+| turn% ⟨.node _ ``«\» _⟩ => 60
+| turn% ⟨.node _ ``«]» _⟩ => 61
+| turn% ⟨.node _ ``«^» _⟩ => 62
+| turn% ⟨.node _ ``«_» _⟩ => 63
+| turn% ⟨.node _ ``«`» _⟩ => 64
 | turn% ⟨.node _ ``«a» _⟩ => 65
 | turn% ⟨.node _ ``«b» _⟩ => 66
 | turn% ⟨.node _ ``«c» _⟩ => 67
@@ -670,15 +668,15 @@ def toFin : Key → Fin 97
 | turn% ⟨.node _ ``«x» _⟩ => 88
 | turn% ⟨.node _ ``«y» _⟩ => 89
 | turn% ⟨.node _ ``«z» _⟩ => 90
-| turn% ⟨.node _ ``lbrace _⟩ => 91
-| turn% ⟨.node _ ``pipe _⟩ => 92
-| turn% ⟨.node _ ``rbrace _⟩ => 93
-| turn% ⟨.node _ ``tilde _⟩ => 94
+| turn% ⟨.node _ ``«{» _⟩ => 91
+| turn% ⟨.node _ ``«|» _⟩ => 92
+| turn% ⟨.node _ ``«}» _⟩ => 93
+| turn% ⟨.node _ ``«~» _⟩ => 94
 | spin% => 95
 | _ => 96
 
 open Sodium Crypto Ethos in
-def quantize {τ : Sodium σ} (scope : ScopeName := .global) : Key → CryptoM τ Observable
+def quantize {τ : Sodium σ} (scope : ScopeName := .local) : Key → CryptoM τ Observable
 | turn% γ => do Observable.new <| ← `(tactic|leader% $γ)
 | spin% => do Observable.new <| ← `(tactic|done%)
 | _ => Observable.pointer scope
@@ -692,38 +690,38 @@ def Shape.pull : Shape → Key
 
 def Shape.push : Key → Shape
 | turn% ⟨.node _ ``space _⟩ => shape% ' '
-| turn% ⟨.node _ ``exclamation _⟩ => shape% '!'
-| turn% ⟨.node _ ``quote _⟩ => shape% '"'
-| turn% ⟨.node _ ``hash _⟩ => shape% '#'
-| turn% ⟨.node _ ``dollar _⟩ => shape% '$'
-| turn% ⟨.node _ ``percent _⟩ => shape% '%'
-| turn% ⟨.node _ ``ampersand _⟩ => shape% '&'
-| turn% ⟨.node _ ``apostrophe _⟩ => shape% '\''
-| turn% ⟨.node _ ``lparen _⟩ => shape% '('
-| turn% ⟨.node _ ``rparen _⟩ => shape% ')'
-| turn% ⟨.node _ ``asterisk _⟩ => shape% '*'
-| turn% ⟨.node _ ``plus _⟩ => shape% '+'
-| turn% ⟨.node _ ``comma _⟩ => shape% ','
-| turn% ⟨.node _ ``hyphen _⟩ => shape% '-'
-| turn% ⟨.node _ ``period _⟩ => shape% '.'
-| turn% ⟨.node _ ``divide _⟩ => shape% '/'
-| turn% ⟨.node _ ``zero _⟩ => shape% '0'
-| turn% ⟨.node _ ``one _⟩ => shape% '1'
-| turn% ⟨.node _ ``two _⟩ => shape% '2'
-| turn% ⟨.node _ ``three _⟩ => shape% '3'
-| turn% ⟨.node _ ``four _⟩ => shape% '4'
-| turn% ⟨.node _ ``five _⟩ => shape% '5'
-| turn% ⟨.node _ ``six _⟩ => shape% '6'
-| turn% ⟨.node _ ``seven _⟩ => shape% '7'
-| turn% ⟨.node _ ``eight _⟩ => shape% '8'
-| turn% ⟨.node _ ``nine _⟩ => shape% '9'
-| turn% ⟨.node _ ``colon _⟩ => shape% ':'
-| turn% ⟨.node _ ``semicolon _⟩ => shape% ';'
-| turn% ⟨.node _ ``langle _⟩ => shape% '<'
-| turn% ⟨.node _ ``equals _⟩ => shape% '='
-| turn% ⟨.node _ ``rangle _⟩ => shape% '>'
-| turn% ⟨.node _ ``question _⟩ => shape% '?'
-| turn% ⟨.node _ ``sign _⟩ => shape% '@'
+| turn% ⟨.node _ ``«!» _⟩ => shape% '!'
+| turn% ⟨.node _ ``«"» _⟩ => shape% '"'
+| turn% ⟨.node _ ``«#» _⟩ => shape% '#'
+| turn% ⟨.node _ ``«$» _⟩ => shape% '$'
+| turn% ⟨.node _ ``«%» _⟩ => shape% '%'
+| turn% ⟨.node _ ``«&» _⟩ => shape% '&'
+| turn% ⟨.node _ ``«'» _⟩ => shape% '\''
+| turn% ⟨.node _ ``«(» _⟩ => shape% '('
+| turn% ⟨.node _ ``«)» _⟩ => shape% ')'
+| turn% ⟨.node _ ``«*» _⟩ => shape% '*'
+| turn% ⟨.node _ ``«+» _⟩ => shape% '+'
+| turn% ⟨.node _ ``«,» _⟩ => shape% ','
+| turn% ⟨.node _ ``«-» _⟩ => shape% '-'
+| turn% ⟨.node _ ``«.» _⟩ => shape% '.'
+| turn% ⟨.node _ ``«/» _⟩ => shape% '/'
+| turn% ⟨.node _ ``«0» _⟩ => shape% '0'
+| turn% ⟨.node _ ``«1» _⟩ => shape% '1'
+| turn% ⟨.node _ ``«2» _⟩ => shape% '2'
+| turn% ⟨.node _ ``«3» _⟩ => shape% '3'
+| turn% ⟨.node _ ``«4» _⟩ => shape% '4'
+| turn% ⟨.node _ ``«5» _⟩ => shape% '5'
+| turn% ⟨.node _ ``«6» _⟩ => shape% '6'
+| turn% ⟨.node _ ``«7» _⟩ => shape% '7'
+| turn% ⟨.node _ ``«8» _⟩ => shape% '8'
+| turn% ⟨.node _ ``«9» _⟩ => shape% '9'
+| turn% ⟨.node _ ``«:» _⟩ => shape% ':'
+| turn% ⟨.node _ ``«;» _⟩ => shape% ';'
+| turn% ⟨.node _ ``«<» _⟩ => shape% '<'
+| turn% ⟨.node _ ``«=» _⟩ => shape% '='
+| turn% ⟨.node _ ``«>» _⟩ => shape% '>'
+| turn% ⟨.node _ ``«?» _⟩ => shape% '?'
+| turn% ⟨.node _ ``«@» _⟩ => shape% '@'
 | turn% ⟨.node _ ``«A» _⟩ => shape% 'A'
 | turn% ⟨.node _ ``«B» _⟩ => shape% 'B'
 | turn% ⟨.node _ ``«C» _⟩ => shape% 'C'
@@ -750,12 +748,12 @@ def Shape.push : Key → Shape
 | turn% ⟨.node _ ``«X» _⟩ => shape% 'X'
 | turn% ⟨.node _ ``«Y» _⟩ => shape% 'Y'
 | turn% ⟨.node _ ``«Z» _⟩ => shape% 'Z'
-| turn% ⟨.node _ ``lbracket _⟩ => shape% '['
-| turn% ⟨.node _ ``slash _⟩ => shape% '\\'
-| turn% ⟨.node _ ``rbracket _⟩ => shape% ']'
-| turn% ⟨.node _ ``caret _⟩ => shape% '^'
-| turn% ⟨.node _ ``underscore _⟩ => shape% '_'
-| turn% ⟨.node _ ``grave _⟩ => shape% '`'
+| turn% ⟨.node _ ``«[» _⟩ => shape% '['
+| turn% ⟨.node _ ``«\» _⟩ => shape% '\\'
+| turn% ⟨.node _ ``«]» _⟩ => shape% ']'
+| turn% ⟨.node _ ``«^» _⟩ => shape% '^'
+| turn% ⟨.node _ ``«_» _⟩ => shape% '_'
+| turn% ⟨.node _ ``«`» _⟩ => shape% '`'
 | turn% ⟨.node _ ``«a» _⟩ => shape% 'a'
 | turn% ⟨.node _ ``«b» _⟩ => shape% 'b'
 | turn% ⟨.node _ ``«c» _⟩ => shape% 'c'
@@ -782,10 +780,10 @@ def Shape.push : Key → Shape
 | turn% ⟨.node _ ``«x» _⟩ => shape% 'x'
 | turn% ⟨.node _ ``«y» _⟩ => shape% 'y'
 | turn% ⟨.node _ ``«z» _⟩ => shape% 'z'
-| turn% ⟨.node _ ``lbrace _⟩ => shape% '{'
-| turn% ⟨.node _ ``pipe _⟩ => shape% '|'
-| turn% ⟨.node _ ``rbrace _⟩ => shape% '}'
-| turn% ⟨.node _ ``tilde _⟩ => shape% '~'
+| turn% ⟨.node _ ``«{» _⟩ => shape% '{'
+| turn% ⟨.node _ ``«|» _⟩ => shape% '|'
+| turn% ⟨.node _ ``«}» _⟩ => shape% '}'
+| turn% ⟨.node _ ``«~» _⟩ => shape% '~'
 | spin% => top%
 | _ => default
 
@@ -793,11 +791,9 @@ open Sodium Crypto Ethos
 
 structure _root_.IO.RealWorld.Key (τ : Sodium σ) where
   key : Typo.Key
-  witness : Witness τ := ⟨@default.{1} _ Universal.prompt.{0}, fun _ => key.quantize⟩
+  witness : Witness τ := ⟨@default _ Universal.prompt.{0}, fun _ => key.quantize⟩
 
-/--
-Mechanism for elaborating keypresses.
--/
+/-- Mechanism for elaborating keypresses. -/
 def Typewriter (τ : Sodium σ) : PFunctor where
   «A» := IO.RealWorld.Key τ
   «B» | ⟨none, _⟩ => PEmpty
@@ -828,9 +824,7 @@ def enter (γ : String) (on : String := ";") (action : IO Unit := IO.eprint "\n"
   action
 | _ => throwUnsupportedSyntax
 
-/--
-Given a `TermElabM Shape`, attempt to resolve ⊢ `ULift Char`.
--/
+/-- Given a `TermElabM Shape`, attempt to resolve ⊢ `ULift Char`. -/
 @[aesop unsafe 97% apply (rule_sets := [«external»]) (pattern := ULift.{_} Char)]
 def norm (γ : TermElabM Shape) : TacticM PUnit := do
   match Shape.pull (← runTermElab γ) with
@@ -850,9 +844,7 @@ def read {γ : IO.RealWorld.Key τ} (writer : TacticM ((Typewriter τ).B γ)) : 
   | ⟨spin%, _⟩ => (← writer) <| ← `(tactic|done%)
   | _ => throwUnsupportedSyntax
 
-/--
-Source `IO.RealWorld.Key τ` from stdin without buffering.
--/
+/-- Source `IO.RealWorld.Key τ` from stdin without buffering. -/
 def getKeyFromCore : CoreM (Option (IO.RealWorld.Key τ)) := do
   let fd ← IO.getStdin
   let mut key? : Option (IO.RealWorld.Key τ) := none
@@ -875,42 +867,42 @@ protected def observe
   (ε : CoreM (Option (IO.RealWorld.Key τ)) := getKeyFromCore)
   (pre : String := default)
   (post : String := default)
-  : TacticM (Witness τ) :=
-do match writer with
-| ⟨⟨spin%, α⟩, press⟩ =>
-  let mut buf : String := pre
-  try
-    repeat match ← ε with
-    | some key =>
-      let γ ← mkFreshExprMVar (userName := `«γ») <| mkApp (mkConst ``ULift [levelZero, levelZero]) (mkConst ``Char)
-      let _ ← Tactic.run γ.mvarId! <| read <| write key (δ buf)
-      let γ ← instantiateMVars γ
-      let γ ← Tactic.elabTermEnsuringType (← delab <| mkApp (mkConst ``ULift.down) γ) (mkConst ``Char)
-      let γ := String.mk [← unsafe evalExpr Char (mkConst ``Char) γ]
-      IO.eprint γ
-      buf := buf ++ γ
-    | _ => throwAbortTactic
-    return default
-  catch ex => do
-    unless isAbortTacticException ex do throw ex
-    let γ ← delab <| mkStrLit (buf ++ post)
-    let γ ← `(tactic|exact ⟨$γ⟩)
-    press evalTactic γ
+: TacticM (Witness τ) := do
+  match writer with
+  | ⟨⟨spin%, α⟩, press⟩ =>
+    let mut buf : String := pre
+    try
+      repeat match ← ε with
+      | some key =>
+        let γ ← mkFreshExprMVar (userName := `«γ») <| mkApp (mkConst ``ULift [levelZero, levelZero]) (mkConst ``Char)
+        let _ ← Tactic.run γ.mvarId! <| read <| write key (δ buf)
+        let γ ← instantiateMVars γ
+        let γ ← Tactic.elabTermEnsuringType (← delab <| mkApp (mkConst ``ULift.down) γ) (mkConst ``Char)
+        let γ := String.mk [← unsafe evalExpr Char (mkConst ``Char) γ]
+        IO.eprint γ
+        buf := buf ++ γ
+      | _ => throwAbortTactic
+      return default
+    catch ex => do
+      unless isAbortTacticException ex do throw ex
+      let γ ← delab <| mkStrLit (buf ++ post)
+      let γ ← `(tactic|exact ⟨$γ⟩)
+      press evalExact γ
+      return by refine Universal.map (bind · fun α => ?_) α; exact do
+        -- Provide a witness for `ULift String` using the computed value.
+        unless α.phase = .safe do return α
+        let γ ← Observable.new γ .global
+        γ.emit (← IO.getStdout) "$/spin"
+        return γ
+  | ⟨⟨turn% γ, α⟩, press⟩ =>
+    press (Shape.push <$> do IO.eprint (← parse γ); pure (turn% γ)) <| ← `(tactic|done%)
     return by refine Universal.map (bind · fun α => ?_) α; exact do
-      -- Provide a witness for `ULift String` using the computed value.
-      unless α.phase = .safe do return α
-      let γ ← Observable.new γ .global
-      γ.emit (← IO.getStdout) "$/spin"
+      -- Provide a witness for `ULift String` by encoding the given grapheme as a Json string.
+      let γ ← Observable.new <| ← `(tactic|leader% $γ)
+      let γ ← γ.quantize (if α.phase = .norm then .down else if α.phase = .safe then .left else .right)
+      γ.emit (← IO.getStdout) "$/turn"
       return γ
-| ⟨⟨turn% γ, α⟩, press⟩ =>
-  press (Shape.push <$> do IO.eprint (← parse γ); pure (turn% γ)) <| ← `(tactic|done%)
-  return by refine Universal.map (bind · fun α => ?_) α; exact do
-    -- Provide a witness for `ULift String` by encoding the given grapheme as a Json string.
-    let γ ← Observable.new <| ← `(tactic|leader% $γ)
-    let γ ← γ.quantize (if α.phase = .norm then .down else if α.phase = .safe then .left else .right)
-    γ.emit (← IO.getStdout) "$/turn"
-    return γ
-| ⟨⟨none, α⟩, _⟩ => pure α
+  | ⟨⟨none, α⟩, _⟩ => pure α
 
 protected def print
   (writer : Typewriter τ Tactic)
@@ -918,13 +910,13 @@ protected def print
   (ε : CoreM (Option (IO.RealWorld.Key τ)) := getKeyFromCore)
   (pre : String := default)
   (post : String := default)
-  : TacticM String :=
-do
-  let γ ← mkFreshExprMVar (userName := `«γ») <| mkApp (mkConst ``ULift [levelZero]) (mkConst ``String)
+: TacticM String := do
+  let type := mkApp (mkConst ``ULift [levelZero]) (mkConst ``String)
+  let γ ← mkFreshExprMVar (userName := `«γ») type
   let _ ← Tactic.run γ.mvarId! <| discard <| Typewriter.observe writer δ ε pre post
   let γ ← instantiateMVars γ
-  let γ ← Tactic.elabTermEnsuringType (← delab <| mkApp (mkConst ``ULift.down) γ) (mkConst ``String)
-  unsafe evalExpr String (mkConst ``String) γ
+  let γ ← unsafe evalExpr (ULift String) type γ
+  return γ.down
 
 protected def auto
   (writer : Typewriter τ Tactic)
@@ -932,10 +924,9 @@ protected def auto
   (δ : String → Tactic := enter)
   (pre : String := default)
   (post : String := default)
-  : TacticM (Witness τ) :=
-do
+: TacticM String := do
   let ref ← IO.mkRef ictx.input.data
-  Typewriter.observe writer δ (pre := pre) (post := post) do
+  Typewriter.print writer δ (pre := pre) (post := post) do
     match ← ref.get with
     | [] => pure none
     | ε :: δ => ref.set δ; return some { key := Key.mk ε }
@@ -943,37 +934,37 @@ do
 end Typewriter
 
 @[reducible]
-def Typist (τ : Sodium σ) := Emulator σ ⊚ Typewriter τ
+def Typist [io : World] := Emulator ⊚ Typewriter io.τ
 
 namespace Typist
 
-variable {τ : Sodium σ}
+variable [io : World]
 
 @[reducible]
-protected def map {α β} := @PFunctor.map α β (Typist τ)
+protected def map {α β} := @PFunctor.map α β Typist
 
-instance : Functor (Typist τ) where
+instance : Functor Typist where
   map := Typist.map
 
-abbrev mk := @PFunctor.W.mk (Typist τ)
-abbrev next := @PFunctor.W.next (Typist τ)
-abbrev head := @PFunctor.W.head (Typist τ)
-abbrev children := @PFunctor.W.children (Typist τ)
-abbrev cases := @PFunctor.W.cases (Typist τ)
+abbrev mk := @PFunctor.W.mk Typist
+abbrev next := @PFunctor.W.next Typist
+abbrev head := @PFunctor.W.head Typist
+abbrev children := @PFunctor.W.children Typist
+abbrev cases := @PFunctor.W.cases Typist
 
 end Typist
 
 @[reducible]
-def Automaton (τ : Sodium σ) := Typewriter τ ⊚ Emulator σ
+def Automaton (io : World) := Typewriter io.τ ⊚ Emulator
 
 namespace Automaton
 
-variable {τ : Sodium σ}
+variable [io : World]
 
 @[reducible]
-protected def map {α β} := @PFunctor.map α β (Automaton τ)
+protected def map {α β} := @PFunctor.map α β (Automaton io)
 
-instance : Functor (Automaton τ) where
+instance : Functor (Automaton io) where
   map := Automaton.map
 
 end Automaton

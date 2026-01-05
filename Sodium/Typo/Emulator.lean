@@ -97,6 +97,8 @@ def Emulator [io : World] : PFunctor where
 
 namespace Emulator
 
+variable [io : World]
+
 section quotPrecheckFalse
 set_option quotPrecheck false
 
@@ -118,26 +120,26 @@ notation "commit% " α ", " β =>
 end quotPrecheckFalse
 
 @[reducible]
-protected def map [World] {α β} := @PFunctor.map α β Emulator
+protected def map {α β} := @PFunctor.map α β Emulator
 
-instance [World] : Functor Emulator where
+instance : Functor Emulator where
   map := Emulator.map
 
-@[simp] theorem emulator_idx [World] :
+@[simp] theorem emulator_idx :
   Emulator.A = (IO.RealWorld.Shape × IO.RealWorld.Point) := rfl
 
-@[simp] theorem emulator_stop_idx [World] : Emulator.B stop% = PUnit := rfl
-@[simp] theorem emulator_start_idx [World] : ∀ β, Emulator.B (start% β) = TermElabM Shape := by intro; rfl
-@[simp] theorem emulator_stage_idx [World] : ∀ α, Emulator.B (stage% α) = Tactic := by intro; rfl
-@[simp] theorem emulator_commit_idx [World] : ∀ α β, Emulator.B (commit% α, β) = TermElabM Shape := by intros; rfl
+@[simp] theorem emulator_stop_idx : Emulator.B stop% = PUnit := rfl
+@[simp] theorem emulator_start_idx : ∀ β, Emulator.B (start% β) = TermElabM Shape := by intro; rfl
+@[simp] theorem emulator_stage_idx : ∀ α, Emulator.B (stage% α) = Tactic := by intro; rfl
+@[simp] theorem emulator_commit_idx : ∀ α β, Emulator.B (commit% α, β) = TermElabM Shape := by intros; rfl
 
 /-- Produce a stream of bytes on `log` using magic. -/
 def bridge
+  (x : TermElabM Shape)
   (log : IO.FS.Stream)
   (v : Level := levelOne)
   (scope : ScopeName := .local)
   (config : TSyntaxArray `Aesop.tactic_clause := #[])
-  [io : World]
 : CryptoM io.τ (Emulator (TermElabM Shape)) := do
   let γ ← `(tactic|aesop (rule_sets := [«standard», «cautious», «external», «temporal»]) $config*)
   let o ← Observable.new γ scope
@@ -154,7 +156,7 @@ def bridge
       let (x, _) ← Aesop.runTacticMAsMetaM α x
       return β (by aesop (add norm unfold Universal.prompt))
     catch _ => o.renew scope
-  let δ := δ <| pure (default : Shape)
+  let δ := δ x
   δ.emit log o
   return by
     refine Emulator.map o.observe ⟨ε, fun δ => ?_⟩
