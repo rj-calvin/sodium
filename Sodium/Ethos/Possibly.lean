@@ -6,9 +6,10 @@ import Sodium.FFI.GenericHash
 
 open Lean Elab Term Sodium Aesop Ethos
 
+declare_aesop_rule_sets [«external»] (default := false)
+
 variable ⦃γ : Inhabited Prop⦄ {τ : Sodium (PLift (@default Prop γ))}
 
-/-- A point on Curve25519 relative to `x : Weight`. -/
 structure Prob (x : Weight) extends Weight where
   fpt : SecretVector τ (@Weight.quantize toPSigma .global)
   fpt_shape : x.quantize .global = @Weight.quantize toPSigma .global
@@ -19,13 +20,17 @@ set_option quotPrecheck false
 notation "Δ% " τ ", " x => @Prob _ τ x
 
 notation "δ% " u " : " o =>
-  ∀ (hδ : ∃ y, @Ethos.Weight.quantize y Aesop.ScopeName.local = (u).toNat := o), Δ% $(mkIdent `τ), hδ.choose
+  ∀ (hδ : ∃ δ, @Ethos.Weight.quantize δ Aesop.ScopeName.local = (u).toNat := o), Δ% $(mkIdent `τ), hδ.choose
 
 def toWeight (_ : Δ% τ, x) : Weight := x
 def toSecret (γ : Δ% τ, x) : SecretVector τ <| x.quantize .global := γ.fpt_shape ▸ γ.fpt
 
-abbrev num (p : Δ% τ, x) := (toWeight p).num
-abbrev den (p : Δ% τ, x) := (toWeight p).den
+abbrev num (p : Δ% τ, x) := p.toWeight.num
+abbrev den (p : Δ% τ, x) := p.toWeight.den
+abbrev top (p : Δ% τ, x) := p.toPSigma.fst
+abbrev bot (p : Δ% τ, x) := p.toPSigma.snd.down
+
+def split.{u,v} (p : Δ% τ, x) : Weight.{u} ×' Weight.{v} := ⟨p.toWeight, p.toPSigma⟩
 
 end Prob
 
@@ -322,7 +327,7 @@ protected def «elab» (p : PString) : TermElabM String := do
   for c in p.down.getArgs do
     let type := mkApp (mkConst ``ULift [levelZero, levelZero]) (mkConst ``Char)
     let δ ← Meta.mkFreshExprMVar type
-    runTacticMAsTermElabM δ.mvarId! do Tactic.evalTactic c
+    runTacticMAsTermElabM δ.mvarId! do Tactic.evalExact c
     let δ ← instantiateMVars δ
     let x ← unsafe Meta.evalExpr (ULift Char) type δ
     s := s ++ ⟨[x.down]⟩

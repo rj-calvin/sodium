@@ -9,23 +9,25 @@ namespace Ethos
 
 notation "σ%" => PLift (@default _ Universal.prompt)
 
-@[inherit_doc Ethos.Field] abbrev Universal.Field :=
-  fun τ : Sodium σ% => Universal <| @Ethos.Field.{1,0} Universal.prompt τ Observable
+class World where
+  τ : Sodium σ%
 
-@[inherit_doc Ethos.Lattice] abbrev Universal.Lattice :=
-  fun τ : Sodium σ% => Universal <| @Ethos.Lattice.{0} Universal.prompt τ
+@[inherit_doc Ethos.Field] abbrev Universal.Field [io : World] :=
+  Universal <| @Ethos.Field.{1,0} Universal.prompt io.τ Observable
+
+@[inherit_doc Ethos.Lattice] abbrev Universal.Lattice [io : World] :=
+  Universal <| @Ethos.Lattice.{0} Universal.prompt io.τ
 
 /-- Round-trip `f` through `unimax`. -/
-@[reducible] def Universal.lift
+def Universal.lift {τ : Sodium σ%}
   (f : ∀ ε : Weight, (hε : some (ε.quantize .global) = unimax.toNat) → δ% unimax :
     ε.quantize_relativity.imp fun _ hδ => by rwa [hδ] at hε)
-: Universal.Field τ := by
+: Universal.Field (io := ⟨τ⟩) := by
   refine ⟨@default _ Universal.prompt.{0}, fun o => ?_⟩
-  let o := o (by aesop (add norm unfold Universal.prompt))
   refine ⟨fun ε h _ => f ε.down h, fun w? => ?_⟩
   unfold Universal.Field Ethos.Field at w?
   simp only [unimax_idx] at w?
-  match w? with | _ => exact o
+  match w? with | _ => exact o (by aesop (add norm unfold Universal.prompt))
 
 /-- info: 'Ethos.Universal.lift' depends on axioms: [propext, Classical.choice, Lean.ofReduceBool, Quot.sound] -/
 #guard_msgs in
@@ -35,63 +37,63 @@ namespace Prob
 
 open FFI.Ristretto
 
-variable {τ : Sodium σ%} [x : Scalar]
+variable [x : Scalar] [io : World]
 
-def mkFreshScalar : CryptoM τ (Δ% τ, x.toWeight) := do
-  let fpt ← scalarRandom (τ := τ)
+def mkFreshScalar : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
+  let fpt ← scalarRandom (τ := io.τ)
   return ⟨x.toWeight, x.scalar_nat_idx ▸ fpt, rfl⟩
 
-def mkStaleScalar (w : NonReduced) : CryptoM τ (Δ% τ, x.toWeight) := do
-  let some fpt ← scalarReduce (τ := τ) w | throwSpecViolation Curve25519 decl_name%
+def mkStaleScalar (w : NonReduced) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
+  let some fpt ← scalarReduce (τ := io.τ) w | throwSpecViolation Curve25519 decl_name%
   return ⟨x.toWeight, x.scalar_nat_idx ▸ fpt, rfl⟩
 
-def reduce {α} [Encodable α] (a : α) (name? : Option Name := none) : CryptoM τ (Δ% τ, x.toWeight) := do
+def reduce {α} [Encodable α] (a : α) (name? : Option Name := none) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
   mkStaleScalar (.ofEncodable a name?)
 
-def base (p : Δ% τ, x.toWeight) : Option Reduced :=
-  scalarbase (τ := τ) <| x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt 
+def base (p : Δ% io.τ, x.toWeight) : Option Reduced :=
+  scalarbase (τ := io.τ) <| x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt 
 
-def form (p : Δ% τ, x.toWeight) : Option Reduced → Option Reduced
-| some c => scalarmult (τ := τ) (x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt) c
+def form (p : Δ% io.τ, x.toWeight) : Option Reduced → Option Reduced
+| some c => scalarmult (τ := io.τ) (x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt) c
 | _ => none
 
-def inv (p : Δ% τ, x.toWeight) : CryptoM τ (Δ% τ, x.toWeight) := do
+def inv (p : Δ% io.τ, x.toWeight) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
   let fpt := x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt
-  let some fpt ← scalarInvert (τ := τ) fpt | throwSpecViolation Curve25519 decl_name%
-  have : τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
+  let some fpt ← scalarInvert (τ := io.τ) fpt | throwSpecViolation Curve25519 decl_name%
+  have : io.τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
   return ⟨p.toPSigma, this, p.fpt_shape⟩
 
-def neg (p : Δ% τ, x.toWeight) : CryptoM τ (Δ% τ, x.toWeight) := do
+def neg (p : Δ% io.τ, x.toWeight) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
   let fpt := x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt
-  let some fpt ← scalarNegate (τ := τ) fpt | throwSpecViolation Curve25519 decl_name%
-  have : τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
+  let some fpt ← scalarNegate (τ := io.τ) fpt | throwSpecViolation Curve25519 decl_name%
+  have : io.τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
   return ⟨p.toPSigma, this, p.fpt_shape⟩
 
-def com (p : Δ% τ, x.toWeight) : CryptoM τ (Δ% τ, x.toWeight) := do
+def com (p : Δ% io.τ, x.toWeight) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
   let fpt := x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt
-  let some fpt ← scalarComplement (τ := τ) fpt | throwSpecViolation Curve25519 decl_name%
-  have : τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
+  let some fpt ← scalarComplement (τ := io.τ) fpt | throwSpecViolation Curve25519 decl_name%
+  have : io.τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
   return ⟨p.toPSigma, this, p.fpt_shape⟩
 
-def mul (p q : Δ% τ, x.toWeight) : CryptoM τ (Δ% τ, x.toWeight) := do
+def mul (p q : Δ% io.τ, x.toWeight) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
   let fpt := x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt
   let fqt := x.scalar_nat_idx ▸ q.fpt_shape ▸ q.fpt
-  let some fpt ← scalarMul (τ := τ) fpt fqt | throwSpecViolation Curve25519 decl_name%
-  have : τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
+  let some fpt ← scalarMul (τ := io.τ) fpt fqt | throwSpecViolation Curve25519 decl_name%
+  have : io.τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
   return ⟨p.toPSigma, this, p.fpt_shape⟩
 
-def add (p q : Δ% τ, x.toWeight) : CryptoM τ (Δ% τ, x.toWeight) := do
+def add (p q : Δ% io.τ, x.toWeight) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
   let fpt := x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt
   let fqt := x.scalar_nat_idx ▸ q.fpt_shape ▸ q.fpt
-  let some fpt ← scalarAdd (τ := τ) fpt fqt | throwSpecViolation Curve25519 decl_name%
-  have : τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
+  let some fpt ← scalarAdd (τ := io.τ) fpt fqt | throwSpecViolation Curve25519 decl_name%
+  have : io.τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
   return ⟨p.toPSigma, this, p.fpt_shape⟩
 
-def sub (p q : Δ% τ, x.toWeight) : CryptoM τ (Δ% τ, x.toWeight) := do
+def sub (p q : Δ% io.τ, x.toWeight) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
   let fpt := x.scalar_nat_idx ▸ p.fpt_shape ▸ p.fpt
   let fqt := x.scalar_nat_idx ▸ q.fpt_shape ▸ q.fpt
-  let some fpt ← scalarSub (τ := τ) fpt fqt | throwSpecViolation Curve25519 decl_name%
-  have : τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
+  let some fpt ← scalarSub (τ := io.τ) fpt fqt | throwSpecViolation Curve25519 decl_name%
+  have : io.τ.SecretVector (Weight.quantize p.toPSigma .global) := by rwa [← Prob.fpt_shape, Scalar.scalar_nat_idx]
   return ⟨p.toPSigma, this, p.fpt_shape⟩
 
 end Prob
@@ -150,8 +152,8 @@ instance : Mul Poly.W := ⟨mul⟩
 instance : Add Poly.W := ⟨add⟩
 instance : Sub Poly.W := ⟨sub⟩
 
-protected partial def mk (τ : Sodium σ%) [x : Scalar] : Poly.W → CryptoM τ (Δ% τ, x.toWeight) := aux
-where aux : Poly.W → CryptoM τ (Δ% τ, x.toWeight) := PFunctor.W.cases fun
+protected partial def mk [x : Scalar] [io : World] : Poly.W → CryptoM io.τ (Δ% io.τ, x.toWeight) := aux
+where aux : Poly.W → CryptoM io.τ (Δ% io.τ, x.toWeight) := PFunctor.W.cases fun
 | ⟨.inl c, _⟩ => Prob.mkStaleScalar c
 | ⟨.inr .bot, k⟩ => do
   let α ← aux <| k ()
@@ -170,7 +172,7 @@ where aux : Poly.W → CryptoM τ (Δ% τ, x.toWeight) := PFunctor.W.cases fun
   let α ← aux <| k false
   let β ← aux <| k true
   α.add β
-  | ⟨.inr .top, k⟩ => do
+| ⟨.inr .top, k⟩ => do
   let α ← aux <| k false
   let β ← aux <| k true
   α.sub β
@@ -211,12 +213,12 @@ instance : Zero Point.W := ⟨(0 : Poly.W) • none (α := Reduced)⟩
 instance : Inhabited Point.W := ⟨0⟩
 
 open FFI.Ristretto in
-protected partial def mk {τ : Sodium σ%} (x : Point.W) : CryptoM τ Ristretto := do
+protected partial def mk [io : World] (x : Point.W) : CryptoM io.τ Ristretto := do
   let y ← aux x
   return y.bind fun z => if h : isValidPoint z then some ⟨z, h⟩ else none
-where aux : Point.W → CryptoM τ (Option Reduced) := PFunctor.W.cases fun
+where aux : Point.W → CryptoM io.τ (Option Reduced) := PFunctor.W.cases fun
 | ⟨.inl ⟨α, b⟩, _⟩ =>
-  if isValidPoint b then return (← Poly.mk τ α).form b
+  if isValidPoint b then return (← Poly.mk α).form b
   else pure none
 | ⟨.inr false, k⟩ => do
   let some p ← aux <| k false | return none
@@ -238,23 +240,11 @@ macro "idx? " n:ident " : " config:Aesop.tactic_clause+ : tactic => do
   `(tactic| refine bind $o fun $n => ?_)
 
 macro "point " p:term : tactic => `(tactic| refine' Point.mk $p)
-macro "mount " p:term : tactic => `(tactic| refine' (pure ∘ Point.corec) $p)
+macro "corec " p:term : tactic => `(tactic| refine' (pure ∘ Point.corec) $p)
 
 macro "poly " e:term ", " p:term : tactic => `(tactic| refine (show Poly.W from $p) • $(e).base)
 macro "form " e:term ", " x:term ", " p:term : tactic => `(tactic| refine (show Poly.W from $p) • $(e).form $x)
 
 end Point
-
-#guard_msgs (drop info) in
-#eval show MetaM Ristretto from CryptoM.toMetaM fun _ : Sodium (PLift (@default _ Universal.prompt.{0})) => by
-  idx α : (rule_sets := [«standard»])
-  idx β : (rule_sets := [«standard», «cautious»])
-  idx γ : (rule_sets := [«standard», «cautious», «external»])
-  idx? δ : (rule_sets := [«standard», «cautious», «external», «temporal»])
-  point _ + _ + _ - _
-  poly α, root% 2
-  poly β, root% 3
-  poly γ, root% 5
-  poly δ, root% 8
 
 end Ethos
