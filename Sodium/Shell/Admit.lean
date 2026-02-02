@@ -13,7 +13,7 @@ unsafe def elabAdmit : TermElab
   evalExpr Expr (mkConst ``Expr) γ (safety := .unsafe)
 | _ => fun _ => throwUnsupportedSyntax
 
-def runAdmitAt (uri : System.FilePath) (code : List String) (name : Name) (latency : Nat := 29) (delay : Nat := 31) : IO Unit := do
+def runAdmitAt [io : World] (uri : System.FilePath) (code : List String) (name : Name) (latency : Nat := 29) (delay : Nat := 31) : IO Unit := do
   let tid ← IO.getTID
   let shell := uri / name.toStringWithSep "/" true default |>.addExtension "lean"
   let workspace := {uri := uri.toString, name := "«shell»" : Lsp.WorkspaceFolder}
@@ -67,7 +67,7 @@ def runAdmitAt (uri : System.FilePath) (code : List String) (name : Name) (laten
     let hLog := (← read).hLog
 
     let bridge : Syntax.Tactic → MetaM _
-    | `(tactic|aesop $config*) => Emulator.bridge (σ := Universal.Destruct) hLog config
+    | `(tactic|aesop $config*) => Emulator.bridge hLog config
     | _ => Elab.throwUnsupportedSyntax
 
     repeat match ← (← get).doc.cmdSnaps.getFinishedPrefixWithConsistentLatency (23 * latency) with
@@ -78,7 +78,7 @@ def runAdmitAt (uri : System.FilePath) (code : List String) (name : Name) (laten
     | (_, _, true) => IO.FS.writeFile shell (← get).doc.meta.text.source
     | (_, _, _) => continue
 
-protected def Admit.core (name : Name) (code : List String) (scope : ScopeName := .local) : MetaM Unit :=
+protected def Admit.core [io : World] (name : Name) (code : List String) (scope : ScopeName := .local) : MetaM Unit :=
   Meta.withNewMCtxDepth do
     if scope = .global then
       try enableRawMode; runAdmitAt ((← IO.appDir) / ".." / "..") code name

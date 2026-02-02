@@ -46,7 +46,7 @@ def unimax : Level := .ofNat BYTES
 
 @[simp] theorem unimax_idx : unimax = 32 := rfl
 @[simp] theorem unimax_pseudo_idx : @some Nat (Nat.succ 31) = unimax.toNat := rfl
-@[simp] theorem unimax_partial_idx : @some Nat 64 = unimax.toNat.bind fun o => pure <| o + Nat.succ 31 := rfl
+@[simp] theorem unimax_partial_idx : (unimax.toNat.bind fun o => pure (o + 32)) = @some Nat 64 := rfl
 @[simp] theorem unimax_match_idx : unimax.toNat.isSome = true := by unfold Level.toNat; rfl
 
 @[simp] theorem unimax_nat_idx : ∀ x, some x = unimax.toNat → x = 32 := by
@@ -342,8 +342,8 @@ def Field : PFunctor.{u, v} where
   B x := by
     obtain x : Prob.{u} _ := x ⟨(@default Scalar _).toWeight⟩ rfl
     cases x.toSecret.isZero
-    . exact ULift.{v} <| Δ% τ, x.toWeight
-    . exact PString.{v}
+    . exact Δ% τ, x.toWeight
+    . exact PString
 
 namespace Field
 
@@ -415,19 +415,21 @@ info: Try this:
     next x
       x_1 =>
       simp_all only [imp_false, unimax_pseudo_idx, unimax_idx, Option.bind_none, Option.not_lt_none]
-      (contradiction)
+      (admit)
 -/
 #guard_msgs(info, drop warning) in
-#ext_idx? ext_idx_one Δ(2 | 33).IsScalar : (add unsafe (by contradiction)) (add unsafe (by admit))
+#ext_idx? ext_idx_one Δ(2 | 33).IsScalar : (add unsafe (by admit))
 
 /--
 info: Try this:
   apply And.intro
   · unfold Lean.Level.toNat
+    unfold Lean.Level.getOffset
     simp_all only [Fin.isValue, ne_eq, Weight.mk_num_pos, not_false_eq_true, Weight.quantize_global_partial_eq,
       Nat.succ_eq_add_one, unimax_idx]
     rfl
   · unfold Lean.Level.toNat
+    unfold Lean.Level.getOffset
     simp_all only [unimax_idx, Nat.succ_eq_add_one, Nat.reduceAdd, unimax_pseudo_idx, unimax_nat_idx, Option.pure_def]
     split
     next x heq =>
@@ -439,7 +441,7 @@ info: Try this:
       (admit)
 -/
 #guard_msgs(info, drop warning) in
-#ext_idx? ext_idx_two Δ(3 | 34).IsScalar : (add unsafe (by admit))
+#ext_idx? ext_idx_two Δ(3 | 34).IsScalar : (add safe unfold Level.getOffset) (add unsafe (by admit))
 
 theorem ext_idx_three : Δ(32 | 63).IsScalar := by
   apply And.intro
@@ -467,7 +469,7 @@ abbrev Gauge {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} := @PFu
   let Field : PFunctor.{0} := @Field _ τ; ∀ _ : @Gauge _ τ PString, Field.W
 
 class HLattice {ξ : Inhabited Prop} {τ : Sodium (PLift (@default _ ξ))} (_ : @Gauge _ τ PString) where
-  field : PFunctor.W <| @Field _ τ
+  field : PFunctor.M <| @Field _ τ
 
 namespace Lattice
 

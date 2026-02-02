@@ -236,14 +236,14 @@ def liftRelative.{v, u} : ∀ x : Weight, {y : Weight // Weight.quantize.{u} x .
     simp_all only [ne_eq, not_false_eq_true, quantize_global_partial_eq, Nat.succ_eq_add_one, quantize_local_eq]
     rfl
 
-@[simp] theorem quantize_lift_relative_nonempty.{v, u} :
+theorem quantize_lift_relative_nonempty.{v, u} :
     ∀ x : Weight, Nonempty {y : Weight // Weight.quantize.{u} x .global = Weight.quantize.{v} y .local} :=
   (Nonempty.intro ·.liftRelative)
 
 /-- Given any global weight `x` in universe `u`, there exists a local weight `y` in universe `v` of equal measure. -/
 theorem quantize_relativity.{v, u} : ∀ x : Weight, ∃ y : Weight, Weight.quantize.{u} x .global = Weight.quantize.{v} y .local := by
   intro x
-  obtain ⟨y, hy⟩ := liftRelative.{v, u} x
+  obtain ⟨y, hy⟩ := quantize_lift_relative_nonempty.{v, u} x
   exact ⟨y, hy⟩
 
 end Ethos.Weight

@@ -35,7 +35,7 @@ instance : Encodable Shape := by unfold Shape; infer_instance
 instance : DecidableEq Shape := by unfold Shape; infer_instance
 
 def quantize {τ : Sodium σ} (scope : ScopeName := .local) : Shape → CryptoM τ Observable
-| shape% γ => do Observable.new <| ← `(tactic|exact ⟨$(Syntax.mkCharLit γ)⟩)
+| shape% γ => do Observable.new <| ← `(tactic| exact ⟨$(Syntax.mkCharLit γ)⟩)
 | top% => Observable.pointer (if scope = .local then .global else .local)
 | _ => Observable.pointer scope
 
@@ -141,7 +141,7 @@ def bridge
   (scope : ScopeName := .local)
   (config : TSyntaxArray `Aesop.tactic_clause := #[])
 : CryptoM io.τ (Emulator (TermElabM Shape)) := do
-  let γ ← `(tactic|aesop (rule_sets := [«standard», «cautious», «external», «temporal»]) $config*)
+  let γ ← `(tactic| aesop (rule_sets := [«standard», «cautious», «external», «temporal»]) $config*)
   let o ← Observable.new γ scope
   let log ← (if scope = .global then IO.setStdout else IO.setStderr) log
   let ε : Emulator.A := start% γ

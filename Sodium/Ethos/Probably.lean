@@ -192,7 +192,6 @@ end Poly
 namespace Point
 
 instance : Inhabited Point.A := ⟨.inl (default, default)⟩
-instance : Inhabited Point.W := ⟨⟨default, PEmpty.elim⟩⟩
 
 def arity : Point.A → Nat
 | .inl _ => 0
@@ -209,7 +208,7 @@ instance : Add Point.W := ⟨add⟩
 instance : Sub Point.W := ⟨sub⟩
 instance : HSMul Poly.W (Option Reduced) Point.W := ⟨smul⟩
 
-instance : Zero Point.W := ⟨(0 : Poly.W) • none (α := Reduced)⟩
+instance : Zero Point.W := ⟨⟨default, PEmpty.elim⟩⟩
 instance : Inhabited Point.W := ⟨0⟩
 
 open FFI.Ristretto in
@@ -244,6 +243,17 @@ macro "corec " p:term : tactic => `(tactic| refine' (pure ∘ Point.corec) $p)
 
 macro "poly " e:term ", " p:term : tactic => `(tactic| refine (show Poly.W from $p) • $(e).base)
 macro "form " e:term ", " x:term ", " p:term : tactic => `(tactic| refine (show Poly.W from $p) • $(e).form $x)
+
+example [io : World] : CryptoM io.τ Point.M := by
+  idx α : (rule_sets := [«standard», «cautious»])
+  idx β : (rule_sets := [«standard», «cautious», «external»])
+  idx γ : (rule_sets := [«standard», «cautious», «external», «temporal»])
+  idx δ : (rule_sets := [«standard», «cautious», «external», «temporal»]) (add norm unfold Level.getOffset)
+  corec ?_ + ?_ + ?_ - ?_
+  poly α, root% 2 + root% 3
+  poly β, root% 5
+  poly γ, root% 7
+  poly δ, root% 8
 
 end Point
 
