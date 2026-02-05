@@ -100,9 +100,9 @@ lean_lib «Sodium» where
       #[Module.oNoExportFacet, `module.alloy.c.o.noexport]
   moreLeancArgs := #["-fPIC"]
   weakLeancArgs := #[
-    "-I.lake/build/libsodium-build/install/include"
+    s!"-I{__dir__}/.lake/build/libsodium-build/install/include"
   ]
-  moreLinkArgs := #["-L.lake/build/lib", "-lsodium"]
+  moreLinkArgs := #[s!"-L{__dir__}/.lake/build/lib", "-lsodium"]
 
 lean_exe «shell» where
   root := `Shell

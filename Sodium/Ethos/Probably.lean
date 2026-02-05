@@ -47,7 +47,7 @@ def mkStaleScalar (w : NonReduced) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
   let some fpt ← scalarReduce (τ := io.τ) w | throwSpecViolation Curve25519 decl_name%
   return ⟨x.toWeight, x.scalar_nat_idx ▸ fpt, rfl⟩
 
-def reduce {α} [Encodable α] (a : α) (name? : Option Name := none) : CryptoM io.τ (Δ% io.τ, x.toWeight) := do
+def reduce {α} [Encodable α] (a : α) (name? : Option Name := none) : CryptoM io.τ (Δ% io.τ, x.toWeight) :=
   mkStaleScalar (.ofEncodable a name?)
 
 def base (p : Δ% io.τ, x.toWeight) : Option Reduced :=
@@ -98,7 +98,8 @@ def sub (p q : Δ% io.τ, x.toWeight) : CryptoM io.τ (Δ% io.τ, x.toWeight) :=
 
 end Prob
 
-@[reducible] def Poly : PFunctor where
+@[reducible]
+def Poly : PFunctor where
   A := NonReduced ⊕ PhaseAngle
   B | .inl _ => PEmpty
     | .inr .up | .inr .down | .inr .bot => PUnit
@@ -184,7 +185,8 @@ elab "root% " n:num : term => do
 
 end Poly
 
-@[reducible] def Point : PFunctor where
+@[reducible]
+def Point : PFunctor where
   A := Poly.W × Reduced ⊕ Bool
   B | .inl _ => PEmpty
     | .inr _ => Bool
@@ -244,15 +246,15 @@ macro "corec " p:term : tactic => `(tactic| refine' (pure ∘ Point.corec) $p)
 macro "poly " e:term ", " p:term : tactic => `(tactic| refine (show Poly.W from $p) • $(e).base)
 macro "form " e:term ", " x:term ", " p:term : tactic => `(tactic| refine (show Poly.W from $p) • $(e).form $x)
 
-example [io : World] : CryptoM io.τ Point.M := by
+example [io : World] : CryptoM io.τ Ristretto := by
   idx α : (rule_sets := [«standard», «cautious»])
   idx β : (rule_sets := [«standard», «cautious», «external»])
   idx γ : (rule_sets := [«standard», «cautious», «external», «temporal»])
   idx δ : (rule_sets := [«standard», «cautious», «external», «temporal»]) (add norm unfold Level.getOffset)
-  corec ?_ + ?_ + ?_ - ?_
-  poly α, root% 2 + root% 3
-  poly β, root% 5
-  poly γ, root% 7
+  point ?_ + ?_ + ?_ - ?_
+  poly α, root% 2
+  poly β, root% 3
+  poly γ, root% 5
   poly δ, root% 8
 
 end Point
