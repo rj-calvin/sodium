@@ -1,6 +1,6 @@
-import «Sodium».Typo.Frontend.Qwerty
+import «Sodium».Ethos
 
-open Lean Elab Tactic PrettyPrinter Sodium Crypto Ethos Typo Aesop
+open Lean Elab Tactic PrettyPrinter Sodium Crypto Ethos Aesop
 
 universe «u»
 
@@ -38,23 +38,23 @@ def destruct (fwd : Universal.Forward) : Universal Universal.Destruct := by
   have : Observable := α construct
   exact ⟨fwd this.carrier⟩
 
-def framerule : RuleTac := RuleTac.ofTacticSyntax fun δ => do
-  match ← δ.goal.getType with
-  | .forallE _ (.app (.const ``Sodium [levelZero]) (.const ``Universal.Destruct [])) body _ =>
-    unless ← Meta.isLevelDefEq levelZero levelOne do Meta.throwIsDefEqStuck
-    CryptoM.toMetaM (ctx := .ofString "external") fun τ : Sodium Universal.Destruct => do
-      let writer : Typewriter τ Tactic := ⟨default, fun next stx => try evalExact stx; catch _ => next stx⟩
-      let (witness, _) ← runTacticMAsMetaM (Typewriter.print writer) δ.mvars.toArray.toList
-      match Parser.runParserCategory (← getEnv) `tactic witness "external" with
-      | .ok stx => return ⟨← `(tactic|intro _; $(⟨stx⟩))⟩
-      | .error err => throwErrorAt (← delab body) err
-  | _ => throwPostpone
+/- def framerule : RuleTac := RuleTac.ofTacticSyntax fun δ => do -/
+/-   match ← δ.goal.getType with -/
+/-   | .forallE _ (.app (.const ``Sodium [levelZero]) (.const ``Universal.Destruct [])) body _ => -/
+/-     unless ← Meta.isLevelDefEq levelZero levelOne do Meta.throwIsDefEqStuck -/
+/-     CryptoM.toMetaM (ctx := .ofString "external") fun τ : Sodium Universal.Destruct => do -/
+/-       let writer : Typewriter τ Tactic := ⟨default, fun next stx => try evalExact stx; catch _ => next stx⟩ -/
+/-       let (witness, _) ← runTacticMAsMetaM (Typewriter.print writer) δ.mvars.toArray.toList -/
+/-       match Parser.runParserCategory (← getEnv) `tactic witness "external" with -/
+/-       | .ok stx => return ⟨← `(tactic|intro _; $(⟨stx⟩))⟩ -/
+/-       | .error err => throwErrorAt (← delab body) err -/
+/-   | _ => throwPostpone -/
 
 def mkFreshGamma (type : Expr := .app (.const ``Universal [levelZero]) (.const ``Universal.Destruct [levelZero])) : MetaM Expr := by
   refine Meta.mkFreshExprMVar (mkForall `«τ» .implicit ?_ type)
   exact .app (.const ``Sodium [levelZero]) (.const ``Universal.Destruct [levelZero])
 
-def runRuleOnce (rule : RuleTac := framerule) (deps : Array MVarId := #[]) : MetaM (Array MVarId) := do
+def runRuleOnce (rule : RuleTac) (deps : Array MVarId := #[]) : MetaM (Array MVarId) := do
   have : Ord MVarId := ⟨fun α β => α.name.quickCmp β.name⟩
   let γ ← mkFreshGamma
   let τ : Expr := .app (.const ``Sodium [levelZero]) (.const ``Universal.Destruct [levelZero])
@@ -82,7 +82,7 @@ def runRuleOnce (rule : RuleTac := framerule) (deps : Array MVarId := #[]) : Met
   | some app => app.postState.restore; return app.goals.map (·.mvarId)
   | _ => throwPostpone
 
-def runRuleForever (rule : RuleTac := framerule) : MetaM Unit := do
+def runRuleForever (rule : RuleTac) : MetaM Unit := do
   let mut mvars : Array MVarId := #[]
   repeat try mvars ← runRuleOnce rule mvars catch
   | ex@(.internal id ..) =>

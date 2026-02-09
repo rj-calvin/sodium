@@ -368,11 +368,7 @@ protected def Universal.print {α : Type} [Encodable α] (ma : Universal (MetaM 
 instance : Functor Universal where
   map := Universal.map
 
-/--
-A `Witness` is a universe-polymorphic computation over proof-carrying objects.
-
-See `Sodium.Typo.Emulator` for example usage.
--/
+/-- A `Witness` is a universe-polymorphic computation over proof-carrying objects. -/
 @[reducible]
 def Witness {σ} (τ : Sodium σ) := Universal (CryptoM τ Observable)
 

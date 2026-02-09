@@ -1,1 +1,1 @@
-import Sodium.Ethos.Basic
+import Sodium.Ethos.Probably

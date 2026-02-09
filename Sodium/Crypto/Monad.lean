@@ -474,7 +474,7 @@ def storeSymmKey [spec.HasValidShape `symmkey] (item : SymmKey τ spec) (file : 
   storeSecret key file item (·.cast (by simp only [getElem, USize.ofNatLT_eq_ofNat]; congr))
 
 unsafe def readSecret {X : {σ : Type} → Sodium σ → (spec : Spec) → [spec.HasValidShape `symmkey] → Type} [spec.HasValidShape `symmkey]
-    (lift : SecretVector τ spec[`symmkey] → X τ spec) (prompt := s!"{spec.name}.{spec[`symmkey] }") : CryptoM τ (X τ spec) := do
+    (lift : SecretVector τ spec[`symmkey] → X τ spec) (prompt := s!"{spec.name}.{spec[`symmkey]}") : CryptoM τ (X τ spec) := do
   let key ← SecretVector.ofStdin prompt spec[`symmkey]
   return lift key
 
