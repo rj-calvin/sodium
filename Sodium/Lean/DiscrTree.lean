@@ -1,6 +1,10 @@
+import Lean.Expr
+import Lean.Meta.DiscrTree
 import Sodium.Lean.Syntax
 
 namespace Lean.Meta
+
+open Expr
 
 instance FVarId.encodable : Encodable FVarId := Encodable.ofEquiv _ {
   push := FVarId.name

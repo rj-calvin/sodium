@@ -1,39 +1,11 @@
+import Lean.Data.Json
+import Std.Data.TreeMap.Raw.Lemmas
+import Std.Data.TreeMap.Raw.WF
 import Sodium.Data.ByteArray
 
-open Lean
+open Lean Std
 
 universe u v
-
-namespace RBNode
-
-variable {α : Type u} [Ord α] [Std.ReflOrd α] {β : Type v}
-
-@[simp]
-theorem insert_find_eq_some : ∀ (k : α) (v : β), RBNode.find compare (RBNode.insert compare RBNode.leaf k v) k = some v := by
-  intro k v
-  unfold RBNode.insert RBNode.ins
-  split
-  . contradiction
-  . unfold RBNode.find
-    have : compare k k = .eq := by exact Std.compare_self
-    split <;> rename_i h
-    . rw [this] at h
-      contradiction
-    . rw [this] at h
-      contradiction
-    . rfl
-
-end RBNode
-
-namespace String
-
-instance instReflOrd : Std.ReflOrd String where
-  compare_self := by
-    intro s
-    unfold compare instOrdString compareOfLessAndEq
-    simp only [String.lt_irrefl, ↓reduceIte]
-
-end String
 
 namespace Json
 
@@ -45,7 +17,7 @@ theorem num_getNat?_eq_ok : ∀ n, (Json.num (JsonNumber.fromNat n)).getNat? = .
   unfold Json.getNat? JsonNumber.fromNat
   split
   . rename_i m h
-    simp_all only [Int.ofNat_eq_coe, Json.num.injEq, JsonNumber.mk.injEq, and_true]
+    simp_all only [Int.ofNat_eq_natCast, Json.num.injEq, JsonNumber.mk.injEq, and_true]
     rw [← Int.mem_toNat?] at h
     unfold Int.toNat? at h
     simp at h
@@ -57,8 +29,10 @@ theorem num_getNat?_eq_ok : ∀ n, (Json.num (JsonNumber.fromNat n)).getNat? = .
 theorem mkObj_getObjVal?_eq_ok : ∀ s, (Json.mkObj [(s, α)]).getObjVal? s = .ok α := by
   intro s
   unfold Json.mkObj Json.getObjVal?
-  simp only [Id.run, bind_pure_comp, map_pure, List.forIn_pure_yield_eq_foldl, List.foldl_cons,
-    List.foldl_nil, pure_bind, RBNode.insert_find_eq_some]
+  have : ((∅ : TreeMap.Raw String Json compare).insert s α)[s]? = some α := by
+    refine TreeMap.Raw.getElem?_insert_self ?_
+    exact TreeMap.Raw.WF.emptyc
+  simp_all only [TreeMap.Raw.ofList_singleton, TreeMap.Raw.get?_eq_getElem?]
   rfl
 
 @[simp]
@@ -80,12 +54,12 @@ class Encodable (α : Type u) where
 
 export Encodable (encode decode?)
 
-attribute [simp] Encodable.encodek
+attribute [simp, grind =] Encodable.encodek
 
 class LawfulJson (α : Type u) [ToJson α] [FromJson α] where
   jsonk : ∀ a, fromJson? (α := α) (toJson a) = .ok a
 
-attribute [simp] LawfulJson.jsonk
+attribute [simp, grind =] LawfulJson.jsonk
 
 instance {α : Type u} [ToJson α] [FromJson α] [h : LawfulJson α] : Encodable α where
   encode := toJson
@@ -213,13 +187,13 @@ instance _root_.UInt32.encodable : Encodable UInt32 :=
 instance _root_.UInt64.encodable : Encodable UInt64 :=
   ofEquiv _ {push := UInt64.toFin, pull := UInt64.ofFin}
 
-private def _root_.ByteArray.encodeImpl : ByteArray → Json := ByteArray.toJson
-private def _root_.ByteArray.decode?Impl : Json → Option ByteArray := Except.toOption ∘ ByteArray.fromJson?
+private def _root_.ByteArray.encode.impl : ByteArray → Json := ByteArray.toJson
+private def _root_.ByteArray.decode?.impl : Json → Option ByteArray := Except.toOption ∘ ByteArray.fromJson?
 
-@[implemented_by ByteArray.encodeImpl]
+@[implemented_by ByteArray.encode.impl]
 def _root_.ByteArray.encode (bs : ByteArray) : Json := Encodable.encode bs.data
 
-@[implemented_by ByteArray.decode?Impl]
+@[implemented_by ByteArray.decode?.impl]
 def _root_.ByteArray.decode? (json : Json) : Option ByteArray := do
   let bs ← Encodable.decode? (α := Array UInt8) json
   return ⟨bs⟩
@@ -304,11 +278,11 @@ instance _root_.Except.encodable [Encodable β] : Encodable (Except α β) :=
       | .inl a => .error a
   }
 
-instance _root_.String.Pos.encodable : Encodable String.Pos :=
-  ofEquiv _ {push := String.Pos.byteIdx, pull := String.Pos.mk}
+instance _root_.String.Pos.encodable : Encodable String.Pos.Raw :=
+  ofEquiv _ {push := String.Pos.Raw.byteIdx, pull := String.Pos.Raw.mk}
 
-instance _root_.Substring.encodable : Encodable Substring :=
-  ofEquiv (String × String.Pos × String.Pos) {
+instance _root_.Substring.encodable : Encodable Substring.Raw :=
+  ofEquiv (String × String.Pos.Raw × String.Pos.Raw) {
     push x := ⟨x.str, x.startPos, x.stopPos⟩
     pull x := ⟨x.1, x.2.1, x.2.2⟩
   }

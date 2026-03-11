@@ -1,71 +1,30 @@
-import Sodium.Data.Chunk
-import Sodium.Crypto.Monad
+import Sodium.Data.Encodable
 
-universe u v
+namespace Sodium
 
-open Lean Sodium FFI GenericHash Crypto
+structure DigestStream where
+  private mk ::
+  private state : ByteArray
 
-abbrev Digest := Hash Blake2b
+noncomputable instance : Nonempty DigestStream := ⟨⟨.empty⟩⟩
 
-instance : ToString Digest := ⟨(·.toBase64)⟩
+@[extern "lean_sodium_generichash"]
+opaque genericHash (input : @& ByteArray) (key : @& Option (ByteVector 32) := none) : ByteVector 64
 
-class ToDigest (α : Type u) where
-  digest : α → Digest
+namespace DigestStream
 
-export ToDigest (digest)
+@[extern "lean_sodium_generichash_init"]
+opaque new (key : @& Option (ByteVector 32) := none) : DigestStream
 
-namespace Digest
+@[extern "lean_sodium_generichash_update"]
+opaque add (state : DigestStream) (input : @& ByteArray) : DigestStream
 
-variable {α : Type u} {β : Type v}
+@[extern "lean_sodium_generichash_final"]
+opaque get (state : @& DigestStream) : ByteVector 64
 
-def toName (dig : Digest) : Name := Name.str Blake2b.name dig.toBase64
+end DigestStream
 
-instance : Inhabited Digest where
-  default := GenericHash.hash default |>.cast
+def digest (x : α) (key : Option (ByteVector 32) := none) [Encodable α] : ByteVector 64 :=
+  genericHash (encode x).compress.toByteArray key
 
-instance [Encodable α] : ToDigest α where
-  digest x := GenericHash.hash (encode x).compress.toUTF8 |>.cast (by native_decide)
-
-instance [ToChunks α] : ToDigest α where
-  digest x := Id.run do
-    let mut stream := hashInit
-    for chunk in toChunks x do
-      stream := hashUpdate stream chunk.compress.toUTF8
-    return hashFinal stream |>.cast
-
-instance : ToDigest Unit where
-  digest _ := digest (json% null)
-
-instance {n : Nat} : ToDigest (Fin n) where
-  digest x := digest (json% $x.toNat)
-
-instance [ToDigest α] [ToDigest β] : ToDigest (α × β) where
-  digest x := Id.run do
-    let mut stream := hashInit
-    stream := hashUpdate stream (digest x.1).toArray
-    stream := hashUpdate stream (digest x.2).toArray
-    return hashFinal stream |>.cast
-
-instance [ToDigest α] [ToDigest β] : ToDigest (α ⊕ β) where
-  digest x := Id.run do
-    let mut stream := hashInit
-    match x with
-    | .inl y =>
-      stream := hashUpdate stream (digest <| json% false).toArray
-      stream := hashUpdate stream (digest y).toArray
-    | .inr z =>
-      stream := hashUpdate stream (digest <| json% true).toArray
-      stream := hashUpdate stream (digest z).toArray
-    return hashFinal stream |>.cast
-
-end Digest
-
-class EqDigest {α : Type u} {β : Type v} [ToDigest α] [ToDigest β] (a : α) (b : β) : Prop where
-  eq_digest : digest a = digest b
-
-namespace Lean.Name
-
-open Crypto in
-def blake2b {α : Type u} [ToDigest α] (x : α) : Name := Digest.toName (digest x)
-
-end Lean.Name
+end Sodium

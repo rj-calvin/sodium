@@ -1,17 +1,10 @@
 import Lake
 open Lake DSL System
 
-require alloy from git "https://github.com/tydeu/lean4-alloy.git" @ "master"
-require aesop from git "https://github.com/leanprover-community/aesop.git" @ "v4.21.0"
-require "leanprover-community" / "batteries" @ git "v4.21.0"
+require aesop from git "https://github.com/leanprover-community/aesop.git" @ "v4.27.0"
 
 package «sodium» where
 
-module_data alloy.c.o.export : FilePath
-module_data alloy.c.o.noexport : FilePath
-
--- Download and build LibSodium from source as both static and shared libraries
--- Build shared first, then create static lib that Lake can use without TLS conversion
 extern_lib libsodium pkg := do
   let libsodiumVersion := "1.0.20"
   let libsodiumUrl := s!"https://download.libsodium.org/libsodium/releases/libsodium-{libsodiumVersion}.tar.gz"
@@ -21,7 +14,6 @@ extern_lib libsodium pkg := do
   let sharedLib := pkg.buildDir / "lib" / "libsodium.so"
   let tarFile := buildDir / s!"libsodium-{libsodiumVersion}.tar.gz"
 
-  -- Download source if not present
   if !(← tarFile.pathExists) then
     logInfo s!"Downloading LibSodium {libsodiumVersion}..."
     IO.FS.createDirAll buildDir
@@ -31,13 +23,11 @@ extern_lib libsodium pkg := do
       cwd := buildDir
     }
 
-  -- Extract and build
   if !(← staticLib.pathExists) then
     logInfo "Building LibSodium from source..."
     IO.FS.createDirAll pkg.staticLibDir
     IO.FS.createDirAll (pkg.buildDir / "lib")
 
-    -- Extract
     if !(← srcDir.pathExists) then
       proc {
         cmd := "tar"
@@ -45,38 +35,34 @@ extern_lib libsodium pkg := do
         cwd := buildDir
       }
 
-    -- Configure with both shared and static libraries
     let installDir := buildDir / "install"
     IO.FS.createDirAll installDir
     proc {
       cmd := "./configure"
       args := #[
-        "--enable-shared=yes",          -- Build shared library
-        "--enable-static=yes",          -- Also build static
-        "--disable-dependency-tracking", -- Faster build
-        "--disable-ssp",                -- Compatibility
-        s!"--prefix={installDir}",      -- Install location
-        "CFLAGS=-fPIC -O2 -g",          -- Position independent code + debug symbols
-        "CPPFLAGS=-fPIC"                -- PIC for preprocessor
+        "--enable-shared=yes",
+        "--enable-static=yes",
+        "--disable-dependency-tracking",
+        "--disable-ssp",
+        s!"--prefix={installDir}",
+        "CFLAGS=-fPIC -O2",
+        "CPPFLAGS=-fPIC"
       ]
       cwd := srcDir
     }
 
-    -- Build with parallel jobs
     proc {
       cmd := "make"
       args := #["-j4"]
       cwd := srcDir
     }
 
-    -- Install to our build directory
     proc {
       cmd := "make"
       args := #["install"]
       cwd := srcDir
     }
 
-    -- Copy both libraries
     let builtStaticLib := installDir / "lib" / "libsodium.a"
     let builtSharedLib := installDir / "lib" / "libsodium.so"
     proc {
@@ -90,20 +76,32 @@ extern_lib libsodium pkg := do
 
   pure (Job.pure staticLib)
 
+def buildNativeO {n : Lean.Name} (pkg : NPackage n) (name : Lean.Name) : FetchM (Job FilePath) := do
+  let oFile := pkg.buildDir / "c" / s!"{name}.o"
+  let srcJob ← inputTextFile <| pkg.dir / "ffi" / s!"{name}.c"
+  let weakArgs := #[
+    "-I", (← getLeanIncludeDir).toString,
+    "-I", (pkg.dir / "ffi").toString,
+    "-I", (pkg.dir / ".lake" / "build" / "libsodium-build" / "install" / "include").toString
+  ]
+  buildO oFile srcJob weakArgs #["-fPIC"] "cc" getLeanTrace
+
+target basic.o pkg : FilePath := buildNativeO pkg `basic
+
+extern_lib lean_sodium_ffi pkg := do
+  let name := nameToStaticLib "ffi"
+  buildStaticLib (pkg.staticLibDir / name) #[
+    ← basic.o.fetch
+  ]
+
 @[default_target]
 lean_lib «Sodium» where
   precompileModules := true
-  nativeFacets := fun shouldExport =>
-    if shouldExport then
-      #[Module.oExportFacet, `module.alloy.c.o.export]
-    else
-      #[Module.oNoExportFacet, `module.alloy.c.o.noexport]
   moreLeancArgs := #["-fPIC"]
-  weakLeancArgs := #[
-    s!"-I{__dir__}/.lake/build/libsodium-build/install/include"
-  ]
+  weakLeancArgs := #[s!"-I{__dir__}/.lake/build/libsodium-build/install/include"]
   moreLinkArgs := #[s!"-L{__dir__}/.lake/build/lib", "-lsodium"]
 
-lean_exe «shell» where
-  root := `Shell
-  supportInterpreter := true
+lean_exe «Test» where
+  moreLeancArgs := #["-fPIC", "-O0", "-g"]
+  weakLeancArgs := #[s!"-I{__dir__}/.lake/build/libsodium-build/install/include"]
+  moreLinkArgs := #[s!"-L{__dir__}/.lake/build/lib", "-lsodium"]
