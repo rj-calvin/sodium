@@ -1,6 +1,4 @@
-import Batteries.Tactic.Congr
 import Sodium.Data.Encodable.Pi
-import Sodium.Data.Empty
 
 universe u v w
 
@@ -37,12 +35,10 @@ theorem elim_inj (γ : Type w) (fγ : (Σ a, β a → γ) → γ) (hfγ : ∀ �
     ∀ ⦃a b⦄, elim γ fγ a = elim γ fγ b → a = b
   | ⟨a₁, f₁⟩, ⟨a₂, f₂⟩, h => by
     obtain ⟨rfl, h⟩ := Sigma.mk.inj_iff.mp (hfγ h)
-    congr with x
+    congr
+    ext x
     simp only [heq_eq_eq] at h
     exact elim_inj γ fγ hfγ (congrFun h x)
-
-instance [hα : IsEmpty α] : IsEmpty (WType β) :=
-  ⟨fun w => WType.recOn w (IsEmpty.elim hα)⟩
 
 variable {ι : α → Nat}
 
@@ -90,7 +86,7 @@ private theorem foldl_max_le {l : List α} {x : α} (h : x ∈ l) (f : α → Na
   induction l with
   | nil => contradiction
   | cons head tail ih =>
-    simp only [List.foldl_cons, Nat.zero_le, Nat.max_eq_right, ge_iff_le]
+    simp only [List.foldl_cons, Nat.zero_le, Nat.max_eq_right]
     cases List.mem_cons.mp h with
     | inl h_eq =>
       subst h_eq
@@ -121,7 +117,7 @@ private theorem foldl_max_bound {l : List α} {bound : Nat} (f : α → Nat)
     have h_hd : f hd ≤ bound := h hd (by exact List.mem_cons_self)
     have h_tl : ∀ x ∈ tl, f x ≤ bound := fun x hx => h x (List.mem_cons_of_mem hd hx)
     have h₀ := ih h_tl
-    simp_all only [List.mem_cons, or_true, implies_true, imp_self, forall_eq_or_imp, and_self, Nat.zero_le,
+    simp_all only [List.mem_cons, or_true, implies_true, forall_eq_or_imp, and_self, Nat.zero_le,
       Nat.max_eq_right, ge_iff_le]
     exact foldl_max_bound_acc f (f hd) h_hd h_tl
 

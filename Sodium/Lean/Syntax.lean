@@ -1,6 +1,4 @@
-import Sodium.Data.Digest
-import Sodium.Data.Chunk
-import Sodium.Data.Encodable.WType
+import Sodium.Data.Encodable
 
 namespace Lean
 
@@ -52,8 +50,8 @@ namespace SourceInfo
 
 def Shape :=
   Unit
-  ⊕ Substring × String.Pos × Substring × String.Pos
-  ⊕ String.Pos × String.Pos × Bool
+  ⊕ Substring.Raw × String.Pos.Raw × Substring.Raw × String.Pos.Raw
+  ⊕ String.Pos.Raw × String.Pos.Raw × Bool
 
 instance encodable : Encodable SourceInfo :=
   have : Encodable Shape := by unfold Shape; infer_instance
@@ -94,7 +92,7 @@ namespace Syntax
 def Shape :=
   Unit
   ⊕ SourceInfo × String
-  ⊕ SourceInfo × Substring × Name × List Syntax.Preresolved
+  ⊕ SourceInfo × Substring.Raw × Name × List Syntax.Preresolved
   ⊕ SourceInfo × SyntaxNodeKind × Nat
 
 local notation "missing%" => Sum.inl ()
@@ -114,7 +112,7 @@ def Shape.push : Syntax → WType fun i : Shape => Fin i.arity
     if _ : stx.size = 0 then ⟨node% info, kind, 0, Fin.elim0⟩
     else ⟨node% info, kind, stx.size, fun i => Shape.push (stx[i]'i.isLt)⟩
 decreasing_by
-  simp_all only [Syntax.node.sizeOf_spec, gt_iff_lt]
+  simp_all only [Syntax.node.sizeOf_spec]
   have h₁ : sizeOf stx < 1 + sizeOf info + sizeOf stx := by omega
   have h₂ : sizeOf (stx[i]'i.isLt) < sizeOf stx := by
     simp_all only [Nat.lt_add_left_iff_pos, Fin.getElem_fin, Array.sizeOf_getElem]
@@ -138,7 +136,7 @@ instance encodable.equiv : Encodable.Equiv Syntax (WType fun i : Shape => Fin i.
         cases s <;> try simp only [Shape.push, Shape.pull]
         rename_i args
         if h : args.size = 0 then
-          simp only [h, Array.eq_empty_of_size_eq_zero, List.size_toArray, List.length_nil, Shape.push,
+          simp only [h, Array.eq_empty_of_size_eq_zero, List.size_toArray, List.length_nil,
             ↓reduceDIte, Shape.pull, Array.ofFn_zero, List.map_toArray, List.map_nil]
         else
           rw [dif_neg h, Shape.pull]
@@ -173,39 +171,6 @@ instance encodable {kind : SyntaxNodeKind} : Encodable (TSyntax kind) :=
       | some a => some ⟨a⟩
   Encodable.ofLeftInj f finv fun _ => by simp only [Json.mkObj_getObjVal?_eq_ok, Encodable.encodek, f, finv]
 
-def encodable.syntax (kind : SyntaxNodeKind) : TSyntax ``Lean.Parser.Tactic.tacticSeq :=
-  Unhygienic.run `(tacticSeq|
-    let f (stx : TSyntax $(Syntax.mkNameLit kind.toString)) : Json := Json.mkObj [($(Syntax.mkStrLit kind.toString), encode stx.raw)];
-    let finv (json : Json) : Option (TSyntax $(Syntax.mkNameLit kind.toString)) :=
-      match json.getObjVal? $(Syntax.mkStrLit kind.toString) with
-      | .error _ => none
-      | .ok json =>
-        match decode? (α := Syntax) json with
-        | none => none
-        | some a => some ⟨a⟩;
-    exact Encodable.ofLeftInj f finv fun _ => by simp [f, finv])
-
-instance : ToChunks (TSyntax ``Lean.Parser.Tactic.tacticSeq) where
-  toChunks tacticSeq :=
-    match tacticSeq with
-    | `(tacticSeq| $tacs*) => tacs.getElems.map encode |>.toList
-    | _ => []
-
-instance : FromChunks (TSyntax ``Lean.Parser.Tactic.tacticSeq) where
-  fromChunks? xs := do
-    let seq ← xs.mapM (@decode? Syntax _)
-    let args := seq.foldl (init := #[]) fun acc stx =>
-      if acc.isEmpty then acc.push stx
-      else acc.push .missing |>.push stx
-    let node := .node .none ``Lean.Parser.Tactic.tacticSeq #[.node .none ``Lean.Parser.Tactic.tacticSeq1Indented args]
-    return ⟨node⟩
-
 end TSyntax
-
-/- #eval show MetaM Format from do -/
-/-   let stx := TSyntax.encodable_syntax `tactic -/
-/-   println! encode stx -/
-/-   println! decode? (α := TSyntax ``Lean.Parser.Tactic.tacticSeq) (encode stx) -/
-/-   return stx.raw.prettyPrint -/
 
 end Lean
