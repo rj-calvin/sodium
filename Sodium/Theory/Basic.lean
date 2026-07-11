@@ -142,7 +142,7 @@ def schnorr (G : PrimeOrderGroup) (H : Hash) : Sign where
   secretKeyBytes := G.scalarBytes
   seedBytes := G.scalarBytes
   sigBytes := G.pointBytes + G.scalarBytes
-  keypair := sorry
+  keypair seed := (G.mulBase seed).map fun pk => (pk, seed)
   sign := sorry
   verify := sorry
 
