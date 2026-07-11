@@ -151,20 +151,12 @@ theorem dhBox_lawful (G : DhFunction) (A : Aead) (kdf : ByteVector G.pointBytes 
   constructor
   intro seedA seedB pkA skA pkB skB nonce msg hkA hkB
   simp only [dhBox] at hkA hkB ⊢
-  cases hpa : G.mulBase seedA with
-  | none => simp [hpa] at hkA
-  | some pa =>
-    cases hpb : G.mulBase seedB with
-    | none => simp [hpb] at hkB
-    | some pb =>
-      rw [hpa] at hkA
-      rw [hpb] at hkB
-      obtain ⟨rfl, rfl⟩ : pa = pkA ∧ seedA = skA := by simpa using hkA
-      obtain ⟨rfl, rfl⟩ : pb = pkB ∧ seedB = skB := by simpa using hkB
-      obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp (hG.mul_isSome seedA seedB pa pb hpa hpb)
-      have hcomm := hG.mul_comm seedA seedB pa pb hpa hpb
-      rw [hq] at hcomm
-      simp [hq, ← hcomm, hA.decrypt?_encrypt]
+  obtain ⟨pa, hpa, rfl, rfl⟩ := Option.map_eq_some_iff.mp hkA
+  obtain ⟨pb, hpb, rfl, rfl⟩ := Option.map_eq_some_iff.mp hkB
+  obtain ⟨q, hq⟩ := Option.isSome_iff_exists.mp (hG.mul_isSome seedA seedB pkA pkB hpa hpb)
+  have hcomm := hG.mul_comm seedA seedB pkA pkB hpa hpb
+  rw [hq] at hcomm
+  simp [hq, ← hcomm, hA.decrypt?_encrypt]
 
 private def dhBoxCx : DhFunction where
   name := `cx
@@ -203,10 +195,8 @@ theorem dhKx_lawful (G : DhFunction) (n : Nat)
     cases hps : G.mulBase seedS with
     | none => simp [hps] at hkS
     | some ps =>
-      rw [hpc] at hkC
-      rw [hps] at hkS
-      obtain ⟨rfl, rfl⟩ : pc = pkC ∧ seedC = skC := by simpa using hkC
-      obtain ⟨rfl, rfl⟩ : ps = pkS ∧ seedS = skS := by simpa using hkS
+      obtain ⟨rfl, rfl⟩ : pc = pkC ∧ seedC = skC := by simpa [hpc] using hkC
+      obtain ⟨rfl, rfl⟩ : ps = pkS ∧ seedS = skS := by simpa [hps] using hkS
       rw [← hG.mul_comm seedC seedS pc ps hpc hps]
       simp only [Option.map_map]
       rfl
