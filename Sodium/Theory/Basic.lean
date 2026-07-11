@@ -193,7 +193,23 @@ theorem dhBox_mul_comm_insufficient :
 theorem dhKx_lawful (G : DhFunction) (n : Nat)
     (kdf : ByteVector G.pointBytes → ByteVector G.pointBytes → ByteVector G.pointBytes →
       ByteVector n × ByteVector n)
-    (hG : G.Lawful) : (dhKx G n kdf).Lawful := sorry
+    (hG : G.Lawful) : (dhKx G n kdf).Lawful := by
+  constructor
+  intro seedC seedS pkC skC pkS skS hkC hkS
+  simp only [dhKx] at hkC hkS ⊢
+  cases hpc : G.mulBase seedC with
+  | none => simp [hpc] at hkC
+  | some pc =>
+    cases hps : G.mulBase seedS with
+    | none => simp [hps] at hkS
+    | some ps =>
+      rw [hpc] at hkC
+      rw [hps] at hkS
+      obtain ⟨rfl, rfl⟩ : pc = pkC ∧ seedC = skC := by simpa using hkC
+      obtain ⟨rfl, rfl⟩ : ps = pkS ∧ seedS = skS := by simpa using hkS
+      rw [← hG.mul_comm seedC seedS pc ps hpc hps]
+      simp only [Option.map_map]
+      rfl
 
 theorem schnorr_lawful (G : PrimeOrderGroup) (H : Hash) (hG : G.Lawful) :
     (schnorr G H).Lawful := sorry
