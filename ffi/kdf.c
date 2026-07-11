@@ -1,20 +1,19 @@
 #include "ffi.h"
+#include <string.h>
 
-LEAN_EXPORT lean_obj_res lean_sodium_kdf_derive_from_key(b_lean_obj_arg tau, uint64_t idx, b_lean_obj_arg ctx, b_lean_obj_arg key, lean_obj_arg world) {
-  void* ptr = sodium_malloc(32);
-  void* mptr = secure_obj_of_lean(lean_ctor_get(key, 0));
-  sodium_mprotect_readonly(mptr);
-  int err = crypto_kdf_blake2b_derive_from_key(ptr, 32, idx, (const char*) lean_sarray_cptr(ctx), mptr);
-  sodium_mprotect_noaccess(ptr);
-  sodium_mprotect_noaccess(mptr);
+LEAN_EXPORT lean_obj_res lean_sodium_kdf_blake2b_derive(b_lean_obj_arg n, uint64_t idx, b_lean_obj_arg ctx, b_lean_obj_arg key) {
+  size_t len = lean_usize_of_nat(n);
+  lean_object* out = lean_alloc_sarray(sizeof(uint8_t), len, len);
 
-  if (err != 0) {
-    sodium_free(ptr);
-    return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("crypto_kdf_blake2b_derive_from_key failed")));
+  if (len < crypto_kdf_blake2b_BYTES_MIN || len > crypto_kdf_blake2b_BYTES_MAX ||
+      crypto_kdf_blake2b_derive_from_key(
+        lean_sarray_cptr(out),
+        len,
+        idx,
+        (const char*) lean_sarray_cptr(ctx),
+        lean_sarray_cptr(key)) != 0) {
+    memset(lean_sarray_cptr(out), 0, len);
   }
 
-  lean_object* ret = lean_alloc_ctor(0, 1, sizeof(size_t));
-  lean_ctor_set(ret, 0, secure_obj_to_lean(ptr));
-  lean_ctor_set_usize(ret, 1, 32);
-  return lean_io_result_mk_ok(ret);
+  return out;
 }

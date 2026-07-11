@@ -92,9 +92,37 @@ end ByteArray
 
 namespace ByteVector
 
-variable {n : Nat}
-
 @[simp] theorem toByteArray_inj : ∀ bs : ByteVector n, bs.toByteArray.toByteVector = bs.cast (by exact Eq.symm bs.size_toByteArray) :=
   by intro; rfl
+
+def append (x : ByteVector n) (y : ByteVector m) : ByteVector (n + m) :=
+  ⟨x.toByteArray ++ y.toByteArray, by simp [ByteArray.size_append]⟩
+
+def take (x : ByteVector s) (n : Nat) (h : n ≤ s) : ByteVector n :=
+  ⟨x.toByteArray.extract 0 n, by simp only [ByteArray.size_extract, size_toByteArray]; omega⟩
+
+def drop (x : ByteVector s) (n : Nat) : ByteVector (s - n) :=
+  ⟨x.toByteArray.extract n s, by simp only [ByteArray.size_extract, size_toByteArray]; omega⟩
+
+protected theorem ext {x y : ByteVector n} (h : x.toByteArray = y.toByteArray) : x = y := by
+  cases x; cases y; simp_all
+
+theorem take_append (x : ByteVector n) (y : ByteVector m) (h : n ≤ n + m) :
+    (x.append y).take n h = x := by
+  obtain ⟨a, ha⟩ := x
+  obtain ⟨b, hb⟩ := y
+  subst ha hb
+  apply ByteVector.ext
+  simp [append, take, ByteArray.extract_append]
+
+theorem drop_append (x : ByteVector n) (y : ByteVector m) (h : n + m - n = m) :
+    ((x.append y).drop n).cast h = y := by
+  obtain ⟨a, ha⟩ := x
+  obtain ⟨b, hb⟩ := y
+  subst ha hb
+  have hx : a.extract a.size (a.size + b.size) = ByteArray.empty :=
+    ByteArray.extract_eq_empty_iff.mpr (by omega)
+  apply ByteVector.ext
+  simp [append, drop, ByteVector.cast, ByteArray.extract_append, hx]
 
 end ByteVector

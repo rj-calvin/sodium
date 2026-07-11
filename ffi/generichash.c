@@ -27,6 +27,23 @@ LEAN_EXPORT lean_obj_res lean_sodium_generichash(b_lean_obj_arg input, b_lean_ob
   return ret;
 }
 
+LEAN_EXPORT lean_obj_res lean_sodium_blake2b32(b_lean_obj_arg input) {
+  lean_object* ret = lean_alloc_sarray(
+    sizeof(uint8_t),
+    crypto_generichash_BYTES,
+    crypto_generichash_BYTES);
+
+  crypto_generichash(
+    lean_sarray_cptr(ret),
+    crypto_generichash_BYTES,
+    lean_sarray_cptr(input),
+    lean_sarray_size(input),
+    NULL,
+    0);
+
+  return ret;
+}
+
 LEAN_EXPORT lean_obj_res lean_sodium_generichash_init(b_lean_obj_arg key) {
   lean_object* data;
   uint8_t* ptr = NULL;

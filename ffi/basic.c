@@ -10,7 +10,7 @@ LEAN_EXPORT lean_obj_res lean_sodium_init(lean_obj_arg world) {
   return lean_io_result_mk_ok(lean_box(0));
 }
 
-LEAN_EXPORT lean_obj_res lean_sodium_malloc(b_lean_obj_arg tau, size_t size, lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res lean_sodium_malloc(size_t size, lean_obj_arg world) {
   void* ptr = sodium_malloc(size);
   randombytes_buf(ptr, size);
   sodium_mprotect_noaccess(ptr);
@@ -20,7 +20,7 @@ LEAN_EXPORT lean_obj_res lean_sodium_malloc(b_lean_obj_arg tau, size_t size, lea
   return lean_io_result_mk_ok(ret);
 }
 
-LEAN_EXPORT lean_obj_res lean_sodium_malloc_deterministic(b_lean_obj_arg tau, size_t size, b_lean_obj_arg seed, lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res lean_sodium_malloc_deterministic(size_t size, b_lean_obj_arg seed, lean_obj_arg world) {
   void* ptr = sodium_malloc(size);
   randombytes_buf_deterministic(ptr, size, lean_sarray_cptr(seed));
   sodium_mprotect_noaccess(ptr);
@@ -30,7 +30,7 @@ LEAN_EXPORT lean_obj_res lean_sodium_malloc_deterministic(b_lean_obj_arg tau, si
   return lean_io_result_mk_ok(ret);
 }
 
-LEAN_EXPORT uint8_t lean_sodium_secure_obj_is_zero(b_lean_obj_arg tau, size_t size, b_lean_obj_arg obj) {
+LEAN_EXPORT uint8_t lean_sodium_secure_obj_is_zero(size_t size, b_lean_obj_arg obj) {
   void* ptr = secure_obj_of_lean(lean_ctor_get(obj, 0));
   sodium_mprotect_readonly(ptr);
   int ret = sodium_is_zero(ptr, size);
@@ -38,7 +38,7 @@ LEAN_EXPORT uint8_t lean_sodium_secure_obj_is_zero(b_lean_obj_arg tau, size_t si
   return ret == 1;
 }
 
-LEAN_EXPORT uint8_t lean_sodium_secure_obj_compare(b_lean_obj_arg tau, size_t size, b_lean_obj_arg obj1, b_lean_obj_arg obj2) {
+LEAN_EXPORT uint8_t lean_sodium_secure_obj_compare(size_t size, b_lean_obj_arg obj1, b_lean_obj_arg obj2) {
   void* ptr1 = secure_obj_of_lean(lean_ctor_get(obj1, 0));
   void* ptr2 = secure_obj_of_lean(lean_ctor_get(obj2, 0));
   sodium_mprotect_readonly(ptr1);
@@ -49,7 +49,7 @@ LEAN_EXPORT uint8_t lean_sodium_secure_obj_compare(b_lean_obj_arg tau, size_t si
   return ret + 1;
 }
 
-LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf(b_lean_obj_arg tau, size_t size, lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf(size_t size, lean_obj_arg world) {
   void* ptr = sodium_malloc(size);
   randombytes_buf(ptr, size);
   sodium_mprotect_readonly(ptr);
@@ -60,7 +60,7 @@ LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf(b_lean_obj_arg tau, size_t 
   return lean_io_result_mk_ok(ret);
 }
 
-LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_deterministic(b_lean_obj_arg tau, size_t size, b_lean_obj_arg seed, lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_deterministic(size_t size, b_lean_obj_arg seed, lean_obj_arg world) {
   void* ptr = sodium_malloc(size);
   randombytes_buf_deterministic(ptr, size, lean_sarray_cptr(seed));
   sodium_mprotect_readonly(ptr);
@@ -71,7 +71,7 @@ LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_deterministic(b_lean_obj_ar
   return lean_io_result_mk_ok(ret);
 }
 
-LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_refresh(b_lean_obj_arg tau, lean_obj_arg buf, lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_refresh(lean_obj_arg buf, lean_obj_arg world) {
   size_t size = lean_ctor_get_usize(buf, 2);
   void* ptr = secure_obj_of_lean(lean_ctor_get(buf, 0));
   sodium_mprotect_readwrite(ptr);
@@ -81,7 +81,7 @@ LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_refresh(b_lean_obj_arg tau,
   return buf;
 }
 
-LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_refresh_deterministic(b_lean_obj_arg tau, lean_obj_arg buf, b_lean_obj_arg seed, lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_refresh_deterministic(lean_obj_arg buf, b_lean_obj_arg seed, lean_obj_arg world) {
   size_t size = lean_ctor_get_usize(buf, 2);
   void* ptr = secure_obj_of_lean(lean_ctor_get(buf, 0));
   sodium_mprotect_readwrite(ptr);
@@ -91,7 +91,7 @@ LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_refresh_deterministic(b_lea
   return buf;
 }
 
-LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_extract_slice(b_lean_obj_arg tau, lean_obj_arg buf, size_t len, lean_obj_arg world) {
+LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_extract_slice(lean_obj_arg buf, size_t len, lean_obj_arg world) {
   size_t off = lean_ctor_get_usize(buf, 1);
   size_t size = lean_ctor_get_usize(buf, 2);
   len = (off >= size) ? 0 : (off + len > size) ? (size - off) : len;

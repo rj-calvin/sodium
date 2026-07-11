@@ -62,6 +62,10 @@ structure PrimeOrderGroup.Lawful (G : PrimeOrderGroup) : Prop where
   validPoint_fromUniform : ∀ u, G.validPoint (G.fromUniform u) = true
   mul_scalarAdd : ∀ a b p, G.validPoint p = true →
     G.mul (G.scalarAdd a b) p = (G.mul a p).bind fun x => (G.mul b p).bind fun y => G.add x y
+  mulBase_scalarMul : ∀ c x px, G.mulBase x = some px →
+    G.mulBase (G.scalarMul c x) = G.mul c px
+  add_mulBase : ∀ a b pa pb pc, G.mulBase a = some pa → G.mulBase b = some pb →
+    G.mulBase (G.scalarAdd a b) = some pc → G.add pa pb = some pc
 
 structure Box where
   name : SpecName
@@ -105,12 +109,12 @@ structure Sign where
   seedBytes : Nat
   sigBytes : Nat
   keypair : ByteVector seedBytes → Option (ByteVector publicKeyBytes × ByteVector secretKeyBytes)
-  sign : ByteArray → ByteVector secretKeyBytes → ByteVector sigBytes
+  sign : ByteArray → ByteVector secretKeyBytes → Option (ByteVector sigBytes)
   verify : ByteVector sigBytes → ByteArray → ByteVector publicKeyBytes → Bool
 
 structure Sign.Lawful (S : Sign) : Prop where
-  verify_sign : ∀ seed pk sk msg, S.keypair seed = some (pk, sk) →
-    S.verify (S.sign msg sk) msg pk = true
+  verify_sign : ∀ seed pk sk msg sig, S.keypair seed = some (pk, sk) →
+    S.sign msg sk = some sig → S.verify sig msg pk = true
 
 def dhBox (G : DhFunction) (A : Aead)
     (kdf : ByteVector G.pointBytes → ByteVector A.keyBytes) : Box where
@@ -136,15 +140,29 @@ def dhKx (G : DhFunction) (n : Nat)
   clientKeys pk sk spk := (G.mul sk spk).map fun q => kdf q pk spk
   serverKeys pk sk cpk := (G.mul sk cpk).map fun q => (kdf q cpk pk).swap
 
-def schnorr (G : PrimeOrderGroup) (H : Hash) : Sign where
+def schnorr (G : PrimeOrderGroup) (H : Hash) (hH : H.outBytes = G.nonReducedBytes) : Sign where
   name := Lean.Name.str G.name "schnorr"
   publicKeyBytes := G.pointBytes
   secretKeyBytes := G.scalarBytes
   seedBytes := G.scalarBytes
   sigBytes := G.pointBytes + G.scalarBytes
   keypair seed := (G.mulBase seed).map fun pk => (pk, seed)
-  sign := sorry
-  verify := sorry
+  sign msg sk := do
+    let pk ← G.mulBase sk
+    let k := G.scalarReduce ((H.hash (sk.toByteArray ++ msg) none).cast hH)
+    let R ← G.mulBase k
+    let c := G.scalarReduce ((H.hash (R.toByteArray ++ pk.toByteArray ++ msg) none).cast hH)
+    let s := G.scalarAdd k (G.scalarMul c sk)
+    let _ ← G.mul c pk
+    let _ ← G.mulBase s
+    return R.append s
+  verify sig msg pk :=
+    let R := sig.take G.pointBytes (Nat.le_add_right _ _)
+    let s := (sig.drop G.pointBytes).cast (by omega)
+    let c := G.scalarReduce ((H.hash (R.toByteArray ++ pk.toByteArray ++ msg) none).cast hH)
+    match G.mulBase s, G.mul c pk with
+    | some sP, some cP => decide (G.add R cP = some sP)
+    | _, _ => false
 
 theorem dhBox_lawful (G : DhFunction) (A : Aead) (kdf : ByteVector G.pointBytes → ByteVector A.keyBytes)
     (hG : G.Lawful) (hA : A.Lawful) : (dhBox G A kdf).Lawful := by
@@ -201,8 +219,22 @@ theorem dhKx_lawful (G : DhFunction) (n : Nat)
       simp only [Option.map_map]
       rfl
 
-theorem schnorr_lawful (G : PrimeOrderGroup) (H : Hash) (hG : G.Lawful) :
-    (schnorr G H).Lawful := sorry
+theorem schnorr_lawful (G : PrimeOrderGroup) (H : Hash) (hH : H.outBytes = G.nonReducedBytes)
+    (hG : G.Lawful) : (schnorr G H hH).Lawful := by
+  constructor
+  intro seed pk sk msg sig hkp hsig
+  simp only [schnorr, Option.pure_def] at hkp hsig ⊢
+  obtain ⟨pk0, hpk, rfl, rfl⟩ := Option.map_eq_some_iff.mp hkp
+  obtain ⟨pk1, hpk1, hsig⟩ := Option.bind_eq_some_iff.mp hsig
+  obtain rfl := Option.some_inj.mp (hpk.symm.trans hpk1)
+  obtain ⟨R, hR, hsig⟩ := Option.bind_eq_some_iff.mp hsig
+  obtain ⟨cP, hcP, hsig⟩ := Option.bind_eq_some_iff.mp hsig
+  obtain ⟨sP, hsP, hsig⟩ := Option.bind_eq_some_iff.mp hsig
+  obtain rfl := Option.some_inj.mp hsig
+  rw [ByteVector.take_append, ByteVector.drop_append]
+  have h2 := (hG.mulBase_scalarMul _ seed _ hpk).trans hcP
+  have hadd := hG.add_mulBase _ _ _ _ _ hR h2 hsP
+  simp [hsP, hcP, hadd]
 
 def xsalsa20poly1305 : Aead where
   name := `xsalsa20poly1305
@@ -276,7 +308,7 @@ def box : Box := dhBox curve25519 xsalsa20poly1305 hsalsa20
 def boxXchacha20poly1305 : Box := dhBox curve25519 xchacha20poly1305 hchacha20
 def boxRistretto255 : Box := dhBox ristretto255.toDhFunction xchacha20poly1305 blake2b32
 def kx : Kx := dhKx curve25519 32 sorry
-def signRistretto255 : Sign := schnorr ristretto255 blake2b
+def signRistretto255 : Sign := schnorr ristretto255 blake2b rfl
 
 theorem box_lawful : box.Lawful :=
   dhBox_lawful curve25519 xsalsa20poly1305 hsalsa20 curve25519_lawful xsalsa20poly1305_lawful

@@ -87,21 +87,28 @@ def buildNativeO {n : Lean.Name} (pkg : NPackage n) (name : Lean.Name) : FetchM 
   buildO oFile srcJob weakArgs #["-fPIC"] "cc" getLeanTrace
 
 target basic.o pkg : FilePath := buildNativeO pkg `basic
+target aead.o pkg : FilePath := buildNativeO pkg `aead
+target core.o pkg : FilePath := buildNativeO pkg `core
+target curve25519.o pkg : FilePath := buildNativeO pkg `curve25519
+target generichash.o pkg : FilePath := buildNativeO pkg `generichash
+target kdf.o pkg : FilePath := buildNativeO pkg `kdf
+target ristretto255.o pkg : FilePath := buildNativeO pkg `ristretto255
 
 extern_lib lean_sodium_ffi pkg := do
   let name := nameToStaticLib "ffi"
   buildStaticLib (pkg.staticLibDir / name) #[
-    ← basic.o.fetch
+    ← basic.o.fetch,
+    ← aead.o.fetch,
+    ← core.o.fetch,
+    ← curve25519.o.fetch,
+    ← generichash.o.fetch,
+    ← kdf.o.fetch,
+    ← ristretto255.o.fetch
   ]
 
 @[default_target]
 lean_lib «Sodium» where
   precompileModules := true
   moreLeancArgs := #["-fPIC"]
-  weakLeancArgs := #[s!"-I{__dir__}/.lake/build/libsodium-build/install/include"]
-  moreLinkArgs := #[s!"-L{__dir__}/.lake/build/lib", "-lsodium"]
-
-lean_exe «Test» where
-  moreLeancArgs := #["-fPIC", "-O0", "-g"]
   weakLeancArgs := #[s!"-I{__dir__}/.lake/build/libsodium-build/install/include"]
   moreLinkArgs := #[s!"-L{__dir__}/.lake/build/lib", "-lsodium"]

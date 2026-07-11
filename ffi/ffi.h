@@ -40,7 +40,13 @@ static inline void* secure_obj_of_lean(b_lean_obj_arg obj) {
   return lean_get_external_data(obj);
 }
 
-lean_obj_res lean_sodium_malloc(b_lean_obj_arg tau, size_t size, lean_obj_arg world);
-lean_obj_res lean_sodium_malloc_deterministic(b_lean_obj_arg tau, size_t size, b_lean_obj_arg seed, lean_obj_arg world);
+static inline lean_obj_res lean_mk_option_some(lean_obj_arg val) {
+  lean_object* some = lean_alloc_ctor(1, 1, 0);
+  lean_ctor_set(some, 0, val);
+  return some;
+}
+
+lean_obj_res lean_sodium_malloc(size_t size, lean_obj_arg world);
+lean_obj_res lean_sodium_malloc_deterministic(size_t size, b_lean_obj_arg seed, lean_obj_arg world);
 
 #endif /* LEAN_SODIUM_FFI_H */
