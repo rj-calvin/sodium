@@ -51,21 +51,37 @@ structure PrimeOrderGroup extends DhFunction where
   sub : ByteVector pointBytes → ByteVector pointBytes → Option (ByteVector pointBytes)
   fromUniform : ByteVector uniformBytes → ByteVector pointBytes
   validPoint : ByteVector pointBytes → Bool
+  scalarReduced : ByteVector scalarBytes → Bool
   scalarReduce : ByteVector nonReducedBytes → ByteVector scalarBytes
   scalarAdd : ByteVector scalarBytes → ByteVector scalarBytes → ByteVector scalarBytes
   scalarMul : ByteVector scalarBytes → ByteVector scalarBytes → ByteVector scalarBytes
   scalarNeg : ByteVector scalarBytes → ByteVector scalarBytes
 
 structure PrimeOrderGroup.Lawful (G : PrimeOrderGroup) : Prop where
-  dh : G.toDhFunction.Lawful
+  mul_comm : ∀ a b pa pb, G.mulBase a = some pa → G.mulBase b = some pb →
+    G.mul a pb = G.mul b pa
+  mul_isSome : ∀ a b pa pb, G.mulBase a = some pa → G.mulBase b = some pb →
+    (G.mul a pb).isSome
+  scalarMul_comm : ∀ a b, G.scalarMul a b = G.scalarMul b a
   add_comm : ∀ p q, G.add p q = G.add q p
   validPoint_fromUniform : ∀ u, G.validPoint (G.fromUniform u) = true
-  mul_scalarAdd : ∀ a b p, G.validPoint p = true →
-    G.mul (G.scalarAdd a b) p = (G.mul a p).bind fun x => (G.mul b p).bind fun y => G.add x y
-  mulBase_scalarMul : ∀ c x px, G.mulBase x = some px →
-    G.mulBase (G.scalarMul c x) = G.mul c px
-  add_mulBase : ∀ a b pa pb pc, G.mulBase a = some pa → G.mulBase b = some pb →
-    G.mulBase (G.scalarAdd a b) = some pc → G.add pa pb = some pc
+  scalarReduced_scalarReduce : ∀ s, G.scalarReduced (G.scalarReduce s) = true
+  scalarReduced_scalarAdd : ∀ a b, G.scalarReduced a = true → G.scalarReduced b = true →
+    G.scalarReduced (G.scalarAdd a b) = true
+  scalarReduced_scalarMul : ∀ a b, G.scalarReduced a = true → G.scalarReduced b = true →
+    G.scalarReduced (G.scalarMul a b) = true
+  mul_scalarAdd : ∀ a b p x y z, G.scalarReduced a = true → G.scalarReduced b = true →
+    G.mul a p = some x → G.mul b p = some y → G.mul (G.scalarAdd a b) p = some z →
+    G.add x y = some z
+  mulBase_scalarMul : ∀ c x px, G.scalarReduced c = true → G.scalarReduced x = true →
+    G.mulBase x = some px → G.mulBase (G.scalarMul c x) = G.mul c px
+  add_mulBase : ∀ a b pa pb pc, G.scalarReduced a = true → G.scalarReduced b = true →
+    G.mulBase a = some pa → G.mulBase b = some pb → G.mulBase (G.scalarAdd a b) = some pc →
+    G.add pa pb = some pc
+
+theorem PrimeOrderGroup.Lawful.dh {G : PrimeOrderGroup} (h : G.Lawful) : G.toDhFunction.Lawful where
+  mul_comm := h.mul_comm
+  mul_isSome := h.mul_isSome
 
 structure Box where
   name : SpecName
@@ -144,9 +160,9 @@ def schnorr (G : PrimeOrderGroup) (H : Hash) (hH : H.outBytes = G.nonReducedByte
   name := Lean.Name.str G.name "schnorr"
   publicKeyBytes := G.pointBytes
   secretKeyBytes := G.scalarBytes
-  seedBytes := G.scalarBytes
+  seedBytes := G.nonReducedBytes
   sigBytes := G.pointBytes + G.scalarBytes
-  keypair seed := (G.mulBase seed).map fun pk => (pk, seed)
+  keypair seed := (G.mulBase (G.scalarReduce seed)).map fun pk => (pk, G.scalarReduce seed)
   sign msg sk := do
     let pk ← G.mulBase sk
     let k := G.scalarReduce ((H.hash (sk.toByteArray ++ msg) none).cast hH)
@@ -232,85 +248,11 @@ theorem schnorr_lawful (G : PrimeOrderGroup) (H : Hash) (hH : H.outBytes = G.non
   obtain ⟨sP, hsP, hsig⟩ := Option.bind_eq_some_iff.mp hsig
   obtain rfl := Option.some_inj.mp hsig
   rw [ByteVector.take_append, ByteVector.drop_append]
-  have h2 := (hG.mulBase_scalarMul _ seed _ hpk).trans hcP
-  have hadd := hG.add_mulBase _ _ _ _ _ hR h2 hsP
+  have hsk := hG.scalarReduced_scalarReduce seed
+  have hk := hG.scalarReduced_scalarReduce ((H.hash ((G.scalarReduce seed).toByteArray ++ msg) none).cast hH)
+  have hc := hG.scalarReduced_scalarReduce ((H.hash (R.toByteArray ++ pk.toByteArray ++ msg) none).cast hH)
+  have h2 := (hG.mulBase_scalarMul _ (G.scalarReduce seed) _ hc hsk hpk).trans hcP
+  have hadd := hG.add_mulBase _ _ _ _ _ hk (hG.scalarReduced_scalarMul _ _ hc hsk) hR h2 hsP
   simp [hsP, hcP, hadd]
-
-def xsalsa20poly1305 : Aead where
-  name := `xsalsa20poly1305
-  keyBytes := 32
-  nonceBytes := 24
-  tagBytes := 16
-  encrypt := sorry
-  decrypt? := sorry
-
-def xchacha20poly1305 : Aead where
-  name := `xchacha20poly1305
-  keyBytes := 32
-  nonceBytes := 24
-  tagBytes := 16
-  encrypt := sorry
-  decrypt? := sorry
-
-def aegis256 : Aead where
-  name := `aegis256
-  keyBytes := 32
-  nonceBytes := 32
-  tagBytes := 32
-  encrypt := sorry
-  decrypt? := sorry
-
-def blake2b : Hash where
-  name := `blake2b
-  outBytes := 64
-  keyBytes := 32
-  hash := sorry
-
-def kdfBlake2b : Kdf where
-  name := `blake2b
-  keyBytes := 32
-  contextBytes := 8
-  derive := sorry
-
-def curve25519 : DhFunction where
-  name := `curve25519
-  scalarBytes := 32
-  pointBytes := 32
-  mulBase := sorry
-  mul := sorry
-
-def ristretto255 : PrimeOrderGroup where
-  name := `ristretto255
-  scalarBytes := 32
-  pointBytes := 32
-  uniformBytes := 64
-  nonReducedBytes := 64
-  mulBase := sorry
-  mul := sorry
-  add := sorry
-  sub := sorry
-  fromUniform := sorry
-  validPoint := sorry
-  scalarReduce := sorry
-  scalarAdd := sorry
-  scalarMul := sorry
-  scalarNeg := sorry
-
-def hsalsa20 : ByteVector 32 → ByteVector 32 := sorry
-def hchacha20 : ByteVector 32 → ByteVector 32 := sorry
-def blake2b32 : ByteVector 32 → ByteVector 32 := sorry
-
-theorem curve25519_lawful : curve25519.Lawful := sorry
-theorem ristretto255_lawful : ristretto255.Lawful := sorry
-theorem xsalsa20poly1305_lawful : xsalsa20poly1305.Lawful := sorry
-
-def box : Box := dhBox curve25519 xsalsa20poly1305 hsalsa20
-def boxXchacha20poly1305 : Box := dhBox curve25519 xchacha20poly1305 hchacha20
-def boxRistretto255 : Box := dhBox ristretto255.toDhFunction xchacha20poly1305 blake2b32
-def kx : Kx := dhKx curve25519 32 sorry
-def signRistretto255 : Sign := schnorr ristretto255 blake2b rfl
-
-theorem box_lawful : box.Lawful :=
-  dhBox_lawful curve25519 xsalsa20poly1305 hsalsa20 curve25519_lawful xsalsa20poly1305_lawful
 
 end Sodium.Theory
