@@ -1,5 +1,6 @@
 import Sodium.Crypto.Box
 import Sodium.Crypto.Sign
+import Sodium.Theory.Ristretto
 
 namespace SodiumTest
 
@@ -176,7 +177,39 @@ def ristretto255Suites : List Suite :=
     { name := "ristretto255.Lawful — mul_scalarAdd", cases := mulScalarAddCases },
     { name := "signRistretto255 — verify_sign", cases := schnorrCases } ]
 
+private def natToBV (k x : Nat) : ByteVector k :=
+  ⟨⟨(Array.range k).map fun i => UInt8.ofNat (x >>> (8 * i))⟩, by simp [ByteArray.size]⟩
+
+private def M : PrimeOrderGroup := Theory.Ristretto.spec
+private def L : Nat := Theory.Ristretto.order
+
+private def bvEq {n : Nat} (x y : ByteVector n) : Bool := x.toByteArray == y.toByteArray
+
+private def modelScalars : List Nat :=
+  [0, 1, 2, 7, L - 1, L, L + 1, 2 ^ 255 - 1, 2 ^ 255, 2 ^ 255 + 5, 2 ^ 256 - 1, 123456789]
+private def modelNonReduced : List Nat :=
+  [0, 1, L, L * L + 42, 2 ^ 512 - 1, 2 ^ 400 + 987654321]
+
+private def modelCases : List (String × Bool) := Id.run do
+  let mut cs := []
+  for a in modelScalars do
+    let va := natToBV 32 a
+    cs := (s!"mulBase parity ({a})", (R.mulBase va).isSome == (M.mulBase va).isSome)
+        :: (s!"scalarNeg ({a})", bvEq (R.scalarNeg va) (M.scalarNeg va)) :: cs
+    for b in modelScalars do
+      let vb := natToBV 32 b
+      cs := (s!"scalarAdd ({a},{b})", bvEq (R.scalarAdd va vb) (M.scalarAdd va vb))
+          :: (s!"scalarMul ({a},{b})", bvEq (R.scalarMul va vb) (M.scalarMul va vb)) :: cs
+  for s in modelNonReduced do
+    let vs := natToBV 64 s
+    cs := (s!"scalarReduce ({s})", bvEq (R.scalarReduce vs) (M.scalarReduce vs)) :: cs
+  pure cs
+
+def modelSuites : List Suite :=
+  [ { name := "ristretto255 model — matches libsodium FFI", cases := modelCases } ]
+
 end SodiumTest
 
 def main : IO Unit :=
-  SodiumTest.runAll (SodiumTest.aeadSuites ++ SodiumTest.curve25519Suites ++ SodiumTest.ristretto255Suites)
+  SodiumTest.runAll (SodiumTest.aeadSuites ++ SodiumTest.curve25519Suites ++
+    SodiumTest.ristretto255Suites ++ SodiumTest.modelSuites)
