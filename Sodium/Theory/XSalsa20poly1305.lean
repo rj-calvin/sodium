@@ -1,40 +1,12 @@
 import Sodium.Theory.Basic
+import Sodium.Theory.Poly1305
 import Sodium.Data.Aead
 
 namespace Sodium.Theory.XSalsa20poly1305
 
-/-! ## Little-endian byte codec -/
-
-def decLE : List UInt8 → Nat
-  | [] => 0
-  | b :: bs => b.toNat + 256 * decLE bs
-
-def encLE : Nat → Nat → List UInt8
-  | 0, _ => []
-  | k + 1, x => UInt8.ofNat (x % 256) :: encLE k (x / 256)
-
-theorem length_encLE (k x : Nat) : (encLE k x).length = k := by
-  induction k generalizing x with
-  | zero => rfl
-  | succ k ih => simp [encLE, ih]
-
-def bytesLE (k x : Nat) : ByteArray := ⟨(encLE k x).toArray⟩
-
-theorem bytesLE_size (k x : Nat) : (bytesLE k x).size = k := by
-  simp [bytesLE, ByteArray.size, length_encLE]
-
-def natLE (b : ByteArray) : Nat := decLE b.data.toList
+open LittleEndian
 
 /-! ## Salsa20 / HSalsa20 core -/
-
-def load32 (b : ByteArray) (i : Nat) : UInt32 :=
-  b[i]!.toUInt32 ||| (b[i + 1]!.toUInt32 <<< 8) |||
-    (b[i + 2]!.toUInt32 <<< 16) ||| (b[i + 3]!.toUInt32 <<< 24)
-
-def store32 (w : UInt32) : List UInt8 :=
-  [w.toUInt8, (w >>> 8).toUInt8, (w >>> 16).toUInt8, (w >>> 24).toUInt8]
-
-def rotl (x n : UInt32) : UInt32 := (x <<< n) ||| (x >>> (32 - n))
 
 /-- One Salsa20 double round (column round then row round): 32 ARX steps. -/
 def doubleRound (x : Array UInt32) : Array UInt32 :=
@@ -86,36 +58,7 @@ def xsalsaKeystream (key : ByteVector 32) (nonce : ByteVector 24) (len : Nat) : 
   let subkey := hsalsa20 (nonce.toByteArray.extract 0 16) key.toByteArray
   salsa20Keystream subkey (nonce.toByteArray.extract 16 24) len
 
-/-! ## Poly1305 -/
-
-def clampMask : Nat := 0x0ffffffc0ffffffc0ffffffc0fffffff
-
-def polyP : Nat := 2 ^ 130 - 5
-
-/-- Poly1305 accumulator: `((Σ blocks) + s) mod 2^128`. -/
-def poly1305Acc (key msg : ByteArray) : Nat := Id.run do
-  let r := natLE (key.extract 0 16) &&& clampMask
-  let s := natLE (key.extract 16 32)
-  let mut h : Nat := 0
-  for bi in [0:(msg.size + 15) / 16] do
-    let stop := min (bi * 16 + 16) msg.size
-    h := (h + (natLE (msg.extract (bi * 16) stop) + 2 ^ (8 * (stop - bi * 16)))) * r % polyP
-  return (h + s) % 2 ^ 128
-
-/-- Poly1305 one-time MAC over `msg` with 32-byte key `r ‖ s`. -/
-def poly1305 (key msg : ByteArray) : ByteArray := bytesLE 16 (poly1305Acc key msg)
-
-theorem poly1305_size (key msg : ByteArray) : (poly1305 key msg).size = 16 :=
-  bytesLE_size 16 _
-
-/-! ## XOR and the secretbox construction -/
-
-def xorList : List UInt8 → List UInt8 → List UInt8
-  | [], _ => []
-  | _ :: _, [] => []
-  | a :: as, b :: bs => (a ^^^ b) :: xorList as bs
-
-def xorBytes (a b : ByteArray) : ByteArray := ⟨(xorList a.data.toList b.data.toList).toArray⟩
+/-! ## The secretbox construction -/
 
 /-- Seal `msg` under keystream `ks`: Poly1305 tag over the XOR ciphertext, then tag ‖ ciphertext. -/
 def boxSeal (ks msg : ByteArray) : ByteArray :=
@@ -140,36 +83,7 @@ def decrypt? (key : @& ByteVector 32) (nonce : @& ByteVector 24) (_ad c : @& Byt
     Option ByteArray :=
   boxOpen (xsalsaKeystream key nonce (32 + (c.extract 16 c.size).size)) c
 
-/-! ## Size and XOR-involution lemmas -/
-
-theorem u8_xor_cancel (a b : UInt8) : a ^^^ b ^^^ b = a := by
-  simp [UInt8.xor_assoc, UInt8.xor_self, UInt8.xor_zero]
-
-theorem xorList_length : ∀ a b : List UInt8, (xorList a b).length = min a.length b.length
-  | [], _ => by simp [xorList]
-  | _ :: _, [] => by simp [xorList]
-  | a :: as, b :: bs => by
-    simp only [xorList, List.length_cons]; rw [xorList_length as bs]; omega
-
-theorem xorList_involution : ∀ m s : List UInt8, m.length ≤ s.length →
-    xorList (xorList m s) s = m
-  | [], _, _ => rfl
-  | _ :: _, [], h => by simp at h
-  | a :: as, b :: bs, h => by
-    simp only [xorList]
-    rw [u8_xor_cancel, xorList_involution as bs (by simp only [List.length_cons] at h; omega)]
-
-theorem xorBytes_size (a b : ByteArray) : (xorBytes a b).size = min a.size b.size := by
-  simp only [xorBytes, ByteArray.size, List.size_toArray, xorList_length, Array.length_toList]
-
-theorem xorBytes_involution (m s : ByteArray) (h : m.size ≤ s.size) :
-    xorBytes (xorBytes m s) s = m := by
-  have hlen : m.data.toList.length ≤ s.data.toList.length := by
-    rw [Array.length_toList, Array.length_toList]
-    exact h
-  have e : (xorBytes m s).data.toList = xorList m.data.toList s.data.toList := by
-    simp only [xorBytes, List.toList_toArray]
-  rw [xorBytes, e, xorList_involution _ _ hlen]
+/-! ## Size lemmas -/
 
 theorem salsa20Core_size (input key : ByteArray) : (salsa20Core input key).size = 64 := by
   simp only [salsa20Core, ByteArray.size, List.size_toArray, List.length_flatMap, store32,

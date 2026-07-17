@@ -1,7 +1,10 @@
 import Sodium.Theory.Basic
+import Sodium.Data.LittleEndian
 import Sodium.Data.Ristretto255
 
 namespace Sodium.Theory.Ristretto
+
+open LittleEndian
 
 def order : Nat := 2 ^ 252 + 27742317777372353535851937790883648493
 
@@ -11,33 +14,13 @@ theorem order_lt_mask : order < 2 ^ 255 := by decide
 
 theorem order_lt_word : order < 256 ^ 32 := by decide
 
-def encList : Nat → Nat → List UInt8
-  | 0, _ => []
-  | k + 1, x => UInt8.ofNat (x % 256) :: encList k (x / 256)
-
-theorem length_encList (k x : Nat) : (encList k x).length = k := by
-  induction k generalizing x with
-  | zero => rfl
-  | succ k ih => simp [encList, ih]
-
-def decList : List UInt8 → Nat
-  | [] => 0
-  | b :: bs => b.toNat + 256 * decList bs
-
-theorem decList_encList (k x : Nat) : decList (encList k x) = x % 256 ^ k := by
-  induction k generalizing x with
-  | zero => simp [encList, decList, Nat.mod_one]
-  | succ k ih =>
-    rw [Nat.pow_succ', Nat.mod_mul]
-    simp [encList, decList, ih]
-
 def enc (k x : Nat) : ByteVector k :=
-  ⟨⟨(encList k x).toArray⟩, by simp [ByteArray.size, length_encList]⟩
+  ⟨bytesLE k x, by simp [bytesLE, ByteArray.size, length_encList]⟩
 
 def dec {k : Nat} (v : ByteVector k) : Nat := decList v.toByteArray.data.toList
 
 @[simp] theorem dec_enc (k x : Nat) : dec (enc k x) = x % 256 ^ k := by
-  simp [dec, enc, decList_encList]
+  simp [dec, enc, bytesLE, decList_encList]
 
 def mask {k : Nat} (v : ByteVector k) : Nat := dec v % 2 ^ 255
 
