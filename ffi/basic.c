@@ -116,16 +116,16 @@ LEAN_EXPORT lean_obj_res lean_sodium_randombytes_buf_extract_slice(lean_obj_arg 
   return pair;
 }
 
-LEAN_EXPORT uint8_t lean_sodium_bytes_compare(size_t size, b_lean_obj_arg bytes1, b_lean_obj_arg bytes2) {
-  return sodium_compare(lean_sarray_cptr(bytes1), lean_sarray_cptr(bytes2), size) + 1;
+LEAN_EXPORT uint8_t lean_sodium_bytes_compare(b_lean_obj_arg n, b_lean_obj_arg bytes1, b_lean_obj_arg bytes2) {
+  return sodium_compare(lean_sarray_cptr(bytes1), lean_sarray_cptr(bytes2), lean_usize_of_nat(n)) + 1;
 }
 
-LEAN_EXPORT uint8_t lean_sodium_bytes_dec_eq(size_t size, b_lean_obj_arg bytes1, b_lean_obj_arg bytes2) {
-  return sodium_compare(lean_sarray_cptr(bytes1), lean_sarray_cptr(bytes2), size) == 0;
+LEAN_EXPORT uint8_t lean_sodium_bytes_dec_eq(b_lean_obj_arg n, b_lean_obj_arg bytes1, b_lean_obj_arg bytes2) {
+  return sodium_compare(lean_sarray_cptr(bytes1), lean_sarray_cptr(bytes2), lean_usize_of_nat(n)) == 0;
 }
 
-LEAN_EXPORT uint8_t lean_sodium_bytes_dec_lt(size_t size, b_lean_obj_arg bytes1, b_lean_obj_arg bytes2) {
-  return sodium_compare(lean_sarray_cptr(bytes1), lean_sarray_cptr(bytes2), size) == -1;
+LEAN_EXPORT uint8_t lean_sodium_bytes_dec_lt(b_lean_obj_arg n, b_lean_obj_arg bytes1, b_lean_obj_arg bytes2) {
+  return sodium_compare(lean_sarray_cptr(bytes1), lean_sarray_cptr(bytes2), lean_usize_of_nat(n)) == -1;
 }
 
 LEAN_EXPORT lean_obj_res lean_sodium_bytes_to_base64(b_lean_obj_arg buf) {

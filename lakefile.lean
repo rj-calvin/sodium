@@ -1,8 +1,6 @@
 import Lake
 open Lake DSL System
 
-require aesop from git "https://github.com/leanprover-community/aesop.git" @ "v4.27.0"
-
 package «sodium» where
 
 extern_lib libsodium pkg := do
@@ -109,6 +107,13 @@ extern_lib lean_sodium_ffi pkg := do
 @[default_target]
 lean_lib «Sodium» where
   precompileModules := true
+  moreLeancArgs := #["-fPIC"]
+  weakLeancArgs := #[s!"-I{__dir__}/.lake/build/libsodium-build/install/include"]
+  moreLinkArgs := #[s!"-L{__dir__}/.lake/build/lib", "-lsodium"]
+
+@[default_target, test_driver]
+lean_exe «SodiumTest» where
+  supportInterpreter := true
   moreLeancArgs := #["-fPIC"]
   weakLeancArgs := #[s!"-I{__dir__}/.lake/build/libsodium-build/install/include"]
   moreLinkArgs := #[s!"-L{__dir__}/.lake/build/lib", "-lsodium"]

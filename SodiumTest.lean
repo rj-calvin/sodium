@@ -1,6 +1,8 @@
 import Sodium.Crypto.Box
 import Sodium.Crypto.Sign
 import Sodium.Theory.Ristretto
+import Sodium.Theory.Curve25519
+import Sodium.Data.Curve25519
 
 namespace SodiumTest
 
@@ -8,6 +10,11 @@ open Sodium Sodium.Crypto Sodium.Theory
 
 def obvEq {n : Nat} (x y : Option (ByteVector n)) : Bool :=
   x.map (·.toByteArray) == y.map (·.toByteArray)
+
+private def bvEq {n : Nat} (x y : ByteVector n) : Bool := x.toByteArray == y.toByteArray
+
+private def natToBV (k x : Nat) : ByteVector k :=
+  ⟨⟨(Array.range k).map fun i => UInt8.ofNat (x >>> (8 * i))⟩, by simp [ByteArray.size]⟩
 
 structure Suite where
   name : String
@@ -65,7 +72,7 @@ def aeadSuites : List Suite :=
 private def cScalars : List (ByteVector 32) := [1, 2, 3, 7, 42, 255].map (ByteVector.replicate 32 ·)
 
 private def curveDhCases : List (String × Bool) := Id.run do
-  let C : DhFunction := curve25519
+  let C : DhFunction := Theory.Curve25519.spec
   let mut cs := []
   for a in cScalars do
     for b in cScalars do
@@ -79,7 +86,7 @@ private def curveDhCases : List (String × Bool) := Id.run do
 def curve25519Suites : List Suite :=
   [ { name := "curve25519.Lawful (DhFunction)", cases := curveDhCases } ]
 
-private def R : PrimeOrderGroup := ristretto255
+private def R : PrimeOrderGroup := Theory.Ristretto.spec
 private def rScalars : List (ByteVector 32) :=
   [1, 3, 7, 42, 200].map fun v => R.scalarReduce (ByteVector.replicate 64 v)
 private def rPoints : List (ByteVector 32) := rScalars.filterMap R.mulBase
@@ -104,14 +111,15 @@ private def addCommCases : List (String × Bool) := Id.run do
   pure cs
 
 private def fromUniformCases : List (String × Bool) :=
-  rUniforms.map fun u => ("validPoint_fromUniform", R.validPoint (R.fromUniform u) == true)
+  rUniforms.map fun u => ("validPoint_fromUniform", R.validPoint (R.fromUniform u))
 
 private def mulBaseScalarMulCases : List (String × Bool) := Id.run do
   let mut cs := []
   for c in rScalars do
     for x in rScalars do
       match R.mulBase x with
-      | some px => cs := ("mulBase_scalarMul", obvEq (R.mulBase (R.scalarMul c x)) (R.mul c px)) :: cs
+      | some px =>
+        cs := ("mulBase_scalarMul", obvEq (R.mulBase (R.scalarMul c x)) (R.mul c px)) :: cs
       | none => cs := ("mulBase_isSome", false) :: cs
   pure cs
 
@@ -128,7 +136,7 @@ private def scalarMulCommCases : List (String × Bool) := Id.run do
   let mut cs := []
   for a in rScalars do
     for b in rScalars do
-      cs := ("scalarMul_comm", (R.scalarMul a b).toByteArray == (R.scalarMul b a).toByteArray) :: cs
+      cs := ("scalarMul_comm", bvEq (R.scalarMul a b) (R.scalarMul b a)) :: cs
   pure cs
 
 private def mulScalarAddCases : List (String × Bool) := Id.run do
@@ -144,15 +152,15 @@ private def mulScalarAddCases : List (String × Bool) := Id.run do
 private def scalarReducedCases : List (String × Bool) := Id.run do
   let mut cs := []
   for u in rUniforms do
-    cs := ("scalarReduced_scalarReduce", R.scalarReduced (R.scalarReduce u) == true) :: cs
+    cs := ("scalarReduced_scalarReduce", R.scalarReduced (R.scalarReduce u)) :: cs
   for a in rScalars do
     for b in rScalars do
-      cs := ("scalarReduced_scalarAdd", R.scalarReduced (R.scalarAdd a b) == true)
-          :: ("scalarReduced_scalarMul", R.scalarReduced (R.scalarMul a b) == true) :: cs
+      cs := ("scalarReduced_scalarAdd", R.scalarReduced (R.scalarAdd a b))
+          :: ("scalarReduced_scalarMul", R.scalarReduced (R.scalarMul a b)) :: cs
   pure cs
 
 private def schnorrCases : List (String × Bool) := Id.run do
-  let S := Crypto.signRistretto255
+  let S := signRistretto255
   let seeds : List (ByteVector 64) :=
     [1, 42, 128, 200, 255].map (ByteVector.replicate 64 ·)
   let mut cs := []
@@ -177,36 +185,57 @@ def ristretto255Suites : List Suite :=
     { name := "ristretto255.Lawful — mul_scalarAdd", cases := mulScalarAddCases },
     { name := "signRistretto255 — verify_sign", cases := schnorrCases } ]
 
-private def natToBV (k x : Nat) : ByteVector k :=
-  ⟨⟨(Array.range k).map fun i => UInt8.ofNat (x >>> (8 * i))⟩, by simp [ByteArray.size]⟩
-
-private def M : PrimeOrderGroup := Theory.Ristretto.spec
 private def L : Nat := Theory.Ristretto.order
-
-private def bvEq {n : Nat} (x y : ByteVector n) : Bool := x.toByteArray == y.toByteArray
 
 private def modelScalars : List Nat :=
   [0, 1, 2, 7, L - 1, L, L + 1, 2 ^ 255 - 1, 2 ^ 255, 2 ^ 255 + 5, 2 ^ 256 - 1, 123456789]
 private def modelNonReduced : List Nat :=
   [0, 1, L, L * L + 42, 2 ^ 512 - 1, 2 ^ 400 + 987654321]
 
+open Theory.Ristretto (enc dec order mask) in
 private def modelCases : List (String × Bool) := Id.run do
   let mut cs := []
   for a in modelScalars do
     let va := natToBV 32 a
-    cs := (s!"mulBase parity ({a})", (R.mulBase va).isSome == (M.mulBase va).isSome)
-        :: (s!"scalarNeg ({a})", bvEq (R.scalarNeg va) (M.scalarNeg va)) :: cs
+    let mulBaseModel : Option (ByteVector 32) :=
+      if mask va % order = 0 then none else some (enc 32 (mask va % order))
+    cs := (s!"mulBase parity ({a})", (Ristretto255.mulBase va).isSome == mulBaseModel.isSome)
+        :: (s!"scalarNeg ({a})",
+            bvEq (Ristretto255.scalarNeg va) (enc 32 ((order - dec va % order) % order))) :: cs
     for b in modelScalars do
       let vb := natToBV 32 b
-      cs := (s!"scalarAdd ({a},{b})", bvEq (R.scalarAdd va vb) (M.scalarAdd va vb))
-          :: (s!"scalarMul ({a},{b})", bvEq (R.scalarMul va vb) (M.scalarMul va vb)) :: cs
+      cs := (s!"scalarAdd ({a},{b})",
+              bvEq (Ristretto255.scalarAdd va vb) (enc 32 ((dec va + dec vb) % 256 ^ 32 % order)))
+          :: (s!"scalarMul ({a},{b})",
+              bvEq (Ristretto255.scalarMul va vb) (enc 32 (dec va * dec vb % order))) :: cs
   for s in modelNonReduced do
     let vs := natToBV 64 s
-    cs := (s!"scalarReduce ({s})", bvEq (R.scalarReduce vs) (M.scalarReduce vs)) :: cs
+    cs := (s!"scalarReduce ({s})",
+            bvEq (Ristretto255.scalarReduce vs) (enc 32 (dec vs % order))) :: cs
+  pure cs
+
+private def CM : DhFunction := Theory.Curve25519.spec
+
+private def curveModelCases : List (String × Bool) := Id.run do
+  let mut cs := []
+  for a in modelScalars do
+    let va := natToBV 32 a
+    cs := (s!"mulBase parity ({a})",
+            (Sodium.Curve25519.mulBase va).isSome == (CM.mulBase va).isSome) :: cs
+    for b in modelScalars do
+      let vb := natToBV 32 b
+      match CM.mulBase va, CM.mulBase vb with
+      | some pa, some pb =>
+        cs := (s!"model mul_comm ({a},{b})", obvEq (CM.mul va pb) (CM.mul vb pa))
+            :: (s!"model mul_isSome ({a},{b})", (CM.mul va pb).isSome) :: cs
+      | _, _ => cs := ("model mulBase_isSome", false) :: cs
   pure cs
 
 def modelSuites : List Suite :=
-  [ { name := "ristretto255 model — matches libsodium FFI", cases := modelCases } ]
+  [ { name := "ristretto255 — FFI matches pure model (implemented_by bridge)",
+      cases := modelCases },
+    { name := "curve25519 model — mulBase parity + DhFunction.Lawful",
+      cases := curveModelCases } ]
 
 end SodiumTest
 
